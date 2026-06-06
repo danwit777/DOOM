@@ -459,10 +459,20 @@ void D_AdvanceDemo (void)
     paused = false;
     gameaction = ga_nothing;
 
-    if ( gamemode == retail )
-      demosequence = (demosequence+1)%7;
-    else
-      demosequence = (demosequence+1)%6;
+#ifdef DOOM_EXPERIMENTAL_MACOS
+    do
+    {
+#endif
+	if ( gamemode == retail )
+	  demosequence = (demosequence+1)%7;
+	else
+	  demosequence = (demosequence+1)%6;
+#ifdef DOOM_EXPERIMENTAL_MACOS
+    } while (demosequence == 1
+	     || demosequence == 3
+	     || demosequence == 5
+	     || demosequence == 6);
+#endif
     
     switch (demosequence)
     {

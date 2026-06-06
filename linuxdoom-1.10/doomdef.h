@@ -81,7 +81,9 @@ typedef enum
 //  and unfinished. Default is synchronous.
 // Experimental asynchronous timer based is
 //  handled by SNDINTR. 
+#ifndef DOOM_EXPERIMENTAL_MACOS
 #define SNDSERV  1
+#endif
 //#define SNDINTR  1
 
 
