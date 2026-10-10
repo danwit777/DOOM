@@ -68,8 +68,8 @@ kbd{font-family:var(--f-display);font-size:10px;color:var(--muted);margin-left:4
       <div class="label">Wysokość postaci w pikselach</div>
       <div class="row" id="res">
         <button id="r-48" data-px="48" aria-pressed="false">48</button>
-        <button id="r-64" data-px="64" aria-pressed="false">64</button>
-        <button id="r-96" data-px="96" aria-pressed="true">96</button>
+        <button id="r-64" data-px="64" aria-pressed="true">64</button>
+        <button id="r-96" data-px="96" aria-pressed="false">96</button>
         <button id="r-128" data-px="128" aria-pressed="false">128</button>
         <button id="r-0" data-px="0" aria-pressed="false">HD</button>
       </div>
@@ -77,7 +77,7 @@ kbd{font-family:var(--f-display);font-size:10px;color:var(--muted);margin-left:4
     <div class="group">
       <div class="label">Kamera</div>
       <div class="row">
-        <button id="side">Widok z boku</button>
+        <button id="side">Kąt sprite'a</button>
         <button id="spin" aria-pressed="false">Obrót</button>
       </div>
       <label class="check"><input type="checkbox" id="outline" checked> Kontur 1 px</label>
@@ -103,144 +103,176 @@ kbd{font-family:var(--f-display);font-size:10px;color:var(--muted);margin-left:4
 (function(){
 const T = THREE;
 
-// ---------- Palette (sampled from the sprite) ----------
+// ---------- Palette (every colour sampled from the sprite frames) ----------
 const PAL = {
   black:'#000000', coatD:'#181712', coatM:'#343027', coatL:'#5c5646',
   oliveD:'#1a190a', oliveM:'#2e2c12', oliveL:'#49471c',
-  navyD:'#141932', navyL:'#26305a',
+  navy:'#141932', navyL:'#232b52',
   skinD:'#5e201a', skinM:'#8d5245', skinL:'#b18465', skinS:'#271713',
-  greyD:'#313d39', greyM:'#474747', greyL:'#7c7062', teal:'#131a1a',
-  orange:'#eb7f1c', amber:'#eba357'
+  tealD:'#131a1a', teal:'#313d39', grey:'#474747', greyL:'#7c7062',
+  orange:'#eb7f1c', amber:'#eba357', cream:'#ffce87', rust:'#64260f'
 };
 document.getElementById('pal').innerHTML = Object.values(PAL).map(c=>`<i style="background:${c}" title="${c}"></i>`).join('');
 
-// ---------- Toon material: 3 palette tones picked by N·L ----------
-const LIGHT = { value: new T.Vector3(0.4,0.8,0.45).normalize() };
+// ---------- Toon material ----------
+// Light is fixed to the screen (upper-left, like the sprite), so the shading reads the same at any angle.
+// Bands: black / dark / mid / light. "fold" adds horizontal cloth creases in object space.
+const LIGHT = { value: new T.Vector3(-0.45,0.75,0.5).normalize() };
 const TOON  = { value: 1 };
-const VS = `varying vec3 vN;
-void main(){ vN = normalize(normalMatrix * normal); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`;
-const FS = `uniform vec3 cD; uniform vec3 cM; uniform vec3 cL; uniform vec3 uL; uniform float uToon; uniform float uFlat;
-varying vec3 vN;
+const VS = `varying vec3 vN; varying vec3 vP;
+void main(){ vN = normalize(normalMatrix * normal); vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`;
+const FS = `uniform vec3 cK; uniform vec3 cD; uniform vec3 cM; uniform vec3 cL; uniform vec3 uL; uniform float uToon; uniform float uFlat; uniform float uFold; uniform vec4 uT;
+varying vec3 vN; varying vec3 vP;
 void main(){
   vec3 n = normalize(vN);
+  if (!gl_FrontFacing) n = -n;
   float d = dot(n, uL);
+  float fold = sin(vP.y*62.0 + sin(vP.x*21.0 + vP.z*27.0)*2.2) * 0.5 + 0.5;
+  d += (fold - 0.5) * uFold;
   vec3 c;
   if (uFlat > 0.5) c = cM;
-  else if (uToon > 0.5) c = d > 0.5 ? cL : (d > -0.15 ? cM : cD);
+  else if (uToon > 0.5) c = d > uT.x ? cL : (d > uT.y ? cM : (d > uT.z ? cD : cK));
   else { float k = clamp(d*0.5+0.5,0.0,1.0); c = k < 0.5 ? mix(cD,cM,k*2.0) : mix(cM,cL,(k-0.5)*2.0); }
   gl_FragColor = vec4(c, 1.0);
 }`;
-function M(d,m,l,flat){
+function M(k,d,m,l,o={}){
   const mat = new T.ShaderMaterial({
-    uniforms:{ cD:{value:new T.Color(d)}, cM:{value:new T.Color(m)}, cL:{value:new T.Color(l)}, uL:LIGHT, uToon:TOON, uFlat:{value:flat?1:0} },
-    vertexShader:VS, fragmentShader:FS
+    uniforms:{ cK:{value:new T.Color(k)}, cD:{value:new T.Color(d)}, cM:{value:new T.Color(m)}, cL:{value:new T.Color(l)},
+      uL:LIGHT, uToon:TOON, uFlat:{value:o.flat?1:0}, uFold:{value:o.fold||0},
+      uT:{value:new T.Vector4(o.hi??0.62, o.mid??0.0, o.lo??-0.5, 0)} },
+    vertexShader:VS, fragmentShader:FS, side: o.double ? T.DoubleSide : T.FrontSide
   });
   mat.userData.mid = m;
   return mat;
 }
 const MAT = {
-  coat:   M(PAL.coatD, PAL.coatM, PAL.coatL),
-  coatDk: M(PAL.black, PAL.coatD, PAL.coatM),
-  pants:  M(PAL.teal,  PAL.coatM, PAL.greyM),
-  pad:    M(PAL.coatD, PAL.greyM, PAL.greyL),
-  shirt:  M(PAL.black, PAL.teal,  PAL.coatD),
-  skin:   M(PAL.skinD, PAL.skinM, PAL.skinL),
-  hair:   M(PAL.greyD, PAL.greyM, PAL.greyL),
-  beard:  M(PAL.teal,  PAL.greyD, PAL.greyM),
-  navy:   M(PAL.black, PAL.navyD, PAL.navyL),
-  olive:  M(PAL.oliveD,PAL.oliveM,PAL.oliveL),
-  metal:  M(PAL.black, PAL.coatD, PAL.greyM),
-  metalL: M(PAL.coatD, PAL.greyM, PAL.greyL),
-  patch:  M(PAL.skinD, PAL.orange,PAL.amber),
-  eye:    M(PAL.skinD, PAL.skinD, PAL.skinD, true),
-  glow:   M(PAL.orange,PAL.orange,PAL.orange,true),
-  flash:  M(PAL.amber, PAL.amber, PAL.amber, true),
-  flashC: M('#fff1c4','#fff1c4','#fff1c4', true)
+  coat:   M(PAL.black, PAL.coatD, PAL.coatM, PAL.coatL, {fold:0.35, hi:0.45}),
+  coatIn: M(PAL.black, PAL.black, PAL.coatD, PAL.coatM, {fold:0.3, double:true}),
+  skirt:  M(PAL.black, PAL.black, PAL.coatD, PAL.coatM, {fold:0.45, double:true, hi:0.6, mid:0.15, lo:-0.25}),
+  cuff:   M(PAL.coatD, PAL.coatM, PAL.coatL, PAL.greyL, {hi:0.4}),
+  pants:  M(PAL.black, PAL.coatD, PAL.coatM, PAL.coatL, {fold:0.5, hi:0.55, mid:-0.15}),
+  pad:    M(PAL.black, PAL.coatM, PAL.coatL, PAL.greyL, {hi:0.5}),
+  shirt:  M(PAL.black, PAL.black, PAL.black, PAL.coatD, {hi:0.8}),
+  belt:   M(PAL.black, PAL.black, PAL.coatD, PAL.coatM, {hi:0.5}),
+  skin:   M(PAL.skinS, PAL.skinD, PAL.skinM, PAL.skinL, {hi:0.45, lo:-0.6}),
+  hair:   M(PAL.tealD, PAL.teal,  PAL.grey,  PAL.greyL, {hi:0.35, mid:-0.2, fold:0.6}),
+  beard:  M(PAL.tealD, PAL.teal,  PAL.grey,  PAL.greyL, {hi:0.55, fold:0.5}),
+  navy:   M(PAL.black, PAL.black, PAL.navy,  PAL.navyL, {hi:0.55}),
+  olive:  M(PAL.black, PAL.oliveD,PAL.oliveM,PAL.oliveL,{fold:0.25, hi:0.35}),
+  metal:  M(PAL.black, PAL.black, PAL.coatD, PAL.grey,  {hi:0.5}),
+  metalL: M(PAL.black, PAL.coatD, PAL.grey,  PAL.greyL, {hi:0.5}),
+  patch:  M(PAL.rust,  PAL.orange,PAL.amber, PAL.cream, {hi:0.5, lo:-0.9}),
+  eye:    M(PAL.skinD, PAL.skinD, PAL.skinD, PAL.skinD, {flat:true}),
+  glow:   M(PAL.rust,PAL.rust,PAL.rust,PAL.rust,{flat:true}),
+  flash:  M(PAL.amber, PAL.amber, PAL.amber, PAL.amber, {flat:true}),
+  flashC: M(PAL.cream, PAL.cream, PAL.cream, PAL.cream, {flat:true})
 };
 
-const BOX = new T.BoxGeometry(1,1,1);
-function box(parent, name, w,h,d, mat, x=0,y=0,z=0, rx=0,ry=0,rz=0){
-  const m = new T.Mesh(BOX, mat);
-  m.name = name; m.scale.set(w,h,d); m.position.set(x,y,z); m.rotation.set(rx,ry,rz);
-  parent.add(m); return m;
+// ---------- Geometry helpers (real sizes, so the fold pattern stays in metres) ----------
+function add(parent, name, geo, mat, x=0,y=0,z=0, rx=0,ry=0,rz=0){
+  const m = new T.Mesh(geo, mat); m.name=name; m.position.set(x,y,z); m.rotation.set(rx,ry,rz); parent.add(m); return m;
 }
 function grp(parent, name, x=0,y=0,z=0){ const g = new T.Group(); g.name=name; g.position.set(x,y,z); parent.add(g); return g; }
+function box(parent,name,w,h,d,mat,x,y,z,rx,ry,rz){ return add(parent,name,new T.BoxGeometry(w,h,d),mat,x,y,z,rx,ry,rz); }
+// tapered tube hanging down from its group origin; sx/sz squash the cross-section
+function limb(parent,name,rTop,rBot,len,mat,y0=0,sx=1,sz=1,segs=9){
+  const g = new T.CylinderGeometry(rTop,rBot,len,segs,2); g.translate(0,-len/2,0); g.scale(sx,1,sz);
+  return add(parent,name,g,mat,0,y0,0);
+}
+function blob(parent,name,rx,ry,rz,mat,x,y,z,rotx=0,roty=0,rotz=0){
+  const g = new T.SphereGeometry(1,10,8); g.scale(rx,ry,rz);
+  return add(parent,name,g,mat,x,y,z,rotx,roty,rotz);
+}
+function spike(parent,name,r,h,mat,x,y,z,rz,rx=0){
+  const g = new T.ConeGeometry(r,h,5); g.translate(0,h/2,0);
+  return add(parent,name,g,mat,x,y,z,rx,0,rz);
+}
+// part of an open tube (for the coat torso and collar); front (+X) gap of half-width `gap`
+function shell(parent,name,rTop,rBot,h,gap,mat,y,sx=1){
+  const g = new T.CylinderGeometry(rTop,rBot,h,18,2,true, Math.PI/2+gap, Math.PI*2-2*gap); g.scale(sx,1,1);
+  return add(parent,name,g,mat,0,y,0);
+}
 
-// ---------- Character rig (faces +X, right side is +Z / towards camera) ----------
+// ---------- Character rig (faces +X, right side is +Z) ----------
 const hero = new T.Group(); hero.name = 'Hero';
-const hips = grp(hero,'hips',0,0.98,0);
-box(hips,'pelvis',0.25,0.17,0.34,MAT.pants,0,0,0);
-box(hips,'belt',0.27,0.06,0.36,MAT.coatDk,0,0.08,0);
-box(hips,'buckle',0.02,0.05,0.06,MAT.metalL,0.14,0.08,0.05);
-box(hips,'pouch',0.08,0.1,0.08,MAT.olive,0.05,0.0,0.19);
+const hips = grp(hero,'hips',0,0.92,0);
+blob(hips,'pelvis',0.15,0.13,0.23,MAT.pants,0,-0.02,0);
+limb(hips,'belt',0.235,0.23,0.065,MAT.belt,0.1,0.68,1);
+box(hips,'buckle',0.03,0.05,0.07,MAT.metalL,0.15,0.066,0);
+box(hips,'pouchR',0.08,0.09,0.07,MAT.olive,0.03,0.03,0.2);
+box(hips,'pouchL',0.08,0.09,0.07,MAT.olive,0.06,0.03,-0.19);
 
 const legs = {};
 for (const s of [-1,1]){
   const side = s>0?'R':'L';
-  const thigh = grp(hips,'thigh'+side,0,-0.04,s*0.095);
-  box(thigh,'thighMesh'+side,0.17,0.46,0.15,MAT.pants,0,-0.21,0);
-  box(thigh,'cargo'+side,0.11,0.12,0.04,MAT.pants,0.0,-0.25,s*0.085);
-  const knee = grp(thigh,'knee'+side,0,-0.43,0);
-  box(knee,'shin'+side,0.15,0.42,0.14,MAT.pants,0,-0.21,0);
-  box(knee,'kneepad'+side,0.06,0.14,0.13,MAT.pad,0.085,-0.06,0);
-  const ankle = grp(knee,'ankle'+side,0,-0.41,0);
-  box(ankle,'bootTop'+side,0.17,0.12,0.16,MAT.navy,0,0.02,0);
-  box(ankle,'boot'+side,0.25,0.09,0.16,MAT.navy,0.05,-0.06,0);
-  box(ankle,'sole'+side,0.28,0.025,0.17,MAT.metal,0.05,-0.11,0);
-  legs[side] = {thigh,knee,ankle};
+  const thigh = grp(hips,'thigh'+side,0,-0.03,s*0.12);
+  limb(thigh,'thighMesh'+side,0.11,0.09,0.42,MAT.pants,0.02,1,1.1);
+  box(thigh,'cargo'+side,0.12,0.13,0.03,MAT.pants,0.0,-0.24,s*0.09);
+  const knee = grp(thigh,'knee'+side,0,-0.4,0);
+  blob(knee,'kneeJoint'+side,0.08,0.08,0.08,MAT.pants,0,0,0);
+  box(knee,'kneepad'+side,0.05,0.13,0.14,MAT.pad,0.08,-0.03,0);
+  limb(knee,'shin'+side,0.085,0.078,0.28,MAT.pants,-0.02);
+  limb(knee,'blouse'+side,0.092,0.085,0.09,MAT.pants,-0.27);
+  const ankle = grp(knee,'ankle'+side,0,-0.38,0);
+  limb(ankle,'bootTop'+side,0.078,0.08,0.1,MAT.navy,0.06);
+  blob(ankle,'boot'+side,0.13,0.06,0.075,MAT.navy,0.045,-0.055,0);
+  box(ankle,'sole'+side,0.25,0.025,0.14,MAT.belt,0.045,-0.1,0);
+  legs[side] = {thigh,knee,ankle,s};
 }
 
-const spine = grp(hips,'spine',0,0.09,0);
+const spine = grp(hips,'spine',0,0.12,0);
 const chest = grp(spine,'chest',0,0,0);
-box(chest,'shirt',0.22,0.5,0.32,MAT.shirt,0,0.25,0);
-box(chest,'coatBack',0.05,0.52,0.42,MAT.coat,-0.12,0.26,0);
+limb(chest,'torso',0.23,0.2,0.48,MAT.shirt,0.5,0.62,1);
+shell(chest,'coatTorso',0.27,0.24,0.5,0.45,MAT.coatIn,0.25,0.68);
 for (const s of [-1,1]){
-  box(chest,'coatSide'+s,0.26,0.52,0.05,MAT.coat,0,0.26,s*0.19);
-  box(chest,'lapel'+s,0.05,0.5,0.12,MAT.coat,0.12,0.25,s*0.135);
-  box(chest,'strap'+s,0.035,0.34,0.05,MAT.olive,0.135,0.33,s*0.1);
-  box(chest,'collar'+s,0.16,0.14,0.05,MAT.coat,-0.02,0.57,s*0.13, 0,0,0.1);
+  // lapels follow the coat opening edge
+  box(chest,'lapel'+s,0.035,0.42,0.07,MAT.coat,0.135,0.28,s*0.12,  s*0.08,0,0);
+  box(chest,'strap'+s,0.03,0.3,0.045,MAT.olive,0.14,0.33,s*0.16);
+  blob(chest,'shoulderCap'+s,0.12,0.08,0.12,MAT.coat,-0.01,0.46,s*0.23);
 }
-box(chest,'shoulders',0.28,0.08,0.46,MAT.coat,0,0.5,0);
-box(chest,'collarBack',0.06,0.18,0.3,MAT.coat,-0.1,0.6,0,0,0,0.15);
-// backpack
-box(chest,'pack',0.18,0.36,0.32,MAT.olive,-0.23,0.3,0);
-box(chest,'packFlap',0.05,0.18,0.3,MAT.olive,-0.335,0.36,0);
-box(chest,'packRoll',0.12,0.09,0.36,MAT.oliveDk || MAT.olive,-0.22,0.52,0);
-box(chest,'packPocket',0.07,0.12,0.12,MAT.olive,-0.3,0.18,0.1);
+blob(chest,'upperBack',0.13,0.13,0.26,MAT.coat,-0.05,0.4,0);
+shell(chest,'collar',0.16,0.19,0.15,0.9,MAT.coatIn,0.58,0.85);
+// backpack, sitting behind the left shoulder like the sprite
+const pack = grp(chest,'pack',-0.26,0.32,-0.03);
+blob(pack,'packBody',0.12,0.23,0.22,MAT.olive,0,0,0);
+blob(pack,'packFlap',0.05,0.12,0.15,MAT.olive,-0.08,0.06,0);
+add(pack,'packRoll',new T.CylinderGeometry(0.065,0.065,0.44,8),MAT.olive,0.0,0.24,0,Math.PI/2,0,0);
+blob(pack,'packPocket',0.05,0.08,0.06,MAT.olive,-0.04,-0.1,-0.15);
 
-const neck = grp(chest,'neck',0,0.55,0);
-box(neck,'neckMesh',0.1,0.1,0.1,MAT.skin,0.01,0.03,0);
-const head = grp(neck,'head',0.01,0.08,0);
-box(head,'skull',0.22,0.24,0.2,MAT.skin,0,0.11,0);
-box(head,'nose',0.04,0.05,0.04,MAT.skin,0.12,0.1,0);
-box(head,'maskBand',0.025,0.045,0.18,MAT.eye,0.112,0.15,0);
-box(head,'eyeR',0.02,0.025,0.035,MAT.glow,0.124,0.152,0.05);
-box(head,'eyeL',0.02,0.025,0.035,MAT.glow,0.124,0.152,-0.05);
-box(head,'beard',0.07,0.15,0.19,MAT.beard,0.085,0.035,0);
-box(head,'chin',0.1,0.06,0.13,MAT.beard,0.07,-0.04,0);
-box(head,'mustache',0.03,0.03,0.13,MAT.hair,0.118,0.085,0);
-box(head,'hairTop',0.25,0.07,0.23,MAT.hair,-0.01,0.245,0);
-box(head,'hairBack',0.07,0.2,0.23,MAT.hair,-0.105,0.15,0);
-box(head,'hairSideR',0.12,0.1,0.03,MAT.hair,-0.03,0.19,0.105);
-box(head,'hairSideL',0.12,0.1,0.03,MAT.hair,-0.03,0.19,-0.105);
-[[0.05,0.29,0.04,0.5],[-0.04,0.3,-0.05,-0.4],[-0.1,0.27,0.07,-0.9],[0.09,0.27,-0.06,0.8],[-0.13,0.2,0,-1.2],[0.0,0.3,0.08,0.2]]
-  .forEach((p,i)=>box(head,'spike'+i,0.05,0.09,0.06,MAT.hair,p[0],p[1],p[2],0,0,p[3]));
+const neck = grp(chest,'neck',0.01,0.54,0);
+limb(neck,'neckMesh',0.05,0.055,0.1,MAT.skin,0.1);
+const head = grp(neck,'head',0.01,0.07,0); head.scale.setScalar(1.22);
+blob(head,'skull',0.1,0.115,0.092,MAT.skin,0,0.1,0);
+blob(head,'nose',0.025,0.03,0.022,MAT.skin,0.098,0.1,0);
+box(head,'maskBand',0.03,0.028,0.12,MAT.eye,0.085,0.135,0);
+box(head,'eyeR',0.02,0.022,0.03,MAT.glow,0.098,0.137,0.038);
+box(head,'eyeL',0.02,0.022,0.03,MAT.glow,0.098,0.137,-0.038);
+blob(head,'beard',0.07,0.085,0.088,MAT.beard,0.05,0.035,0);
+blob(head,'beardChin',0.05,0.05,0.06,MAT.beard,0.07,-0.025,0);
+blob(head,'mustache',0.025,0.018,0.06,MAT.beard,0.098,0.078,0);
+blob(head,'hairCap',0.108,0.07,0.1,MAT.hair,-0.012,0.18,0);
+blob(head,'hairBack',0.06,0.1,0.095,MAT.hair,-0.07,0.12,0);
+// swept-back strands
+[[0.05,0.21,0.03,-1.75,0.15],[0.05,0.21,-0.03,-1.75,-0.15],[0.0,0.22,0.06,-1.95,0.35],[0.0,0.22,-0.06,-1.95,-0.35],
+ [-0.05,0.19,0.0,-2.15,0.0],[-0.06,0.15,0.07,-2.3,0.5],[-0.06,0.15,-0.07,-2.3,-0.5],[0.05,0.15,0.09,-1.5,1.1],[0.05,0.15,-0.09,-1.5,-1.1]]
+  .forEach((p,i)=>spike(head,'strand'+i,0.032,0.11,MAT.hair,p[0],p[1],p[2],p[3],p[4]));
 
 const arms = {};
 const A_UP = 0.28, A_LO = 0.27;
 for (const s of [-1,1]){
   const side = s>0?'R':'L';
-  const sh = grp(chest,'shoulder'+side,0,0.46,s*0.25);
+  const sh = grp(chest,'shoulder'+side,0,0.44,s*0.27);
   const up = grp(sh,'upperArm'+side,0,0,0);
-  box(up,'sleeve'+side,0.14,0.2,0.14,MAT.coat,0,-0.08,0);
-  box(up,'cuff'+side,0.15,0.06,0.15,MAT.coatDk,0,-0.19,0);
-  box(up,'bicep'+side,0.1,0.08,0.1,MAT.skin,0,-0.25,0);
-  if (s>0) box(up,'patch',0.06,0.06,0.012,MAT.patch,0.0,-0.07,0.072);
+  limb(up,'sleeve'+side,0.09,0.08,0.19,MAT.coat,0.03);
+  limb(up,'cuff'+side,0.092,0.09,0.065,MAT.cuff,-0.165);
+  limb(up,'bicep'+side,0.055,0.05,0.07,MAT.skin,-0.22);
+  if (s<0) add(up,'patch',new T.BoxGeometry(0.05,0.09,0.02),MAT.patch,0.0,-0.06,-0.088);
   const lo = grp(up,'forearm'+side,0,-A_UP,0);
-  box(lo,'forearmMesh'+side,0.09,0.2,0.09,MAT.skin,0,-0.09,0);
-  box(lo,'wrist'+side,0.105,0.07,0.105,MAT.navy,0,-0.2,0);
+  blob(lo,'elbow'+side,0.05,0.05,0.05,MAT.skin,0,0,0);
+  limb(lo,'forearmMesh'+side,0.05,0.04,0.19,MAT.skin,0);
+  limb(lo,'wrist'+side,0.047,0.05,0.08,MAT.navy,-0.17);
   const hand = grp(lo,'hand'+side,0,-A_LO,0);
-  box(hand,'glove'+side,0.08,0.1,0.07,MAT.navy,0.0,0.01,0);
+  blob(hand,'glove'+side,0.045,0.055,0.04,MAT.navy,0.0,0.01,0);
   arms[side] = {sh,up,lo,hand,s};
 }
 
@@ -250,27 +282,28 @@ function makeRifle(){
   box(g,'receiver',0.34,0.08,0.05,MAT.metal,0.06,0.05,0);
   box(g,'stock',0.18,0.07,0.04,MAT.metal,-0.2,0.035,0);
   box(g,'butt',0.05,0.13,0.05,MAT.metal,-0.31,0.02,0);
-  box(g,'handguard',0.24,0.075,0.065,MAT.metalL,0.34,0.05,0);
-  box(g,'barrel',0.24,0.025,0.025,MAT.metal,0.57,0.055,0);
+  add(g,'handguard',new T.CylinderGeometry(0.036,0.036,0.24,8),MAT.metalL,0.34,0.05,0,0,0,Math.PI/2);
+  add(g,'barrel',new T.CylinderGeometry(0.013,0.013,0.24,6),MAT.metal,0.57,0.055,0,0,0,Math.PI/2);
   box(g,'muzzle',0.05,0.04,0.04,MAT.metal,0.7,0.055,0);
   box(g,'fsight',0.02,0.08,0.02,MAT.metal,0.45,0.11,0);
   box(g,'mag',0.06,0.16,0.04,MAT.metal,0.13,-0.06,0,0,0,-0.18);
   box(g,'grip',0.04,0.11,0.04,MAT.metal,-0.01,-0.03,0,0,0,0.3);
-  box(g,'scope',0.2,0.045,0.045,MAT.metalL,0.05,0.135,0);
-  box(g,'scopeLensF',0.02,0.06,0.06,MAT.metal,0.16,0.135,0);
+  add(g,'scope',new T.CylinderGeometry(0.024,0.024,0.2,8),MAT.metalL,0.05,0.135,0,0,0,Math.PI/2);
   box(g,'scopeMount',0.1,0.04,0.03,MAT.metal,0.05,0.1,0);
   g.userData = { grip:new T.Vector3(0,-0.01,0), support:new T.Vector3(0.33,0.0,0), muzzle:new T.Vector3(0.74,0.055,0),
-    aimPos:new T.Vector3(0.2,0.41,0.11), aimRot:0, lowPos:new T.Vector3(0.2,0.24,0.12), lowRot:-0.55, rate:0.11, kick:0.035 };
+    aimPos:new T.Vector3(0.2,0.41,0.11), aimRot:0, lowPos:new T.Vector3(0.24,0.2,0.08), lowRot:-0.75, rate:0.11, kick:0.035 };
   return g;
 }
 function makePistol(){
+  // long ribbed pistol, as drawn in the sprite
   const g = grp(chest,'pistol');
-  box(g,'slide',0.21,0.05,0.035,MAT.metalL,0.07,0.065,0);
+  box(g,'slide',0.26,0.05,0.035,MAT.metal,0.09,0.065,0);
+  for (let i=0;i<5;i++) box(g,'rib'+i,0.018,0.025,0.03,MAT.metal,0.03+i*0.045,0.1,0);
   box(g,'frame',0.17,0.035,0.03,MAT.metal,0.06,0.03,0);
   box(g,'grip',0.05,0.12,0.035,MAT.metal,-0.005,-0.03,0,0,0,0.25);
-  box(g,'comp',0.05,0.04,0.035,MAT.metal,0.2,0.06,0);
-  g.userData = { grip:new T.Vector3(0,-0.02,0), support:new T.Vector3(-0.01,-0.03,-0.045), muzzle:new T.Vector3(0.24,0.065,0),
-    aimPos:new T.Vector3(0.5,0.5,0.02), aimRot:0.05, lowPos:new T.Vector3(0.24,0.08,0.17), lowRot:-1.2, rate:0.22, kick:0.06 };
+  box(g,'comp',0.05,0.04,0.035,MAT.metalL,0.24,0.065,0);
+  g.userData = { grip:new T.Vector3(0,-0.02,0), support:new T.Vector3(-0.01,-0.03,-0.045), muzzle:new T.Vector3(0.28,0.065,0),
+    aimPos:new T.Vector3(0.5,0.5,0.02), aimRot:0.05, lowPos:new T.Vector3(0.2,0.0,0.2), lowRot:-1.15, rate:0.22, kick:0.06 };
   return g;
 }
 const weapons = { rifle: makeRifle(), pistol: makePistol() };
@@ -280,19 +313,45 @@ box(flash,'f2',0.12,0.12,0.03,MAT.flash,0.05,0,0,0,0,0.785);
 box(flash,'f3',0.08,0.04,0.04,MAT.flashC,0.04,0,0);
 flash.visible = false;
 
-// ---------- Coat skirt: hinged panels on a damped spring ----------
-const panels = [];
-function panel(name, hx,hy,hz, w,h,d, mesh){
-  const g = grp(hips,name,hx,hy,hz);
-  box(g,name+'Mesh',w,h,d,MAT.coat,mesh?mesh[0]:0,-h/2,mesh?mesh[1]:0);
-  const p = {g, a:0, v:0}; panels.push(p); return p;
+// ---------- Coat skirt: one open, flared tube that is re-shaped every frame ----------
+const SK = { cols:30, rows:8, L:0.74, rTop:0.245, rBot:0.5, sx:0.7 };
+const skirtGeo = new T.BufferGeometry();
+{
+  const n = (SK.cols+1)*(SK.rows+1), idx=[];
+  skirtGeo.setAttribute('position', new T.BufferAttribute(new Float32Array(n*3),3));
+  for (let r=0;r<SK.rows;r++) for (let c=0;c<SK.cols;c++){
+    const a=r*(SK.cols+1)+c, b=a+1, d=a+SK.cols+1, e=d+1;
+    idx.push(a,d,b, b,d,e);
+  }
+  skirtGeo.setIndex(idx);
 }
-const pBack  = panel('skirtBack',-0.135,0.06,0, 0.05,0.68,0.42);
-box(pBack.g,'skirtTail',0.06,0.12,0.4,MAT.coatDk,-0.03,-0.62,0);
-const pSideR = panel('skirtSideR',-0.07,0.06,0.2, 0.15,0.64,0.04);
-const pSideL = panel('skirtSideL',-0.07,0.06,-0.2, 0.15,0.64,0.04);
-const pFrontR= panel('skirtFrontR',0.125,0.06,0.15, 0.04,0.6,0.1);
-const pFrontL= panel('skirtFrontL',0.125,0.06,-0.15, 0.04,0.6,0.1);
+const skirt = add(hips,'skirt',skirtGeo,MAT.skirt,0,0.08,0);
+const skirtState = { back:0, backV:0, R:0, RV:0, L:0, LV:0 };
+function shapeSkirt(thR, thL, walk, wind){
+  const pos = skirtGeo.attributes.position.array;
+  let i=0;
+  for (let r=0;r<=SK.rows;r++){
+    const v = r/SK.rows, v2 = v*v;
+    const gap = 0.6 + 1.15*v;                       // front opening widens towards the hem
+    const rad = SK.rTop + (SK.rBot-SK.rTop)*Math.pow(v,1.3);
+    for (let c=0;c<=SK.cols;c++){
+      const u = c/SK.cols;
+      const th = Math.PI/2 + gap + u*(Math.PI*2-2*gap);
+      let x = Math.sin(th)*rad*SK.sx, z = Math.cos(th)*rad, y = -v*SK.L;
+      const backW = Math.max(0,-Math.sin(th));      // 1 at the back
+      const rW = Math.max(0,Math.cos(th)), lW = Math.max(0,-Math.cos(th));
+      // flaps follow the legs, back panel trails and flares
+      x += v2*SK.L*(rW*Math.sin(skirtState.R)*0.9 + lW*Math.sin(skirtState.L)*0.9);
+      x -= v2*backW*(0.06 + skirtState.back);
+      z += v2*Math.sign(z)*0.05*(1-backW*0.5);
+      // ragged hem: back-left corner hangs lower, like the sprite
+      if (r===SK.rows) y -= 0.14*Math.max(0,-Math.cos(th))*backW + 0.025*Math.sin(c*1.7);
+      pos[i++]=x; pos[i++]=y; pos[i++]=z;
+    }
+  }
+  skirtGeo.attributes.position.needsUpdate = true;
+  skirtGeo.computeVertexNormals();
+}
 
 // ---------- 2-bone IK in chest space ----------
 const _v = new T.Vector3(), _e = new T.Vector3(), _d = new T.Vector3(), _p = new T.Vector3(), _q = new T.Quaternion(), DOWN = new T.Vector3(0,-1,0);
@@ -303,14 +362,13 @@ function solveArm(arm, target, pole){
   const cosA = (A_UP*A_UP + dist*dist - A_LO*A_LO)/(2*A_UP*dist);
   const sinA = Math.sqrt(Math.max(0,1-cosA*cosA));
   _p.copy(pole).addScaledVector(_d,-pole.dot(_d)).normalize();
-  _e.copy(S).addScaledVector(_d,A_UP*cosA).addScaledVector(_p,A_UP*sinA);       // elbow
+  _e.copy(S).addScaledVector(_d,A_UP*cosA).addScaledVector(_p,A_UP*sinA);
   _v.subVectors(_e,S).normalize();
   arm.up.quaternion.setFromUnitVectors(DOWN,_v);
-  const tgt = _p.copy(S).addScaledVector(_d,dist);                              // reachable wrist
+  const tgt = _p.copy(S).addScaledVector(_d,dist);
   _v.subVectors(tgt,_e).normalize().applyQuaternion(_q.copy(arm.up.quaternion).invert());
   arm.lo.quaternion.setFromUnitVectors(DOWN,_v);
 }
-
 // ---------- Scene, camera, pixel pipeline ----------
 const canvas = document.getElementById('c');
 const stage = document.getElementById('stage');
@@ -358,11 +416,11 @@ const postScene = new T.Scene();
 postScene.add(new T.Mesh(new T.PlaneGeometry(2,2), post));
 const postCam = new T.Camera();
 
-const SIDE_YAW = 0.45;
-const S = { anim:'idle', weapon:'rifle', pxChar:96, yaw:SIDE_YAW, spin:false, outline:true, toon:true,
+const SIDE_YAW = 0.9;
+const S = { anim:'idle', weapon:'rifle', pxChar:64, yaw:SIDE_YAW, spin:false, outline:true, toon:true,
   t:0, walk:0, aim:0, shotT:9, nextShot:0, recoil:0, dragging:false };
 let W=160, H=120, scale=1;
-const CHAR_H = 1.86;
+const CHAR_H = 1.95;
 
 function resize(){
   const r = stage.getBoundingClientRect();
@@ -393,7 +451,7 @@ function setSize(w,h,sc){
 
 function updateHud(){
   const deg = (((S.yaw-SIDE_YAW)*180/Math.PI)%360+360)%360;
-  document.getElementById('hud').innerHTML = (S.pxChar? S.pxChar+' px':'HD')+' · <b>'+(Math.abs(deg)<1||Math.abs(deg-360)<1?'side':Math.round(deg)+'°')+'</b> · '+W+'×'+H;
+  document.getElementById('hud').innerHTML = (S.pxChar? S.pxChar+' px':'HD')+' · <b>'+(Math.abs(deg)<1||Math.abs(deg-360)<1?'sprite':Math.round(deg)+'°')+'</b> · '+W+'×'+H;
 }
 
 // ---------- Animation ----------
@@ -404,7 +462,7 @@ function legAngles(side, t){
   const ph = t*Math.PI*2*1.3 + (side==='R'?0:Math.PI);
   const wTh = 0.5*Math.sin(ph);
   const wKn = -0.12 - 0.85*Math.max(0,Math.cos(ph));
-  const stTh = side==='R' ? 0.34 : -0.3, stKn = side==='R' ? -0.1 : -0.18;
+  const stTh = side==='R' ? 0.12 : -0.08, stKn = side==='R' ? -0.06 : -0.08;
   const th = lerp(stTh,wTh,S.walk), kn = lerp(stKn,wKn,S.walk);
   return [th,kn];
 }
@@ -421,8 +479,9 @@ function update(dt){
     const [th,kn] = legAngles(side,t);
     const L = legs[side];
     L.thigh.rotation.z = th; L.knee.rotation.z = kn; L.ankle.rotation.z = -(th+kn)*0.9;
-    L.thigh.rotation.x = (side==='R'?-1:1)*0.07*(1-S.walk);
-    const e = 0.04 + 0.43*Math.cos(th) + 0.41*Math.cos(th+kn) + 0.12;
+    const ab = L.s*lerp(0.34,0.06,S.walk);           // wide A-stance from the sprite
+    L.thigh.rotation.x = -ab; L.ankle.rotation.x = ab*0.9;
+    const e = 0.03 + (0.4*Math.cos(th) + 0.38*Math.cos(th+kn))*Math.cos(ab) + 0.11;
     ext = Math.max(ext,e);
   }
   hips.position.y = ext + Math.sin(t*2.1)*0.004*(1-S.walk);
@@ -471,24 +530,15 @@ function update(dt){
   }
   solveArm(arms.L, supp, POLE_L);
 
-  // coat panels: damped springs chasing the legs
+  // coat skirt: damped springs chasing the legs (sub-stepped so big export steps stay stable)
   const thR = legs.R.thigh.rotation.z, thL = legs.L.thigh.rotation.z;
-  const wind = Math.sin(t*1.3)*0.04 + Math.sin(t*3.1)*0.015;
-  const targets = [
-    [pBack,  -0.1 - 0.35*S.walk + wind + Math.min(thR,thL)*0.4],
-    [pSideR, thR*0.6 - 0.06 + wind*0.5],
-    [pSideL, thL*0.6 - 0.06 + wind*0.5],
-    [pFrontR,Math.max(thR,0)*1.05 + 0.04],
-    [pFrontL,Math.max(thL,0)*1.05 + 0.04],
-  ];
-  for (const [p,tg] of targets){
-    // sub-step so big frame steps (sprite export) stay stable
-    const n = Math.ceil(dt/(1/240));
-    for (let i=0;i<n;i++){ const h=dt/n; p.v += ((tg - p.a)*90 - p.v*11)*h; p.a += p.v*h; }
-    p.g.rotation.z = p.a;
+  const wind = Math.sin(t*1.3)*0.03 + Math.sin(t*3.1)*0.012;
+  const tg = { back: 0.05 + 0.3*S.walk + wind + Math.max(0,-Math.min(thR,thL))*0.3, R: thR*0.8, L: thL*0.8 };
+  const n = Math.ceil(dt/(1/240));
+  for (let i=0;i<n;i++){ const h=dt/n;
+    for (const k of ['back','R','L']){ skirtState[k+'V'] += ((tg[k]-skirtState[k])*70 - skirtState[k+'V']*9)*h; skirtState[k] += skirtState[k+'V']*h; }
   }
-  pFrontR.g.rotation.x = -0.12; pFrontL.g.rotation.x = 0.12;
-  pSideR.g.rotation.x = -0.08;  pSideL.g.rotation.x = 0.08;
+  shapeSkirt(thR, thL, S.walk, wind);
 
   // camera orbit
   if (S.spin && !S.dragging) S.yaw += dt*0.6;
@@ -498,7 +548,6 @@ function update(dt){
 
 function render(clear){
   cam.updateMatrixWorld();
-  LIGHT.value.set(0.55,0.8,0.25).normalize().transformDirection(cam.matrixWorldInverse);
   TOON.value = S.toon?1:0;
   post.uniforms.uOutline.value = S.outline?1:0;
   post.uniforms.uClear.value = clear?1:0;
