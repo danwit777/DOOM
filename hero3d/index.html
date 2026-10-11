@@ -120,65 +120,108 @@ document.getElementById('pal').innerHTML = Object.values(PAL).map(c=>`<i style="
 // Bands: black / dark / mid / light. "fold" adds horizontal cloth creases in object space.
 const LIGHT = { value: new T.Vector3(-0.45,0.75,0.5).normalize() };
 const TOON  = { value: 1 };
+const SHIFT = { value: 0 };     // 1 = render every material one ramp step darker (inner-line pass)
+const NF = { value: 1 };        // global noise-frequency multiplier (kept at 1: noise lives in metres, object space)
 const VS = `varying vec3 vN; varying vec3 vP;
-void main(){ vN = normalize(normalMatrix * normal); vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`;
-const FS = `uniform vec3 cK; uniform vec3 cD; uniform vec3 cM; uniform vec3 cL; uniform vec3 uL; uniform float uToon; uniform float uFlat; uniform float uFold; uniform vec4 uT;
+#ifdef USE_REST
+attribute vec3 rest;
+#endif
+void main(){ vN = normalize(normalMatrix * normal);
+#ifdef USE_REST
+  vP = rest;
+#else
+  vP = position;
+#endif
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`;
+const FS = `uniform vec3 cK; uniform vec3 cD; uniform vec3 cM; uniform vec3 cL; uniform vec3 cS; uniform vec3 cS2; uniform vec3 uL;
+uniform float uToon; uniform float uFlat; uniform float uFold; uniform vec4 uT; uniform vec3 uGS; uniform vec3 uGrit; uniform vec4 uSpec; uniform vec3 uVG; uniform vec2 uStr; uniform float uShift; uniform float uNF;
 varying vec3 vN; varying vec3 vP;
+float h3(vec3 p){ p = fract(p*vec3(0.1031,0.1030,0.0973)); p += dot(p, p.yxz+33.33); return fract((p.x+p.y)*p.z); }
+float vn(vec3 x){ vec3 i = floor(x), f = fract(x); f = f*f*(3.0-2.0*f);
+  return mix(mix(mix(h3(i),             h3(i+vec3(1,0,0)),f.x), mix(h3(i+vec3(0,1,0)),h3(i+vec3(1,1,0)),f.x),f.y),
+             mix(mix(h3(i+vec3(0,0,1)), h3(i+vec3(1,0,1)),f.x), mix(h3(i+vec3(0,1,1)),h3(i+vec3(1,1,1)),f.x),f.y), f.z); }
+vec3 ramp(float i){ return i > 2.5 ? cL : (i > 1.5 ? cM : (i > 0.5 ? cD : cK)); }
 void main(){
   vec3 n = normalize(vN);
   if (!gl_FrontFacing) n = -n;
-  float d = dot(n, uL);
-  float fold = sin(vP.y*62.0 + sin(vP.x*9.0 + vP.z*11.0)*0.9) * 0.5 + 0.5;
-  d += (fold - 0.5) * uFold;
+  float d = dot(n, uL) - uVG.z*clamp((uVG.x - vP.y)/(uVG.x - uVG.y), 0.0, 1.0);   // value drop toward the hem (rest-space height)
+  // clean tone i0 = pure lighting (screen light) -> the painted value plan. Grit, creases and flecks are then allowed to move
+  // a pixel ONE tone away from i0 and never into black unless the light already put it there (sheet C / sprites: clustered
+  // 2-3 tone painted shapes, black only for real shadow and outline)
+  float i0 = d > uT.x ? 3.0 : (d > uT.y ? 2.0 : (d > uT.z ? 1.0 : 0.0));
+  vec3 q = vP * uGS * uNF;
+  float g = vn(q)*0.75 + vn(q*2.03 + 17.0)*0.25;                      // mottle, object space, mean ~0.5
+  float w = vP.y*62.0 + (vn(vP*vec3(7.0,3.0,7.0)) - 0.5)*6.0;         // wobbling horizontal crease field
+  float crease = smoothstep(0.72, 0.9, sin(w)*0.5+0.5) * step(0.42, vn(vP*vec3(22.0,9.0,22.0) + 5.0));  // broken dashes
+  float bk = mix(uGrit.z, 1.0, smoothstep(-0.06, 0.06, vP.x));           // grit.z < 1: the back panel (rest x < 0) stays smoother (sheet C back)
+  float ga = uGrit.x*bk;
+  float cr = crease*uFold;
+  float dn = d + (g - 0.5)*ga*mix(1.0, 0.45, smoothstep(uT.y, uT.x, d)) - cr;   // lit faces stay cleaner (sprite)
+  float i = dn > uT.x ? 3.0 : (dn > uT.y ? 2.0 : (dn > uT.z ? 1.0 : 0.0));
+  if (uT.w > 0.5 && i0 < 2.5) i = min(i, 2.0);                       // clean highlights: the light tone only where the light itself puts it
+  float st = vn(q*vec3(1.0,0.45,1.0) + 41.0);                         // stroke field: long in y (vertical cloth folds)
+  if (uGrit.y > 0.0 && st > uGrit.y + (1.0 - bk)*0.08) i = i0 - 1.0;  // sparse dark strokes, one tone down (fewer on the back)
+  if (st < uStr.x - (1.0 - bk)*0.08 && i0 > 1.5 && i0 < 2.5 && d > uStr.y) i = 3.0;      // sparse light strokes on the lit side of the cloth
+  if (cr > 0.2) i = min(i, i0 - 1.0);                                  // painted crease dashes: always one tone down
+  i = clamp(i, max(i0 - 1.0, min(i0, 1.0)), i0 + 1.0);
+  if (n.z < uSpec.w) i = min(i, 0.0);                                  // dark grazing rim (pauldron lower rim)
+  i = max(i - uShift, 0.0);
   vec3 c;
-  if (uFlat > 0.5) c = cM;
-  else if (uToon > 0.5) c = d > uT.x ? cL : (d > uT.y ? cM : (d > uT.z ? cD : cK));
+  if (uFlat > 0.5) c = uShift > 1.5 ? cK : (uShift > 0.5 ? cD : cM);
+  else if (uToon > 0.5) c = ramp(i);
   else { float k = clamp(d*0.5+0.5,0.0,1.0); c = k < 0.5 ? mix(cD,cM,k*2.0) : mix(cM,cL,(k-0.5)*2.0); }
+  if (uSpec.z > 0.0 && uShift < 0.5){ float s = uSpec.z > 1.5 ? pow(max(dot(n, normalize(uL + vec3(0.0,0.0,1.0))),0.0), uSpec.z) : dot(n, uL);   // z<=1: gloss spot on raw n.L
+    if (s > uSpec.y) c = cS2; else if (s > uSpec.x) c = cS; }
   gl_FragColor = vec4(c, 1.0);
 }`;
 function M(k,d,m,l,o={}){
+  const g = o.grit || [0,0,1];
   const mat = new T.ShaderMaterial({
     uniforms:{ cK:{value:new T.Color(k)}, cD:{value:new T.Color(d)}, cM:{value:new T.Color(m)}, cL:{value:new T.Color(l)},
-      uL:LIGHT, uToon:TOON, uFlat:{value:o.flat?1:0}, uFold:{value:o.fold||0},
-      uT:{value:new T.Vector4(o.hi??0.62, o.mid??0.0, o.lo??-0.5, 0)} },
+      cS:{value:new T.Color(o.cS||l)}, cS2:{value:new T.Color(o.cS2||o.cS||l)},
+      uL:LIGHT, uToon:TOON, uShift:SHIFT, uNF:NF, uFlat:{value:o.flat?1:0}, uFold:{value:o.fold||0},
+      uGS:{value:new T.Vector3(...(o.gs||[30,30,30]))}, uGrit:{value:new T.Vector3(g[0],g[1],g[2] ?? 1)},
+      uSpec:{value:new T.Vector4(...(o.spec||[2,2,0]), o.rim ?? -2)}, uVG:{value:new T.Vector3(...(o.vg||[1,0,0]))}, uStr:{value:new T.Vector2(...(o.str||[-1,0]))},
+      uT:{value:new T.Vector4(o.hi??0.62, o.mid??0.0, o.lo??-0.5, o.clean?1:0)} },
+    defines: o.rest ? {USE_REST:''} : {},
     vertexShader:VS, fragmentShader:FS, side: o.double ? T.DoubleSide : T.FrontSide
   });
   mat.userData.mid = m;
   return mat;
 }
 const MAT = {
-  coat:   M(PAL.black, PAL.coatD, PAL.coatM, PAL.coatL, {fold:0.35, hi:0.45}),
-  coatT:  M(PAL.black, PAL.coatD, PAL.coatM, PAL.coatL, {fold:0.2, hi:0.95, mid:-0.18}),
+  coat:   M(PAL.black, PAL.coatD, PAL.coatM, PAL.coatL, {clean:true, fold:0.3, hi:0.62, mid:0.2, lo:-0.75, gs:[26,6,26], grit:[0.3,0.8], str:[0.2,0.35]}),
+  coatT:  M(PAL.black, PAL.coatD, PAL.coatM, PAL.coatL, {clean:true, fold:0.0, hi:0.8, mid:0.38, lo:-0.7, gs:[30,4,30], grit:[0.35,0.78,0.3], str:[0.2,0.5], vg:[1.05,0.4,0.15], rest:true}),
   cuff:   M(PAL.coatD, PAL.coatM, PAL.coatL, PAL.coatL, {hi:0.4}),
-  pants:  M(PAL.black, PAL.coatD, PAL.coatM, PAL.coatL, {fold:0.3, hi:0.95, mid:0.15, lo:-0.4}),   // sheet C trousers: #36322b body, #292520/#191713 folds
-  pad:    M(PAL.black, '#26251d', '#2d2b23', '#3a362f', {hi:0.75, mid:-0.45}),      // grey knee-pad plate (sheet C #2c2923)
-  padHi:  M('#26251d', '#4a453c', '#5c564d', '#685e53', {hi:0.85, mid:-0.1, lo:-0.7}),  // raised light inset on the pad (#60584d)
-  shirt:  M(PAL.black, PAL.black, PAL.black, PAL.coatD, {hi:0.8}),
+  pants:  M(PAL.black, PAL.coatD, PAL.coatM, PAL.coatL, {clean:true, fold:0.45, hi:1.6, mid:-0.05, lo:-0.75, gs:[6,14,6], grit:[1.0,0]}),
+  pad:    M(PAL.coatD, PAL.coatM, PAL.coatM, PAL.coatL, {hi:0.55, mid:-0.2, lo:-0.7}),
+  padHi:  M(PAL.coatM, PAL.coatL, PAL.coatL, PAL.coatL, {hi:0.5, mid:-0.4, lo:-0.9}),
+  shirt:  M(PAL.black, PAL.black, PAL.coatD, PAL.coatM, {hi:1.3, mid:0.35, lo:-1.0, gs:[10,24,10], grit:[0.6,0]}),
   belt:   M(PAL.black, PAL.coatD, PAL.coatD, PAL.coatD, {lo:-0.6}),
   buckleT:M(PAL.coatL, PAL.coatL, PAL.coatL, PAL.coatL, {flat:true}),
   buckleB:M(PAL.coatM, PAL.coatM, PAL.coatM, PAL.coatM, {flat:true}),
-  skin:   M(PAL.skinS, PAL.skinD, PAL.skinM, PAL.skinL, {hi:0.45, lo:-0.6}),
-  hair:   M('#131a1a', '#2e3633', '#474542', '#787264', {hi:0.93, mid:-0.1, lo:-0.65}),   // sheet C grey hair
-  beard:  M(PAL.teal,  PAL.teal,  PAL.coatM, PAL.coatL, {hi:0.75, mid:-0.15, lo:-0.5}),
+  skin:   M(PAL.skinS, PAL.skinD, PAL.skinM, PAL.skinL, {hi:0.62, mid:-0.05, lo:-0.2, gs:[30,30,30], grit:[0.0,0]}),
+  hair:   M(PAL.tealD, PAL.teal, PAL.grey, PAL.greyL, {hi:0.6, mid:0.45, lo:-0.3, gs:[6,40,30], grit:[0.3,0.8], str:[0.24,0.3]}),   // swept-back strands: streaks run front-to-back
+  beard:  M(PAL.tealD, PAL.teal, PAL.grey, PAL.greyL, {hi:0.75, mid:-0.15, lo:-0.5}),
   navy:   M(PAL.black, PAL.black, PAL.navy,  PAL.navyL, {hi:0.55}),
   olive:  M(PAL.oliveD,PAL.oliveD,PAL.oliveM,PAL.oliveL,{fold:0.25, hi:0.35}),
-  pack:   M(PAL.black, '#1b1a0e', '#2e2b1a', '#45422a', {hi:0.5, mid:-0.15, lo:-0.6}),   // olive-dark backpack (sheet C #2e2b21, sprite olive)
-  packD:  M(PAL.black, PAL.black, '#1b1a0e', '#2e2b1a', {hi:0.5, mid:-0.1}),              // pack straps / webbing gaps
-  packL:  M(PAL.black, '#2e2b1a', '#45422a', '#5a5636', {hi:0.5}),                          // pack buckles, ribs
+  pack:   M(PAL.black, PAL.oliveD, PAL.oliveM, PAL.oliveL, {hi:0.5, mid:-0.15, lo:-0.6}),   // olive backpack (sprite olive #1a190a / #2e2c12 / #49471c)
+  packD:  M(PAL.black, PAL.black, PAL.oliveD, PAL.oliveM, {hi:0.5, mid:-0.1}),              // pack straps / webbing gaps
+  packL:  M(PAL.black, PAL.oliveM, PAL.oliveL, PAL.coatL, {hi:0.5}),                          // pack buckles, ribs
   metal:  M(PAL.black, PAL.black, PAL.black, PAL.grey,  {hi:0.72}),
   metalL: M(PAL.black, PAL.black, PAL.grey,  PAL.grey,  {hi:0.6, mid:0.3}),
   hairDk: M(PAL.tealD, PAL.teal,  PAL.teal,  PAL.teal,  {hi:0.9, mid:-0.3, lo:-0.9}),
-  boot:   M(PAL.black, PAL.black, '#07070c', PAL.navy, {hi:0.68, mid:0.3}), // navy-black boots (sheet C #030204 body, navy only on the lit faces)
+  boot:   M(PAL.black, PAL.black, PAL.black, PAL.navy, {hi:0.9, mid:0.5, fold:-0.9}),
   ink:    M(PAL.black, PAL.black, PAL.black, PAL.black, {flat:true}),      // black rim lines (belt edges, pad rims, seams)
-  coatLo: M(PAL.black, PAL.coatD, PAL.coatM, PAL.coatL, {fold:0.08, hi:0.9, mid:-0.18, lo:-0.55}),
-  lapel:  M(PAL.black, PAL.coatD, PAL.coatM, PAL.coatL, {hi:0.45, mid:-0.2}),
-  collar: M(PAL.black, PAL.coatD, PAL.coatM, PAL.coatL, {hi:0.5, double:true}),
-  lining: M(PAL.black, PAL.black, PAL.black, PAL.coatD, {hi:0.7, fold:0.3}),
-  pauldron:M(PAL.rust, '#b8561c', PAL.orange, PAL.cream, {hi:0.8, mid:0.2, lo:-0.2}),
+  coatLo: M(PAL.black, PAL.coatD, PAL.coatM, PAL.coatL, {clean:true, fold:0.08, hi:1.1, mid:0.4, lo:-0.75, gs:[14,3,14], grit:[0.35,0.8,0.3], str:[0.18,0.5], vg:[1.05,0.4,0.15], rest:true}),
+  lapel:  M(PAL.black, PAL.coatD, PAL.coatM, PAL.coatL, {hi:0.68, mid:0.33, lo:0.0, gs:[12,5,12], grit:[0.6,0.82], rest:true}),
+  collar: M(PAL.black, PAL.coatD, PAL.coatM, PAL.coatL, {hi:0.67, mid:0.5, lo:0.25, gs:[12,5,12], grit:[0.6,0.82], double:true}),
+  lining: M(PAL.black, PAL.black, PAL.black, PAL.coatD, {hi:0.92, fold:0.3, rest:true}),
+  pauldron:M(PAL.rust, '#b8561c', PAL.orange, PAL.amber, {hi:0.8, mid:0.1, lo:-0.45, spec:[2,0.94,1], cS2:PAL.cream, rim:0.08}),   // glossy: darker lower half, saturated orange top, amber/cream hotspot
   bootN:  M(PAL.navy,  PAL.navy,  PAL.navy,  PAL.navy,  {flat:true}),
-  wrap:   M(PAL.black, PAL.coatD, PAL.coatM, PAL.coatL, {hi:0.92, mid:0.22, lo:-0.2, fold:0.3}),
+  wrap:   M(PAL.black, PAL.coatD, PAL.coatM, PAL.coatL, {clean:true, fold:0.45, hi:1.6, mid:-0.15, lo:-0.8, gs:[6,14,6], grit:[1.0,0]}),
   pupil:  M(PAL.black, PAL.black, PAL.black, PAL.black, {flat:true}),
-  eye:    M('#bb412a', '#bb412a', '#bb412a', '#bb412a', {flat:true}),   // glowing red eyes
+  eye:    M('#5e201a', '#5e201a', '#5e201a', '#5e201a', {flat:true}),   // dark-red eye slit (sprite #5e201a)
   glow:   M(PAL.rust,PAL.rust,PAL.rust,PAL.rust,{flat:true}),
   flash:  M(PAL.amber, PAL.amber, PAL.amber, PAL.amber, {flat:true}),
   flashC: M(PAL.cream, PAL.cream, PAL.cream, PAL.cream, {flat:true})
@@ -244,52 +287,74 @@ for (const s of [-1,1]){
 // The T-pose keeps the sheet's slight knee bend (knee 0.05 m in front of the hip line, ankle 0.05 behind) and 10° splay.
 const LEG = { thigh:0.42, shin:0.44, hipZ:0.125, hipX:0.02, hipY:-0.03, ankleH:0.10,
   tpose:{th:0.12, kn:-0.32, ab:0.18, sab:-0.13, foot:0.22},
-  stance:{ R:{th:-0.2, kn:-0.05, ab:0.3, sab:0.0, foot:0.75}, L:{th:0.3, kn:0.0, ab:0.3, sab:-0.21, foot:0.3} } };
-// baggy trouser leg below the knee as a lathe (r, y in knee space): 0.21 W under the knee, real fold ridges, widest
-// bunch 0.23 W x 0.25 D at h 0.26, turning in over the boot shaft at h 0.17
-const SHIN_P = [[0.096,0.0],[0.103,-0.04],[0.104,-0.12],[0.108,-0.165],[0.103,-0.19],[0.111,-0.215],[0.105,-0.24],
-  [0.115,-0.27],[0.107,-0.30],[0.108,-0.322],[0.098,-0.345],[0.075,-0.362],[0.045,-0.372]];
-const shinGeo = new T.LatheGeometry(SHIN_P.map(([r,y])=>new T.Vector2(r,y)), 12); shinGeo.scale(1.1,1,1);
+  stance:{ R:{th:-0.2, kn:-0.05, ab:0.22, sab:0.14, foot:0.85}, L:{th:0.3, kn:0.0, ab:0.3, sab:-0.21, foot:-0.1} } };
+// lean cargo trouser leg below the knee as a lathe (r, y in knee space): 0.16 W x 0.20 D under the knee, tapering a
+// little through stacked fabric rolls (each rises slowly and tucks in sharply) to a short blouse lip of 0.17 W x 0.21 D
+// at h 0.22 just above the boot, turning in hard over the boot shaft at h 0.19 (sheet C: even baggy leg, bunch at the
+// cuff; the sprite: 7 px under the knee tapering to 6, 4-5 px boot shaft)
+const SHIN_P = [[0.079,0.02],[0.080,-0.04],[0.077,-0.09],[0.079,-0.13],[0.074,-0.142],[0.077,-0.19],[0.072,-0.202],
+  [0.075,-0.25],[0.071,-0.26],[0.083,-0.295],[0.085,-0.315],[0.080,-0.328],[0.066,-0.339],[0.054,-0.35],[0.05,-0.358]];
+// wavy fold rolls: the rings between the knee and the cuff wander up and down round the leg (two waves per turn), so the
+// toon bands and depth lines draw broken, slanted creases instead of level hoops; the knee and cuff rings stay level
+function foldLathe(g, pts, y0, y1, amp, k){
+  const a = g.attributes.position, n = pts.length, segs = a.count/n - 1;
+  for (let i=0;i<a.count;i++){
+    const x = a.getX(i), y = a.getY(i), z = a.getZ(i), ang = Math.atan2(x,z);
+    const w = Math.max(0, Math.min(1, (y0-y)/0.04, (y-y1)/0.03));
+    a.setY(i, y + w*amp*Math.sin(2*ang + y*k));
+  }
+  g.computeVertexNormals();
+  const nr = g.attributes.normal;                            // weld the lathe seam (first and last column share positions)
+  for (let j=0;j<n;j++){ const p = j, q = segs*n + j;
+    const v = new T.Vector3(nr.getX(p)+nr.getX(q), nr.getY(p)+nr.getY(q), nr.getZ(p)+nr.getZ(q)).normalize();
+    nr.setXYZ(p, v.x, v.y, v.z); nr.setXYZ(q, v.x, v.y, v.z); }
+}
+const shinGeo = new T.LatheGeometry(SHIN_P.map(([r,y])=>new T.Vector2(r,y)), 12); shinGeo.scale(1.25,1,1); shinGeo.translate(-0.006,0,0);
+foldLathe(shinGeo, SHIN_P, -0.03, -0.335, 0.014, 40);
+// thigh as a lathe (r, y in hip space): seat/upper thigh 0.19 W tapering to a 0.13 W knee with two small fold rolls
+// above it, closed at the top
+const THIGH_P = [[0,0.07],[0.066,0.064],[0.092,0.04],[0.097,0.0],[0.095,-0.06],[0.089,-0.14],[0.082,-0.21],[0.077,-0.272],
+  [0.071,-0.284],[0.074,-0.33],[0.068,-0.342],[0.069,-0.40],[0.066,-0.45]];
+const thighGeo = new T.LatheGeometry(THIGH_P.map(([r,y])=>new T.Vector2(r,y)), 12); thighGeo.scale(1.08,1,1);
 const legs = {};
 for (const s of [-1,1]){
   const side = s>0?'R':'L';
   const thigh = grp(hips,'thigh'+side,LEG.hipX,LEG.hipY,s*LEG.hipZ);
-  // baggy cargo trousers: 0.24 m at the hip, 0.21 at the knee; flap cargo pocket on the outer-front thigh (h 0.71-0.84)
+  // cargo trousers: 0.19 m at the seat tapering to 0.13 at the knee; flap cargo pocket on the outer-front thigh (h 0.71-0.84)
   // with a flap strap, and a strap loop with a D-ring at the front of the hip (h 0.92-0.96)
-  limb(thigh,'thighMesh'+side,0.12,0.103,LEG.thigh+0.05,MAT.pants,0.05,1.12,1.0,12);
-  const cargo = grp(thigh,'cargoPocket'+side,0.03,-0.165,s*0.1); cargo.rotation.y = -s*0.45;
-  box(cargo,'cargo'+side,0.10,0.13,0.034,MAT.pants,0,0,s*0.012);
-  box(cargo,'cargoFlap'+side,0.106,0.035,0.04,MAT.pants,0,0.05,s*0.014);
-  box(cargo,'cargoStrap'+side,0.02,0.06,0.044,MAT.belt,0,0.03,s*0.014);
-  box(thigh,'hipLoop'+side,0.014,0.06,0.028,MAT.belt,0.136,-0.02,-s*0.01,0,0,0.12);
-  box(thigh,'hipRing'+side,0.016,0.018,0.034,MAT.buckleB,0.138,-0.055,-s*0.01,0,0,0.12);
+  add(thigh,'thighMesh'+side,thighGeo,MAT.pants);
+  const cargo = grp(thigh,'cargoPocket'+side,0.022,-0.17,s*0.077); cargo.rotation.y = -s*0.45;
+  box(cargo,'cargo'+side,0.09,0.12,0.028,MAT.pants,0,0,s*0.012);
+  box(cargo,'cargoFlap'+side,0.096,0.032,0.034,MAT.pants,0,0.05,s*0.014);
+  box(cargo,'cargoStrap'+side,0.02,0.055,0.038,MAT.belt,0,0.03,s*0.014);
+  box(thigh,'hipLoop'+side,0.014,0.06,0.028,MAT.belt,0.108,-0.02,-s*0.01,0,0,0.12);
+  box(thigh,'hipRing'+side,0.016,0.018,0.034,MAT.buckleB,0.11,-0.055,-s*0.01,0,0,0.12);
   const knee = grp(thigh,'knee'+side,0,-LEG.thigh,0);
-  blob(knee,'kneeJoint'+side,0.1,0.09,0.103,MAT.pants,0,0,0);
+  blob(knee,'kneeJoint'+side,0.078,0.08,0.08,MAT.pants,0,0,0);   // no wider than the thigh end: the pad is the widest thing
   // grey knee pad (sheet C): plate 0.10 W x 0.13 H wrapping round the knee front on a black rim, just proud of the
   // shin, a raised light inset in its upper middle, and a dark strap round the back of the knee
-  const pad = grp(knee,'kneePad'+side,0.104,-0.017,0);
+  const pad = grp(knee,'kneePad'+side,0.095,-0.017,0);
   const facets = (name,h,fw,ww,t,x,mat)=>{                                  // a front facet and two side wings (wrap round the knee)
     box(pad,name+side,t,h,fw,mat,x,0,0);
     for (const w of [-1,1]) box(pad,name+'W'+side+w,t,h,ww,mat,x-0.4*ww,0,w*(fw/2+0.38*ww),0,-w*0.62,0);
   };
   facets('padRim',0.17,0.09,0.044,0.02,-0.008,MAT.ink);
   facets('kneepad',0.13,0.07,0.032,0.024,0.004,MAT.pad);
-  box(pad,'padInset'+side,0.012,0.058,0.052,MAT.padHi,0.018,0.02,0,0,0,0.3);
-  limb(knee,'padStrap'+side,0.104,0.104,0.022,MAT.belt,0.0,1.0,1.0,12).position.y = -0.005;
-  // shin: baggy and bunched over the boot shaft
+  box(pad,'padInset'+side,0.016,0.074,0.066,MAT.padHi,0.021,0.016,0,0,0,0.3);
+  limb(knee,'padStrap'+side,0.088,0.088,0.022,MAT.belt,0.0,1.0,1.0,12).position.y = -0.005;
+  // shin: pinched under the knee, baggy and bunched over the boot shaft
   add(knee,'shin'+side,shinGeo,MAT.wrap);
   const ankle = grp(knee,'ankle'+side,0,-LEG.shin,0);
-  // navy-black laced boot: shaft 0.125 W x 0.15 D up to 0.185, foot 0.25 long (heel flush with the shaft back), black sole,
-  // navy toe cap, a navy tongue with two lace bands on the front of the shaft
-  box(ankle,'bootTop'+side,0.15,0.185,0.125,MAT.boot,0,-0.0075,0);
-  box(ankle,'boot'+side,0.25,0.075,0.125,MAT.boot,0.05,-0.0625,0);
-  box(ankle,'sole'+side,0.258,0.022,0.132,MAT.ink,0.052,-0.089,0);
-  box(ankle,'heel'+side,0.07,0.03,0.134,MAT.ink,-0.04,-0.085,0);
-  box(ankle,'tongue'+side,0.012,0.13,0.05,MAT.bootN,0.078,0.03,0);
-  box(ankle,'strapA'+side,0.08,0.016,0.128,MAT.bootN,0.04,0.055,0);
-  box(ankle,'strapB'+side,0.08,0.016,0.128,MAT.bootN,0.04,0.0,0);
-  box(ankle,'toecap'+side,0.09,0.06,0.128,MAT.bootN,0.132,-0.065,0);
-  ankle.scale.set(0.8,1,0.8); legs[side] = {thigh,knee,ankle,s};
+  // black laced boot: a narrow ROUND shaft (0.095 W x 0.115 D, a box would read 40% wider at the 3/4 angle) up to h 0.185,
+  // a chunky foot with a sloped instep and a rounded navy toe, a flush black sole and heel, one navy lace line up the front
+  { const g = new T.CylinderGeometry(0.046,0.049,0.185,10); g.scale(1.18,1,1); add(ankle,'bootTop'+side,g,MAT.boot,-0.004,-0.0075,0); }
+  box(ankle,'boot'+side,0.18,0.072,0.098,MAT.boot,0.037,-0.064,0);
+  box(ankle,'instep'+side,0.095,0.058,0.098,MAT.boot,0.064,-0.038,0,0,0,-0.45);
+  blob(ankle,'toecap'+side,0.058,0.042,0.057,MAT.bootN,0.1,-0.058,0);
+  box(ankle,'sole'+side,0.222,0.024,0.104,MAT.ink,0.042,-0.088,0);
+  box(ankle,'heel'+side,0.066,0.03,0.104,MAT.ink,-0.027,-0.085,0);
+  box(ankle,'tongue'+side,0.01,0.12,0.038,MAT.bootN,0.052,0.03,0);
+  legs[side] = {thigh,knee,ankle,s};
 }
 // both feet on the ground in the standing stance: bend the knee of the longer leg until the two ankles are level
 function ankleDrop(st, s){
@@ -308,14 +373,37 @@ const spine = grp(hips,'spine',0,0.12,0);
 const chest = grp(spine,'chest',AX,0,0);
 // tight black shirt (shows in the coat opening): torso + sculpted pecs and abs
 limb(chest,'torso',0.21,0.19,0.58,MAT.shirt,0.46,0.78,1);
+// muscle plates (sheet C: charcoal pecs and a 3x2 abs grid split by black seams): rounded pads with small gaps between
+// them, so the depth lines draw the seams and their lit tops catch the shirt's light tone in HD and the T-pose
 for (const s of [-1,1]){
-  box(chest,'pec'+s,0.03,0.08,0.09,MAT.shirt,0.158,0.25,s*0.05);
-  [0.15,0.09,0.03].forEach((yy,i)=>box(chest,'abs'+i+s,0.024,0.05,0.06,MAT.shirt,0.155,yy,s*0.035));
+  rblob(chest,'pec'+s,0.028,0.058,0.072,0.55,MAT.shirt,0.152,0.262,s*0.068, 0,0,-0.12);
+  [0.165,0.107,0.052].forEach((yy,i)=>rblob(chest,'abs'+i+s,0.016,0.027,0.031,0.85,MAT.shirt,0.14-0.005*i,yy,s*0.034));   // rounder, shallower: muscle, not vest plates
 }
 // tall stand-up collar: a tube 0.35 W x 0.25 D, open in front for the beard (0.17 m gap), rolled lit rim on top
-const collar = shell(chest,'collar',0.175,0.178,0.115,0.5,MAT.collar,0.5125,0.71); collar.position.x = -0.05;
-const rimG = new T.TorusGeometry(0.175,0.012,5,20,Math.PI*2-1.0); rimG.rotateX(Math.PI/2); rimG.rotateY(-0.5); rimG.scale(0.71,1,1);
-add(chest,'collarRim',rimG,MAT.cuff,-0.05,0.57,0);
+const CSX = 0.83;                                                            // collar depth / width (0.25 D x 0.30 W, sheet C)
+const collarG = grp(chest,'collarRig',0,0,0);
+const collar = shell(collarG,'collar',0.148,0.152,0.115,0.5,MAT.collar,0.5125,CSX); collar.position.x = -0.075;   // set back: the beard hangs in front of it (sheet C side)
+const rimG = new T.TorusGeometry(0.148,0.012,5,20,Math.PI*2-1.0); rimG.rotateX(Math.PI/2); rimG.rotateY(-0.5); rimG.scale(CSX,1,1);
+add(collarG,'collarRim',rimG,MAT.cuff,collar.position.x,0.57,0);
+// the collar's rim slants: it stands highest at the back of the neck and falls towards the front tips, so in the 3/4
+// sprite poses it frames the jaw instead of hiding the beard; the side walls still rise to the jaw in the front view
+const COLLAR = { front:0.085, back:0.018, side:-0.015, h:0.115 };
+function collarSlant(g, full){
+  const a = g.attributes.position;
+  for (let i=0;i<a.count;i++){
+    const x = a.getX(i)/CSX, z = a.getZ(i), c = x/Math.max(1e-6,Math.hypot(x,z));
+    const t = full ? 1 : Math.min(1,Math.max(0,(a.getY(i)+COLLAR.h/2)/COLLAR.h));
+    a.setY(i, a.getY(i) + t*(-COLLAR.front*Math.pow(Math.max(c,0),0.7) + COLLAR.back*Math.max(-c,0) + COLLAR.side*(1-Math.abs(c))));
+  }
+  g.computeVertexNormals();
+}
+collarSlant(collar.geometry, false); collarSlant(rimG, true);
+{ // dark inner face 6 mm inside the collar (reversed winding): a black ring between beard and collar, like sprite row 6
+  const g = collar.geometry.clone(), a = g.attributes.position, ix = g.index.array;
+  for (let i=0;i<a.count;i++){ const x = a.getX(i), z = a.getZ(i), r = Math.hypot(x/CSX,z), k = Math.max(0,r-0.006)/Math.max(r,1e-6); a.setX(i,x*k); a.setZ(i,z*k); }
+  for (let i=0;i<ix.length;i+=3){ const t = ix[i+1]; ix[i+1] = ix[i+2]; ix[i+2] = t; }
+  g.computeVertexNormals(); add(collarG,'collarInner',g,MAT.lining,collar.position.x,collar.position.y,0);
+}
 // backpack (sheet C back view; olive-dark): centred on the spine, sitting on the coat back (coat back at chest x -0.178),
 // top under the collar at shoulder height (1.58), bottom at the belt (1.04). Upper body 0.27 W, top flap, a webbing
 // column with five straps, two vertical compression straps over the column and the wider (0.33 W) rounded lower pocket.
@@ -362,14 +450,15 @@ limb(neck,'neckMesh',0.05,0.055,0.13,MAT.skin,0.02).position.x = -0.035;   // se
 // Head frame: origin on the body axis at the neck top (sheet h 1.655), +X forward, +Z the character's right; y = h-1.655.
 // Sheet heights: crest 1.86, hairline 1.80, brow 1.705-1.728, eyes 1.707 (Z ±0.055), nose tip 1.68, mouth 1.665,
 // beard bottom 1.555; widths: hair 0.24, face 0.17, ears ±0.105; depth: hair back -0.155 → brow +0.105, nose +0.14.
-// In the sprite poses the head turns 0.22 rad towards screen-right (chin tucked in idle, pushed forward when aiming)
+// In the sprite poses the face turns 0.2 rad towards the camera so both eyes read (chin tucked, pushed forward when aiming)
 // and looks back over the near shoulder with the pistol up; in the T-pose it faces straight ahead, as on the sheet.
 const HEAD0 = new T.Vector3(-0.056,0,0), HY = 1.655;
+const POSE = { headYaw:-0.35, headUp:0.02, headFwd:0.06, drop:0.03, collarFwd:0.055, collarTilt:-0.3, chin:-0.04, coatBack:0.12 };          // sprite poses: head turned to the camera, chin tucked, coat tail trailing
 const head = grp(neck,'head',HEAD0.x,HEAD0.y,HEAD0.z);
 neck.updateMatrixWorld = function(force){
   const k = 1-S.tp, pistol = S.weapon==='pistol' ? S.aim : 0, fwd = (0.5*(1-S.aim) + 0.9*(S.aim-pistol) + 1.0*pistol)*0.0305*k;   // screen px -> m along screen-right
-  head.rotation.y = (0.22 - Math.PI/2*pistol)*k;
-  head.position.set(HEAD0.x + 0.622*fwd + 0.06*k, HEAD0.y - 0.03*k, HEAD0.z - 0.783*fwd);   // neck craned forward, shoulders hunched
+  head.rotation.y = (POSE.headYaw*(1-pistol) + (0.22 - Math.PI/2)*pistol)*k;            // face turned towards the camera (sprite: both eyes read)
+  head.position.set(HEAD0.x + 0.622*fwd + POSE.headFwd*k, HEAD0.y + POSE.headUp*k, HEAD0.z - 0.783*fwd);   // neck craned forward (the collar leans with it), head held up off relaxed shoulders
   T.Object3D.prototype.updateMatrixWorld.call(this, force);
 };
 const hy = h=>h-HY;                                     // sheet height -> head frame y
@@ -401,22 +490,23 @@ function strand(par,name,R,z0,t0,t1,r,mat,out=0.004,tipOut=0){
   g.computeVertexNormals();
   return add(par,name,g,mat);
 }
-const faceMat = M('#170d0b', '#5c3026', '#87594a', '#a87e62', {hi:0.3, mid:-0.3, lo:-0.85});
-const hairLt  = M('#131a1a', '#313d39', '#4f504a', '#7c7062', {hi:0.82, mid:-0.2, lo:-0.8});   // strands: lit tops read as light grey streaks
-const beardMat = M('#1c1c1a', '#2b3330', '#3e423d', '#6e675c', {hi:0.8, mid:-0.2, lo:-0.7});
-const beardLt = M('#1c1c1a', '#363b38', '#4f4d45', '#7d6f61', {hi:0.6, mid:-0.3, lo:-0.8});
-const mustMat = M('#2a2822', '#4f4d45', '#6e6a62', '#816f61', {hi:0.3, mid:-0.4, lo:-0.9});
+const faceMat = M(PAL.skinS, PAL.skinD, PAL.skinM, PAL.skinL, {hi:0.45, mid:-0.4, lo:-0.75});
+const hairLt  = M(PAL.tealD, PAL.teal, PAL.grey, PAL.greyL, {hi:0.6, mid:0.0, lo:-0.6});
+const beardMat = M(PAL.tealD, PAL.teal, PAL.grey, PAL.greyL, {hi:0.75, mid:0.0, lo:-0.6});
+const beardLt = M(PAL.tealD, PAL.teal, PAL.grey, PAL.greyL, {hi:0.7, mid:0.0, lo:-0.7});
+const mustMat = M(PAL.tealD, PAL.teal, PAL.grey, PAL.greyL, {hi:0.5, mid:-0.2, lo:-0.8});
 const scarMat = M('#5f221d', '#5f221d', '#5f221d', '#5f221d', {flat:true});
 const cran = grp(head,'cranium',0,0,0);
 // skull + face: a boxy superellipsoid, jaw under the beard, heavy brow ridge over a black socket band, red eye slits
-const HK = [0.112,0.088,0.086,0.72], HKC = [-0.01,hy(1.714),0];
+const HK = [0.106,0.09,0.08,0.72], HKC = [-0.01,hy(1.714),0];
 rblob(cran,'skull',HK[0],HK[1],HK[2],HK[3],faceMat,HKC[0],HKC[1],HKC[2]);
-rblob(cran,'jaw',0.075,0.05,0.072,0.8,faceMat,0.035,hy(1.68),0);
-rblob(cran,'browRidge',0.03,0.014,0.082,0.6,faceMat,0.085,hy(1.735),0);
+rblob(cran,'jaw',0.072,0.05,0.064,0.8,faceMat,0.035,hy(1.68),0);
+// angry brows: two heavy ridges slanting down to the nose (sheet C), so the eyes sit in a hard V of shadow
+for (const s of [1,-1]) rblob(cran,'browRidge'+s,0.03,0.015,0.048,0.6,faceMat,0.087,hy(1.734),s*0.042, -s*0.32,0,0);
 rblob(cran,'sockets',0.02,0.013,0.078,0.6,MAT.pupil,0.088,hy(1.714),0);
-for (const s of [1,-1]) box(cran,'eye'+s,0.012,0.011,0.03,MAT.eye,0.104,hy(1.709),s*0.052);
+for (const s of [1,-1]) box(cran,'eye'+s,0.012,0.011,0.021,MAT.eye,0.104,hy(1.709),s*0.05);   // small slits: one red pixel each at 64 px
 blob(cran,'nose',0.022,0.032,0.018,faceMat,0.106,hy(1.70),0, 0,0,-0.35);
-for (const s of [1,-1]) blob(cran,'ear'+s,0.024,0.032,0.018,faceMat,-0.03,hy(1.71),s*0.104);
+for (const s of [1,-1]) blob(cran,'ear'+s,0.024,0.032,0.018,faceMat,-0.028,hy(1.71),s*0.098);
 skin2(cran,'scar',HK,HKC,Math.PI-0.66,Math.PI-0.56,1.05,1.95,scarMat);                         // dark-red scar down through the near (right) eye
 skin2(cran,'scarL',HK,HKC,Math.PI+0.44,Math.PI+0.52,0.95,1.3,scarMat);                          // small mark above the left brow
 // hair: a shell grown out of the skull surface (thickness 0.04-0.05 on top, raised at the front crest, thin over the
@@ -439,7 +529,7 @@ function hairPt(u, out=0){                                // u: direction from t
   const yy = P.y + HKC[1] + HY, ang = Math.atan2(u.z, u.x);
   const w = smooth(hairline(ang)-0.01, hairline(ang)+0.012, yy);
   P.addScaledVector(u, -0.004 + w*(hairT(ang,yy,u.y)+0.004) + out).add(new T.Vector3(HKC[0],HKC[1],HKC[2]));
-  const top = hy(1.85); if (P.y > top) P.y = top + (P.y-top)*0.35;              // flat-topped crown
+  const top = hy(1.83); if (P.y > top) P.y = top + (P.y-top)*0.3;              // flat-topped crown
   P.x += w*0.05*Math.max(u.x,0)*smooth(1.78,1.80,yy);               // the crest juts forward over the brow
   return P;
 }
@@ -457,14 +547,22 @@ function hstrand(name,zk,t0,t1,r,out=0.003){              // strand over the hai
 }
 [[0,0.62],[0.22,0.66],[-0.22,0.66],[0.45,0.75],[-0.45,0.75],[0.7,0.9],[-0.7,0.9],[1.0,1.0],[-1.0,1.0]]
   .forEach(([zk,t0],i)=>hstrand('strand'+i,zk,t0,Math.PI+1.0,0.009));
-for (const s of [1,-1]){
-  spike(cran,'tuft'+s,0.016,0.05,MAT.hair,-0.02,hy(1.80),s*0.105,-s*1.2, 0);           // temple flicks standing out sideways
-  spike(cran,'crestTip'+s,0.014,0.04,MAT.hair,0.06,hy(1.818),s*0.035,-0.9, s*0.25);        // crest tips flicking up and back
-}
+// spiky crest: a row of swept-back spikes along the flat top (sprite rows 0-1 notch the top edge; sheet C's top corners
+// flick out), alternating base / strand tone so the crest reads as streaks; the sides stay tight to the skull
+[[0.8,0.0,0.045,0.35],[1.05,0.3,0.05,0.6],[1.1,-0.32,0.045,0.6],[1.45,0.62,0.045,0.85],[1.5,-0.62,0.045,0.85],
+ [1.8,0.15,0.05,1.15],[1.85,-0.18,0.045,1.15],[1.3,0.0,0.05,0.8]].forEach(([t,zk,h,rz],i)=>{
+  const P = hairPt(new T.Vector3(Math.cos(t),Math.sin(t),zk).normalize(), -0.008), rx = -zk*1.1;
+  h = Math.max(0.02, Math.min(h, (hy(1.866)-P.y)/(Math.cos(rz)*Math.cos(rx))));      // tips define the 1.86 crest, never above it
+  spike(cran,'crestSpike'+i,0.02,h,i%2?hairLt:MAT.hair,P.x,P.y,P.z,rz,rx);
+});
+// swept-back tips over the occiput (sheet C side view: the hair flicks out behind the head in spiky points, 1.70-1.80)
+[[2.25,0.0,0.075,1.85],[2.35,0.45,0.065,1.95],[2.35,-0.45,0.065,1.95],[2.75,0.2,0.07,2.15],[2.75,-0.25,0.07,2.15],[3.1,0.5,0.055,2.35],[3.1,-0.5,0.055,2.35]]
+  .forEach(([t,zk,h,rz],i)=>{ const P = hairPt(new T.Vector3(Math.cos(t),Math.sin(t),zk).normalize(), -0.01);
+    spike(cran,'backSpike'+i,0.019,h,i%2?MAT.hair:hairLt,P.x,P.y,P.z,rz,-zk*0.9); });
 // beard: rounded block from the cheeks down to a blunt point (0.15 wide at 1.60, 0.075 at the tip), sideburns up to the
 // ears, lighter strands down the front, a drooping mustache either side of the dark mouth
-const BR = [0.07,0.066,0.078,0.8];
-const beard = grp(cran,'beardRig',0.055,hy(1.617),0);
+const BR = [0.07,0.074,0.058,0.8];                        // longer, narrower beard: hangs in front of the collar in the sprites
+const beard = grp(cran,'beardRig',0.058,hy(1.612),0);
 function beardTaper(m){                                  // taper the lower half to a blunt point (beard and its strands)
   const a = m.geometry.attributes.position;
   for (let i=0;i<a.count;i++){ const v = Math.min(Math.max(-a.getY(i)/BR[1],0),1);
@@ -511,7 +609,8 @@ for (const s of [-1,1]){
 // It hangs from a hinge on top of the shoulder (by the collar) and swings with part of the upper-arm direction, so it
 // stays on the shoulder when the arm reaches forward and settles over the deltoid when the arm hangs (a narrow orange
 // strip on the far side in the 3/4 sprites).
-const PAULD = { follow:0.75, hy:0.1, hz:0.07 };                             // swing share; hinge above / inboard of the joint
+const PAULD_RIM = M('#271713', PAL.rust, '#662e16', '#8e411b', {hi:0.6, mid:0.0, lo:-0.5});   // rim tones from sheet C (#432315/#662e16/#8e411b)
+const PAULD = { follow:0.6, hy:0.03, hz:0.05, flat:0.65, short:0.85, drop:0.02, size:0.95 };   // swing share; hinge above / inboard of the joint; drop / size: sprite poses (a cap on the far shoulder edge)
 const pauldron = grp(chest,'pauldronPivot',0,SH_Y+PAULD.hy,-SH_Z+PAULD.hz);
 {
   const g = new T.SphereGeometry(1,28,16), a = g.attributes.position;
@@ -519,12 +618,15 @@ const pauldron = grp(chest,'pauldronPivot',0,SH_Y+PAULD.hy,-SH_Z+PAULD.hz);
     let x = a.getX(i), y = a.getY(i); const w = -a.getZ(i);                 // w: +1 outer end, −1 neck end
     if (w < 0){ const r = Math.hypot(x,y); if (r > 1e-6){ const k = Math.pow(1-Math.pow(-w,3),1/3)/r; x *= k; y *= k; } }  // blunt neck end
     const lat = w < 0 ? w*0.08 : w*0.21;                                     // 0.29 m across
-    const top = w < 0 ? 1 : 1 - 0.25*w;                                      // egg: fullest near the neck
-    const dep = w < 0 ? 1 : 1 - 0.2*w*w;
-    a.setXYZ(i, x*0.16*dep, y > 0 ? y*0.125*top : y*0.065, -lat);
+    const top = w < 0 ? 1 : 1 - 0.16*w;                                      // round dome, fullest a third of the way out, blunt outer end
+    const dep = w < 0 ? 1 : 1 - 0.12*w*w;
+    a.setXYZ(i, x*0.16*dep, y > 0 ? y*0.142*top : y*0.075, -lat);
   }
   g.computeVertexNormals();
-  add(pauldron,'pauldron',g,MAT.pauldron,-0.015,0.085-PAULD.hy,0.045-PAULD.hz, 0,0,0);
+  PAULD.mesh = add(pauldron,'pauldron',g,MAT.pauldron,-0.015,0.072-PAULD.hy,0.035-PAULD.hz, 0,0,0);
+  // dark rust lip round the dome's lower edge (sheet C: the glossy dome sits on a rim that reads as a 1 px dark band)
+  const rg = g.clone(); rg.scale(1.06,0.3,1.05); rg.translate(0,-0.006,-0.004); rg.computeVertexNormals();
+  add(PAULD.mesh,'pauldronRim',rg,PAULD_RIM);
 }
 const TP_DIR_L = new T.Vector3(0,0,-1), _armDir = new T.Vector3();
 
@@ -625,7 +727,9 @@ const liningGeo = new T.BufferGeometry();
   const n = coatHalf*2;
   coatGeo.setAttribute('position', new T.BufferAttribute(new Float32Array(n*3),3));
   coatGeo.setAttribute('normal', new T.BufferAttribute(new Float32Array(n*3),3));
+  coatGeo.setAttribute('rest', new T.BufferAttribute(new Float32Array(n*3),3));
   liningGeo.setAttribute('position', new T.BufferAttribute(new Float32Array(n*3),3));
+  liningGeo.setAttribute('rest', coatGeo.attributes.rest);
   const idxL = [], idxM = [], idxB = [], idxIn = [];
   for (let h=0;h<2;h++) for (let r=0;r<COAT.rows;r++) for (let c=0;c<COAT.cols;c++){
     const a = h*coatHalf + r*coatCols + c, b = a+1, d = a+coatCols, e = d+1;
@@ -639,7 +743,7 @@ const liningGeo = new T.BufferGeometry();
   liningGeo.setIndex(idxIn);
   [['coat',idxM,MAT.coatT],['coatLapel',idxL,MAT.lapel],['coatLong',idxB,MAT.coatLo]].forEach(([name,idx,mat])=>{
     const g = new T.BufferGeometry();
-    g.setAttribute('position', coatGeo.attributes.position); g.setAttribute('normal', coatGeo.attributes.normal); g.setIndex(idx);
+    g.setAttribute('position', coatGeo.attributes.position); g.setAttribute('normal', coatGeo.attributes.normal); g.setAttribute('rest', coatGeo.attributes.rest); g.setIndex(idx);
     add(hips,name,g,mat).frustumCulled = false;
   });
   add(hips,'coatLining',liningGeo,MAT.lining).frustumCulled = false;
@@ -650,6 +754,7 @@ const ventGeo = new T.BufferGeometry();
 {
   const n = ventRows.length, idx = [];
   ventGeo.setAttribute('position', new T.BufferAttribute(new Float32Array(2*n*2*3),3));
+  ventGeo.setAttribute('rest', new T.BufferAttribute(new Float32Array(2*n*2*3),3));
   for (let h=0;h<2;h++) for (let k=0;k<n-1;k++){ const a = (h*n+k)*2, b = a+1, c = a+2, d = a+3; idx.push(a,b,c, b,d,c, a,c,b, b,c,d); }
   ventGeo.setIndex(idx);
   add(hips,'coatVent',ventGeo,MAT.lining).frustumCulled = false;
@@ -693,6 +798,7 @@ function legAt(pts, y, out){             // leg axis (x,z) at hips-space height 
   out.x = p.x+(q.x-p.x)*t; out.z = p.z+(q.z-p.z)*t; return out;
 }
 const _lp = {x:0,z:0};
+let coatRestDone = false;
 function shapeCoat(){
   const pos = coatGeo.attributes.position.array;
   spine.updateMatrix(); chest.updateMatrix();
@@ -715,6 +821,7 @@ function shapeCoat(){
           const pa = Math.min(1,(COAT.hipY-y)/0.35), k = 1 + COAT.pleat*pa*Math.sin(u*Math.PI*COAT.pleats)/Math.hypot(x,z);
           x *= k; z *= k; }
         if (c >= COAT.cols-2 && y > 0.98 && y < 1.58){ const rr = Math.hypot(x,z), k = 1+0.01/rr; x*=k; z*=k; }   // lapel stands proud
+        if (!coatRestDone){ const ra = coatGeo.attributes.rest.array, j = i; ra[j]=x; ra[j+1]=y; ra[j+2]=z; }
         // rest point → hips space (blend chest-bound and hips-bound)
         const wC = Math.min(1,Math.max(0,(y-COAT.hipY)/(COAT.chestY-COAT.hipY)));
         _cv.set(x, y-CHEST_Y, z).applyMatrix4(_cm);
@@ -748,6 +855,7 @@ function shapeCoat(){
   liningGeo.attributes.position.needsUpdate = true;
   liningGeo.computeVertexNormals();
   shapeVent(pos, nrm);
+  if (!coatRestDone){ coatRestDone = true; coatGeo.attributes.rest.needsUpdate = true; ventGeo.attributes.rest.array.set(ventGeo.attributes.position.array); ventGeo.attributes.rest.needsUpdate = true; }
 }
 
 // ---------- 2-bone IK in chest space ----------
@@ -773,13 +881,13 @@ const renderer = new T.WebGLRenderer({canvas, antialias:false, alpha:true, prese
 renderer.setPixelRatio(1);
 const scene = new T.Scene(); scene.add(hero);
 const cam = new T.OrthographicCamera(-1,1,1,-1,0.1,20);
-let rt = null;
+let rt = null, rtK = null, rtO = null;
 const post = new T.ShaderMaterial({
-  uniforms:{ tC:{value:null}, tD:{value:null}, px:{value:new T.Vector2(1,1)}, uOutline:{value:1},
+  uniforms:{ tC:{value:null}, tD:{value:null}, tK:{value:null}, tO:{value:null}, px:{value:new T.Vector2(1,1)}, uOutline:{value:1},
     bgTop:{value:new T.Color('#11181a')}, bgLow:{value:new T.Color('#0b0f10')}, floorC:{value:new T.Color('#1d211d')}, floorL:{value:new T.Color('#343027')},
     groundY:{value:0}, shC:{value:new T.Vector2()}, shR:{value:new T.Vector2(1,1)}, uClear:{value:0} },
   vertexShader:`varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.0,1.0); }`,
-  fragmentShader:`uniform sampler2D tC; uniform sampler2D tD; uniform vec2 px; uniform float uOutline;
+  fragmentShader:`uniform sampler2D tC; uniform sampler2D tD; uniform sampler2D tK; uniform sampler2D tO; uniform vec2 px; uniform float uOutline;
   uniform vec3 bgTop; uniform vec3 bgLow; uniform vec3 floorC; uniform vec3 floorL; uniform float groundY; uniform vec2 shC; uniform vec2 shR; uniform float uClear;
   varying vec2 vUv;
   float D(vec2 o){ return texture2D(tD, vUv + o*px).r; }
@@ -788,7 +896,16 @@ const post = new T.ShaderMaterial({
     bool fg = dc < 0.9999;
     float dl=D(vec2(-1.,0.)), dr=D(vec2(1.,0.)), du=D(vec2(0.,1.)), dd=D(vec2(0.,-1.));
     if (!fg){
-      if (uOutline > 0.5 && (dl<0.9999 || dr<0.9999 || du<0.9999 || dd<0.9999)) { gl_FragColor = vec4(0.0,0.0,0.0,1.0); return; }
+      if (uOutline > 0.5 && (dl<0.9999 || dr<0.9999 || du<0.9999 || dd<0.9999)) {
+        // selective outline: under the body (fg above) and beside shadowed parts = black; above / beside lit parts = the
+        // neighbour's own colour one ramp step darker (sprite: only 10-20 % of top-edge pixels are black, 45-58 % of bottom ones)
+        vec3 o = vec3(0.0);
+        if (du >= 0.9999){
+          vec2 nb = dd<0.9999 ? vec2(0.,-1.) : (dl<0.9999 ? vec2(-1.,0.) : vec2(1.,0.));
+          vec2 q = vUv + nb*px;                                   // dark parts: one ramp step darker, bright parts (skin, hair, orange): two
+          o = dot(texture2D(tC, q).rgb, vec3(0.299,0.587,0.114)) > 0.25 ? texture2D(tO, q).rgb : texture2D(tK, q).rgb;
+        }
+        gl_FragColor = vec4(o,1.0); return; }
       if (uClear > 0.5) { gl_FragColor = vec4(0.0); return; }
       vec2 f = gl_FragCoord.xy;
       vec3 c;
@@ -804,7 +921,8 @@ const post = new T.ShaderMaterial({
     }
     vec3 col = texture2D(tC, vUv).rgb;
     float t = 0.0025;
-    if (uOutline > 0.5 && (dl < dc-t || dr < dc-t || du < dc-t || dd < dc-t)) col *= 0.32;
+    float gap = dc - min(min(dl,dr),min(du,dd));
+    if (uOutline > 0.5 && gap > t) col = gap > 0.03 ? vec3(0.0) : texture2D(tK, vUv).rgb;   // inner lines stay on the palette
     gl_FragColor = vec4(col,1.0);
   }`,
   depthTest:false, depthWrite:false
@@ -836,13 +954,15 @@ function setSize(w,h,sc){
   canvas.style.width = (W*sc)+'px'; canvas.style.height = (H*sc)+'px';
   if (rt) { rt.dispose(); rt.depthTexture.dispose(); }
   rt = new T.WebGLRenderTarget(W,H,{minFilter:T.NearestFilter, magFilter:T.NearestFilter});
+  if (rtK) rtK.dispose(); rtK = new T.WebGLRenderTarget(W,H,{minFilter:T.NearestFilter, magFilter:T.NearestFilter}); post.uniforms.tK.value = rtK.texture;
+  if (rtO) rtO.dispose(); rtO = new T.WebGLRenderTarget(W,H,{minFilter:T.NearestFilter, magFilter:T.NearestFilter}); post.uniforms.tO.value = rtO.texture;
   rt.depthTexture = new T.DepthTexture(W,H); rt.depthTexture.type = T.UnsignedIntType;
   post.uniforms.tC.value = rt.texture; post.uniforms.tD.value = rt.depthTexture;
   post.uniforms.px.value.set(1/W,1/H);
   const ppu = S.pxChar===0 ? (H/1.55)/CHAR_H : S.pxChar/CHAR_H;
   const halfH = H/ppu/2, halfW = W/ppu/2, cy = 0.95;
   cam.left=-halfW; cam.right=halfW; cam.top=halfH; cam.bottom=-halfH; cam.updateProjectionMatrix();
-  S.ppu = ppu; S.cy = cy;
+  S.ppu = ppu; S.cy = cy; NF.value = Math.min(3, Math.max(1, ppu*CHAR_H/64));   // noise cells keep ~the same size in pixels at every resolution (no camo blobs in HD)
   updateHud();
 }
 
@@ -898,12 +1018,14 @@ function update(dt){
   // torso
   const breath = Math.sin(t*2.1);
   spine.rotation.z = (-0.02 - 0.08*S.walk - 0.1*S.aim)*(1-S.tp);
-  spine.position.y = 0.12 - 0.03*S.aim;
+  spine.position.y = 0.12 - 0.03*S.aim - POSE.drop*(1-S.aim)*(1-S.tp);
   chest.position.y = breath*0.006;
   chest.rotation.z = breath*0.01;
   chest.rotation.y = Math.sin(t*Math.PI*2*1.3)*-0.08*S.walk;
-  neck.rotation.z = (0.02 + 0.05*S.aim + Math.sin(t*0.7)*0.02*(1-S.aim))*(1-S.tp);
+  neck.rotation.z = (POSE.chin + 0.05*S.aim + Math.sin(t*0.7)*0.02*(1-S.aim))*(1-S.tp);
   head.rotation.z = -0.04*S.aim;
+  { const a = POSE.collarTilt*(1-S.tp), px = collar.position.x, py = 0.455;              // collar leans forward with the craned neck, hinged at its base
+    collarG.rotation.z = a; collarG.position.set(px - (px*Math.cos(a) - py*Math.sin(a)) + POSE.collarFwd*(1-S.tp), py - (px*Math.sin(a) + py*Math.cos(a)), 0); }
 
   // weapon pose
   for (const k in weapons) weapons[k].visible = (k===S.weapon) && S.tp < 0.5;
@@ -947,11 +1069,15 @@ function update(dt){
     A.fing.scale.set(lerp(1, 0.6, S.tp), lerp(0.07, 0.13, S.tp), 1); A.hand.rotation.set(0, A.s*S.tp*Math.PI/2, 0); }
   _armDir.copy(DOWN).applyQuaternion(arms.L.up.quaternion);
   pauldron.quaternion.identity().slerp(_oq.setFromUnitVectors(TP_DIR_L,_armDir), PAULD.follow);
+  // off the T-pose the dome settles flatter onto the deltoid (sprites: a 2-3 px orange edge on the far shoulder)
+  const psz = lerp(PAULD.size,1,S.tp);
+  PAULD.mesh.scale.set(psz, psz*lerp(PAULD.flat,1,S.tp), psz*lerp(PAULD.short,1,S.tp));
+  pauldron.position.y = SH_Y + PAULD.hy - PAULD.drop*(1-S.tp);
 
   // coat: damped springs chasing the legs (sub-stepped so big export steps stay stable)
   const thR = legs.R.thigh.rotation.z, thL = legs.L.thigh.rotation.z;
   const wind = Math.sin(t*1.3)*0.03 + Math.sin(t*3.1)*0.012;
-  const tg = { back: 0.05 + 0.3*S.walk + wind + Math.max(0,-Math.min(thR,thL))*0.3*S.walk, R: (thR-LEG.stance.R.th*(1-S.walk))*0.8, L: (thL-LEG.stance.L.th*(1-S.walk))*0.8 };
+  const tg = { back: lerp(POSE.coatBack,0.05,Math.max(S.walk,S.tp)) + 0.3*S.walk + wind + Math.max(0,-Math.min(thR,thL))*0.3*S.walk, R: (thR-LEG.stance.R.th*(1-S.walk))*0.8, L: (thL-LEG.stance.L.th*(1-S.walk))*0.8 };
   const n = Math.ceil(dt/(1/240));
   for (let i=0;i<n;i++){ const h=dt/n;
     for (const k of ['back','R','L']){ coatState[k+'V'] += ((tg[k]-coatState[k])*70 - coatState[k+'V']*9)*h; coatState[k] += coatState[k+'V']*h; }
@@ -974,6 +1100,8 @@ function render(clear){
   post.uniforms.groundY.value = Math.round((g0.y*0.5+0.5)*H);
   post.uniforms.shC.value.set(Math.round((g0.x*0.5+0.5)*W), Math.round((g0.y*0.5+0.5)*H)-1);
   post.uniforms.shR.value.set(Math.max(3,0.42*S.ppu), Math.max(1.5,0.05*S.ppu));
+  SHIFT.value = 1; renderer.setRenderTarget(rtK); renderer.setClearColor(0x000000,0); renderer.clear(); renderer.render(scene,cam);
+  SHIFT.value = 2; renderer.setRenderTarget(rtO); renderer.clear(); renderer.render(scene,cam); SHIFT.value = 0;
   renderer.setRenderTarget(rt); renderer.setClearColor(0x000000,0); renderer.clear();
   renderer.render(scene,cam);
   renderer.setRenderTarget(null); renderer.clear();
