@@ -143,6 +143,7 @@ float h3(vec3 p){ p = fract(p*vec3(0.1031,0.1030,0.0973)); p += dot(p, p.yxz+33.
 float vn(vec3 x){ vec3 i = floor(x), f = fract(x); f = f*f*(3.0-2.0*f);
   return mix(mix(mix(h3(i),             h3(i+vec3(1,0,0)),f.x), mix(h3(i+vec3(0,1,0)),h3(i+vec3(1,1,0)),f.x),f.y),
              mix(mix(h3(i+vec3(0,0,1)), h3(i+vec3(1,0,1)),f.x), mix(h3(i+vec3(0,1,1)),h3(i+vec3(1,1,1)),f.x),f.y), f.z); }
+#define RIM_LO 2.0
 vec3 ramp(float i){ return i > 2.5 ? cL : (i > 1.5 ? cM : (i > 0.5 ? cD : cK)); }
 void main(){
   vec3 n = normalize(vN);
@@ -205,6 +206,8 @@ void main(){
   if (uLo > 0.5 && uLoT.x > 1.5) i = n.y > 0.5 ? 3.0 : 2.0;            // sprite size: bright accent = light cap on its upper faces over the mid body
   if (uLo > 0.5) i = clamp(i, uLoT.x, uLoT.y);                         // sprite size: accents keep only their bright tones
   i = max(i - uShift, 0.0);
+  if (uShift < -0.5 && uLo > 0.5) i = max(i, RIM_LO);                 // rim pass at sprite size: a rim on a shadowed block still reads (owner: light edge next to black)
+  if (uShift < -0.5) i = min(i, uLo > 0.5 ? uLoT.y : 3.0);             // rim pass (one step lighter): sprite-size accents keep their tone cap
   if (uLo > 0.5 && uLoT.x > 0.5) i = uShift > 1.5 ? 0.0 : max(i, uLoT.x);   // ... also in the inner-line pass (no dark spots); their outline is the darkest tone
   vec3 c;
   if (uFlat > 0.5) c = uShift > 1.5 ? cK : (uShift > 0.5 ? cD : cM);
@@ -232,13 +235,13 @@ function M(k,d,m,l,o={}){
   return mat;
 }
 const MAT = {
-  coat:   M(PAL.black, PAL.coatD, PAL.coatM, PAL.coatL, {id:0.8, clean:true, fold:0.3, hi:0.62, mid:0.2, lo:-0.75, gs:[26,6,26], grit:[1.0,0.66], str:[0.28,0.35], hd:[0.8,0.8,1], hf:[6,9,6], hl:0.85, hx:[-9,0.94,0.5,-9], hg:[14]}),
-  coatT:  M(PAL.black, PAL.coatD, PAL.coatM, PAL.coatL, {id:0.8, clean:true, fold:0.0, hi:0.8, mid:0.38, lo:-0.7, gs:[30,4,30], grit:[0.8,0.68,0.15], str:[0.2,0.5], vg:[1.05,0.4,0.15], rest:true, hd:[0.81,0.66,0], hf:[9,1.4,9], hl:0.92, fm:0.7, hg:[14]}),
+  coat:   M(PAL.black, PAL.coatD, PAL.coatM, PAL.coatL, {id:0.8, clean:true, loD:-0.15, fold:0.3, hi:0.62, mid:0.2, lo:-0.75, gs:[26,6,26], grit:[1.0,0.66], str:[0.28,0.35], hd:[0.8,0.8,1], hf:[6,9,6], hl:0.85, hx:[-9,0.94,0.5,-9], hg:[14]}),
+  coatT:  M(PAL.black, PAL.coatD, PAL.coatM, PAL.coatL, {id:0.8, clean:true, loD:-0.2, fold:0.0, hi:0.8, mid:0.38, lo:-0.7, gs:[30,4,30], grit:[0.8,0.68,0.15], str:[0.2,0.5], vg:[1.05,0.4,0.15], rest:true, hd:[0.81,0.66,0], hf:[9,1.4,9], hl:0.92, fm:0.7, hg:[14]}),
   cuff:   M(PAL.coatD, PAL.coatM, PAL.coatL, PAL.coatL, {id:0.8, hi:0.4}),
   pants:  M(PAL.black, PAL.coatD, PAL.coatM, PAL.coatL, {id:0.8, clean:true, fold:0.45, hi:0.9, mid:0.15, lo:-0.5, tl:[9,-0.3,-0.75], gs:[6,14,6], grit:[0.45,0], hd:[0.85,0.84,2], hf:[4,14,4], hl:2, hx:[0.5,0.94,0.42,-0.1], hg:[14]}),   // light caps only from the key light (big views); sprite size: mid/dark planes, lit fold dashes
   pad:    M(PAL.coatD, PAL.coatM, PAL.coatM, PAL.coatL, {id:0.6, hi:0.75, mid:-0.2, lo:-0.7, loT:[1,1]}),          // dark grey plate (lit top facet) in a black frame from the post pass; sprite size: light plate
   padHi:  M(PAL.coatM, PAL.coatL, PAL.coatL, PAL.greyL, {id:0.6, hi:0.2, mid:-0.4, lo:-0.9, hs:[0.008,0.016], loT:[2,2]}),   // raised inset: a small grey-white highlight block in its upper middle (big views), the light core at sprite size
-  shirt:  M(PAL.black, '#1c1c1c', '#2a2a2a', PAL.grey, {id:0.8, hi:0.95, mid:0.72, lo:0.3, gs:[10,24,10], grit:[0.6,0], loT:[0,0], hd:[0.86,2,0]}),   // big views: charcoal shirt planes (pecs, abs) over black; sprite size: black (owner's sprites)
+  shirt:  M(PAL.black, '#1c1c1c', '#2a2a2a', PAL.grey, {id:0.8, hi:0.95, mid:0.6, lo:-0.02, gs:[10,24,10], grit:[0.6,0], loT:[0,0], hd:[0.86,2,0]}),   // big views: charcoal shirt planes (pecs, abs) over black; sprite size: black (owner's sprites)
   belt:   M(PAL.black, PAL.coatD, PAL.coatD, PAL.coatD, {lo:-0.6}),
   buckleT:M(PAL.coatL, PAL.coatL, PAL.coatL, PAL.coatL, {flat:true}),
   buckleB:M(PAL.coatM, PAL.coatM, PAL.coatM, PAL.coatM, {flat:true}),
@@ -256,7 +259,7 @@ const MAT = {
   boot:   M(PAL.black, PAL.black, PAL.navy, PAL.navyL, {hi:9, mid:0.68, lo:-0.5, tl:[0.8,0.05,-0.5], fold:-0.9}),   // big views: near-black with navy on lit faces (sheet C); sprite size: navy shaft, lit navy top, black only in shadow (the sole box is the black line)
   ink:    M(PAL.black, PAL.black, PAL.black, PAL.black, {flat:true}),      // black rim lines (belt edges, pad rims, seams)
   coatLo: M(PAL.black, PAL.coatD, PAL.coatM, PAL.coatL, {id:0.8, clean:true, fold:0.08, hi:1.1, mid:0.4, lo:-0.75, gs:[14,3,14], grit:[1.0,0.66,0.15], str:[0.18,0.5], vg:[1.05,0.4,0.15], rest:true, hd:[0.81,0.66,0], hf:[9,1.4,9], hm:0.25, fm:0.7, hg:[14]}),
-  lapel:  M(PAL.black, PAL.coatD, PAL.coatM, PAL.coatL, {id:0.8, hi:0.52, mid:0.2, lo:-0.2, gs:[12,5,12], grit:[0.6,0.82], rest:true, hd:[0.8,0.8,0], hf:[11,1.6,11]}),
+  lapel:  M(PAL.black, PAL.coatD, PAL.coatM, PAL.coatL, {id:0.8, hi:0.52, mid:0.2, lo:-0.2, loD:0.45, gs:[12,5,12], grit:[0.6,0.82], rest:true, hd:[0.8,0.8,0], hf:[11,1.6,11]}),
   collar: M(PAL.black, PAL.coatD, PAL.coatM, PAL.coatL, {id:0.8, hi:0.67, mid:0.5, lo:0.25, gs:[12,5,12], grit:[0.6,0.82], double:true, hd:[0.8,2,0]}),
   lining: M(PAL.black, PAL.coatD, PAL.coatM, PAL.coatM, {id:0.8, hi:0.9, mid:0.45, lo:-0.6, fold:0.3, gs:[22,5,22], grit:[0.35,0], str:[-1,0], tl:[9,9,-0.45], bk:0.9, rest:true, hd:[0.8,0.78,0], hf:[11,1.6,11]}),   // coat inside: dark olive cloth with folds in the big views; sprite size: black, coatD only on lit flap insides (owner's sprites)
   pauldron:M(PAL.rust, '#b8561c', PAL.orange, PAL.amber, {hi:0.93, mid:0.1, lo:-0.45, spec:[0.62,0.86,20], cap:0.85, cS:PAL.amber, cS2:PAL.cream, rim:0.08, loT:[2,3], id:0.9}),   // glossy: darker lower half, saturated orange top, amber/cream hotspot
@@ -268,6 +271,11 @@ const MAT = {
   flash:  M(PAL.amber, PAL.amber, PAL.amber, PAL.amber, {flat:true}),
   flashC: M(PAL.cream, PAL.cream, PAL.cream, PAL.cream, {flat:true})
 };
+
+// sprite size: the pack straps over the shoulders take the coat's tones, so the shoulder tops carry the coat's lit rim
+// (owner's sprites: coat-mid / light-olive shoulder line, no dark strap band)
+{ const lo = [PAL.black, PAL.coatD, PAL.coatM, PAL.coatL].map(c=>new T.Color(c));
+  ['cK','cD','cM','cL'].forEach((k,i)=>{ const a = MAT.packD.uniforms[k].value; MAT.packD.uniforms[k] = { get value(){ return LO.value > 0.5 ? lo[i] : a; } }; }); }
 
 // ---------- Geometry helpers (real sizes, so the fold pattern stays in metres) ----------
 function add(parent, name, geo, mat, x=0,y=0,z=0, rx=0,ry=0,rz=0){
@@ -443,13 +451,17 @@ function ankleDrop(st, s){
 
 const spine = grp(hips,'spine',0,0.12,0);
 const chest = grp(spine,'chest',AX,0,0);
-// tight black shirt (shows in the coat opening): torso + sculpted pecs and abs
-limb(chest,'torso',0.21,0.19,0.53,MAT.shirt,0.46,0.78,1);   // hem tucked under the belt (the trousers start below it)
+// tight black shirt (shows in the coat opening): torso + sculpted pecs and abs. Own copy of the shirt tones whose bands
+// follow the view (SHIRT.base + the chest front's own light, set in update): the chest front is always the dark charcoal
+// plane, pec / ab tops one step up, black only in the seams and the far side -- a shirt in every view, not a black hole in
+// the 3/4 game poses where the screen light grazes it. Sprite size: black with at most a dark charcoal pec top (owner's sprites).
+const SHIRT = { base:[0.95,0.6,-0.02], sBase:[0.95,0.72,0.3], dRef:0.4966, lo:0.36, mat:M(PAL.black, '#1c1c1c', '#2a2a2a', PAL.grey, {id:0.8, hi:0.95, mid:0.6, lo:-0.02, gs:[10,24,10], grit:[0.6,0], loT:[0,1], hd:[0.86,2,0]}) };   // lo: band lift at sprite size (only the pec tops leave black)
+limb(chest,'torso',0.21,0.19,0.53,SHIRT.mat,0.46,0.78,1);   // hem tucked under the belt (the trousers start below it)
 // muscle plates (sheet C: charcoal pecs and a 3x2 abs grid split by black seams): rounded pads with small gaps between
 // them, so the depth lines draw the seams and their lit tops catch the shirt's light tone in HD and the T-pose
 for (const s of [-1,1]){
-  rblob(chest,'pec'+s,0.028,0.058,0.072,0.55,MAT.shirt,0.152,0.262,s*0.068, 0,0,-0.12);
-  [0.165,0.107,0.052].forEach((yy,i)=>rblob(chest,'abs'+i+s,0.016,0.027,0.031,0.85,MAT.shirt,0.14-0.005*i,yy,s*0.034));   // rounder, shallower: muscle, not vest plates
+  rblob(chest,'pec'+s,0.028,0.058,0.072,0.55,SHIRT.mat,0.152,0.262,s*0.068, 0,0,-0.12);
+  [0.165,0.107,0.052].forEach((yy,i)=>rblob(chest,'abs'+i+s,0.016,0.027,0.031,0.85,SHIRT.mat,0.14-0.005*i,yy,s*0.034));   // rounder, shallower: muscle, not vest plates
 }
 // tall stand-up collar: a tube 0.35 W x 0.25 D, open in front for the beard (0.17 m gap), rolled lit rim on top
 const CSX = 0.83;                                                            // collar depth / width (0.25 D x 0.30 W, sheet C)
@@ -540,12 +552,13 @@ const neck = grp(chest,'neck',0.03,0.565,0);
 // In the sprite poses the face is turned a little towards the camera (3/4: hair mass behind, face column in front, dark eye
 // slit, as in the owner's sprites) and looks towards the raised pistol; in the T-pose it faces straight ahead, as on the sheet.
 const HEAD0 = new T.Vector3(-0.056,0,0), HY = 1.655;
-const POSE = { headYaw:-0.3, headUp:-0.01, headFwd:0.06, drop:0.03, collarFwd:0.055, collarTilt:-0.1, chin:0.0, coatBack:0.12 };          // sprite poses: head facing forward in 3/4 profile, chin tucked, coat tail trailing
+const POSE = { headYaw:-0.15, headUp:-0.01, headFwd:0.06, drop:0.03, collarFwd:0.055, collarTilt:-0.1, chin:0.0, coatBack:0.12, headScale:0.15, gPx:[-1.5,-1.5,-1], gDrop:0.035, gPitch:0.2 };          // sprite poses: head facing forward in 3/4 profile, chin tucked, coat tail trailing
 const head = grp(neck,'head',HEAD0.x,HEAD0.y,HEAD0.z);
 neck.updateMatrixWorld = function(force){
-  const k = 1-S.tp, pistol = S.weapon==='pistol' ? S.aim : 0, fwd = (0.5*(1-S.aim) + 0.9*(S.aim-pistol) + 1.0*pistol)*0.0305*k;   // screen px -> m along screen-right
+  const k = 1-S.tp, pistol = S.weapon==='pistol' ? S.aim : 0, fwd = ((0.5+POSE.gPx[0])*(1-S.aim) + (0.9+POSE.gPx[1])*(S.aim-pistol) + (1.0+POSE.gPx[2])*pistol)*0.0305*k;   // screen px -> m along screen-right
   head.rotation.y = (POSE.headYaw*(1-pistol) - 0.8*pistol)*k;            // face turned towards the camera / the raised pistol (sprite: the eye slit reads)
-  head.position.set(HEAD0.x + 0.622*fwd + POSE.headFwd*k, HEAD0.y + POSE.headUp*k, HEAD0.z - 0.783*fwd);   // neck craned forward (the collar leans with it), head held up off relaxed shoulders
+  head.position.set(HEAD0.x + 0.622*fwd + POSE.headFwd*k, HEAD0.y + (POSE.headUp - POSE.gDrop)*k, HEAD0.z - 0.783*fwd);   // neck craned forward (the collar leans with it), head held up off relaxed shoulders
+  head.scale.setScalar(1 + POSE.headScale*k);                                // game poses: the owner's big-headed read (T-pose stays at sheet scale)
   T.Object3D.prototype.updateMatrixWorld.call(this, force);
 };
 const hy = h=>h-HY;                                     // sheet height -> head frame y
@@ -585,16 +598,16 @@ function HM(hd, lo, o={}){
   ['cK','cD','cM','cL'].forEach((k,i)=>{ const a = new T.Color(hd[i]), b = new T.Color(lo[i]); m.uniforms[k] = { get value(){ return LO.value > 0.5 ? b : a; } }; });
   return m;
 }
-const SKIN_HD = ['#21150e','#4a3123','#6d4c39','#8c6850'], SKIN_LO = [PAL.skinS, PAL.skinD, PAL.skinM, PAL.skinL];
+const SKIN_HD = ['#21150e','#4a3123','#6d4c39','#8c6850'], SKIN_LO = [PAL.skinD, PAL.skinM, PAL.skinL, PAL.skinL];   // sprite size: the owner's lit tan face strip (skinM / skinD only in the deep shadow)
 const faceMat = HM(SKIN_HD, SKIN_LO, {hi:0.6, mid:0.33, lo:-0.25, tl:[0.63,-0.05,-0.5]});        // lit plane only on up/left-facing planes
 const neckMat = HM(['#140c08','#21150e','#21150e','#4a3123'], [PAL.black,PAL.black,PAL.black,PAL.skinS], {hi:0.7, mid:0.35, lo:-0.3});   // throat in the beard's shadow
 const sockMat = HM(['#120b07','#120b07','#120b07','#120b07'], ['#000000','#000000','#000000','#000000'], {flat:true});   // deep eye sockets under the brow
-const HAIR_LO = [PAL.tealD, PAL.teal, PAL.grey, PAL.greyL];
+const HAIR_LO = [PAL.tealD, PAL.teal, PAL.teal, PAL.greyL];
 const hairMat = HM(['#101413','#232a27','#373d39','#6f7068'], HAIR_LO, {hi:0.62, mid:0.22, lo:-0.3, tl:[0.55,0.12,-0.3]});
 const hairLt  = HM(['#101413','#2b322e','#4a4f49','#85867c'], HAIR_LO, {hi:0.5, mid:0.05, lo:-0.45, tl:[0.38,-0.05,-0.4]});     // the clumps' lit tops
 const hairSd  = HM(['#0c0f0e','#1b201e','#2c322f','#41463f'], [PAL.tealD,PAL.teal,PAL.teal,PAL.greyL], {hi:0.75, mid:0.3, lo:-0.35, tl:[0.6,-0.15,-0.5]});   // clipped sides / grooves: darker; sprite size: teal mass, light grey on the top planes
-const beardMat = HM(['#0e0f0e','#232422','#353633','#575750'], [PAL.tealD,PAL.grey,PAL.grey,PAL.greyL], {hi:0.72, mid:0.28, lo:-0.3, tl:[0.66,-0.05,-0.45], double:true});
-const beardDk = HM(['#0a0b0a','#191a19','#262826','#393b38'], [PAL.tealD,PAL.tealD,PAL.teal,PAL.grey], {hi:0.8, mid:0.3, lo:-0.3});
+const beardMat = HM(['#0e0f0e','#2a2b28','#46473f','#6b6a62'], [PAL.tealD,PAL.teal,PAL.greyL,PAL.greyL], {hi:0.72, mid:0.28, lo:-0.3, tl:[0.66,-0.05,-0.45], double:true});
+const beardDk = HM(['#0a0b0a','#191a19','#262826','#393b38'], [PAL.tealD,PAL.tealD,PAL.teal,PAL.teal], {hi:0.8, mid:0.3, lo:-0.3});
 const cran = grp(head,'cranium',0,0,0);
 // closed loft: rings around Y. ring(i, a) -> [x,y,z] for row i (0..rows-1), a in [0,2pi); rows 0 and rows-1 should be caps
 function loft(parent,name,rows,na,ring,mat){
@@ -632,7 +645,7 @@ function facePt(h, a){                                     // a: 0 front, +pi/2 
   const A = Math.acos(Math.max(-1,Math.min(1,c)));        // eye sockets: recessed under the brow ledge, the nose bridge between them stays
   x -= 0.013*smooth(1.682,1.698,h)*(1-smooth(1.712,1.721,h))*smooth(0.1,0.22,A)*(1-smooth(0.6,0.85,A));
   const kb = 0.009*Math.exp(-Math.pow((h-1.686)/0.01,2))*smooth(0.35,0.7,A)*(1-smooth(1.25,1.6,A))   // cheekbones: a ridge under the sockets (lit top, shadowed hollow below)
-    - 0.008*smooth(1.6,1.635,h)*(1-smooth(1.655,1.676,h))*smooth(0.3,0.6,A)*(1-smooth(1.25,1.55,A))      // cheek hollow under it (faces down / away: the shadow plane)
+    - 0.003*smooth(1.6,1.635,h)*(1-smooth(1.655,1.676,h))*smooth(0.3,0.6,A)*(1-smooth(1.25,1.55,A))      // cheek hollow under it (faces down / away: the shadow plane)
     - 0.005*smooth(1.735,1.75,h)*(1-smooth(1.775,1.795,h))*smooth(0.75,1.0,A)*(1-smooth(1.35,1.6,A));   // flat temple plane
   return new T.Vector3(x + kb*c, h-HY, r[2]*spow(s, c >= 0 ? r[5] : 0.8) + kb*s);
 }
@@ -647,20 +660,35 @@ function faceN(h, a){                                      // outward normal (fi
   const fm = cran.getObjectByName('face'), g = fm.geometry.toNonIndexed(); g.computeVertexNormals(); fm.geometry = g; }
 // skull: long front-to-back, its top and back under the hair; a real neck under it, its top hidden in the jaw
 const HK = [0.1,0.088,0.075,0.85], HKC = [-0.025,hy(1.742),0];
-rblob(cran,'skull',HK[0],HK[1],HK[2],HK[3],faceMat,HKC[0],HKC[1],HKC[2]);
+// tuck: the back of the skull and hair pulled in towards the occiput (sheet A: no bulb behind the ear), the temples
+// drawn in to the face line (no puffed sides over the brow)
+const HW = { bx:-0.03, bk:0.74, tz:0.11, nd:0.03, bw:0.09 };
+function headWarp(v){
+  if (v.x < HW.bx) v.x = HW.bx + (v.x - HW.bx)*HW.bk;
+  v.y -= HW.nd*smooth(hy(1.72),hy(1.66),v.y)*smooth(-0.04,-0.1,v.x);   // the lower back runs down into the nape (no overhang above the collar)
+  v.z *= 1 - HW.tz*smooth(hy(1.70),hy(1.76),v.y)*smooth(-0.07,0.02,v.x);
+  v.z *= 1 + HW.bw*smooth(hy(1.72),hy(1.79),v.y)*smooth(-0.03,-0.1,v.x);   // fuller upper back (sheet A back: wide at the crown, V to the nape)
+  return v;
+}
+{ const sk = rblob(cran,'skull',HK[0],HK[1],HK[2],HK[3],faceMat,HKC[0],HKC[1],HKC[2]), a = sk.geometry.attributes.position, v = new T.Vector3();
+  for (let i=0;i<a.count;i++){ v.fromBufferAttribute(a,i).add(sk.position); headWarp(v).sub(sk.position); a.setXYZ(i,v.x,v.y,v.z); }
+  sk.geometry.computeVertexNormals(); }
 limb(neck,'neckMesh',0.05,0.058,0.2,neckMat,0.0).position.x = HEAD0.x - 0.006;
 // straight heavy brow: one bar across the face (lit top plane), deep dark sockets under it with the red eyes
 rblob(cran,'brow',0.013,0.0085,0.056,0.45,faceMat,0.106,hy(1.7235),0, 0,0,-0.35);
 for (const s of [1,-1]) rblob(cran,'eyebrow'+s,0.0055,0.0048,0.024,0.6,hairSd,0.1135,hy(1.7255),s*0.034, s*0.16,-s*0.12,-0.45);   // flush on the brow ledge, angled down to the nose (scowl)
 const sockets = [1,-1].map(s=>rblob(cran,'socket'+s,0.007,0.0095,0.022,0.6,sockMat,0.084,hy(1.708),s*0.036, 0,0,0.15));
-const eyeMat = M('#b3261b', '#b3261b', '#b3261b', '#b3261b', {flat:true, spr:['#69231c','#69231c']});   // red eyes (sheet C); muted maroon slit at sprite size (owner's sprites)
+const eyeMat = M('#b3261b', '#b3261b', '#b3261b', '#b3261b', {flat:true, spr:['#a3281c','#a3281c']});   // red eyes (sheet C); muted maroon slit at sprite size (owner's sprites)
 const eyes = [1,-1].map(s=>box(cran,'eye'+s,0.005,0.004,0.0065,eyeMat,0.0905,hy(1.704),s*0.038));
 // sprite size: the sockets merge into one dark eye bar under the brow and the red eyes grow to ~1 px, so the 64 px head
 // keeps the owner's dark eye row with red in it (the big views keep small glints deep in the sockets)
+const SPR = []; let mouth = null;                      // sprite-size-only face parts (built below with the beard)
 cran.updateMatrixWorld = function(force){
   const k = LO.value;
   for (const m of sockets) m.scale.set(1 + 0.6*k, 1 + 0.8*k, 1 + 0.55*k);
-  for (const m of eyes){ m.scale.set(1, 1 + 2.4*k, 1 + 1.3*k); m.position.x = 0.0905 + 0.0055*k; }
+  for (const m of eyes){ m.scale.set(1 + 0.6*k, 1 + 3.2*k, 1 + 0.9*k); m.position.x = 0.0905 + 0.022*k; m.position.y = hy(1.704 - 0.004*k); }
+  cran.rotation.z = POSE.gPitch*(0.4 + 0.6*k)*(1-S.tp);                                    // game poses: face held up (the owner's upright head: eye row high, not a crown view)
+  for (const m of SPR) m.visible = k > 0.5; if (mouth) mouth.visible = k <= 0.5;
   T.Object3D.prototype.updateMatrixWorld.call(this, force);
 };
 // straight nose: a wedge from the brow down to a firm tip (lit ridge, shaded far side)
@@ -670,7 +698,7 @@ cran.updateMatrixWorld = function(force){
     if (i===5) return [x-0.02, y+0.004, 0]; if (i===0) return [x-0.012, y-0.006, 0];
     const k = Math.round(a/(Math.PI/2))%4;                 // 0 ridge, 1 right side, 2 back, 3 left side
     return k===0 ? [x, y, 0] : k===2 ? [x-d, y, 0] : [x-0.012, y-0.002, (k===1?1:-1)*b]; }, faceMat); }
-for (const s of [1,-1]) rblob(cran,'ear'+s,0.014,0.021,0.01,0.75,faceMat,-0.024,hy(1.699),s*0.077, s*0.2,0,-0.12);
+for (const s of [1,-1]) rblob(cran,'ear'+s,0.014,0.021,0.01,0.75,faceMat,-0.024,hy(1.699),s*0.0735, s*0.14,0,-0.12);   // set close to the skull
 // HAIR: slicked back. A shell grown out of the skull: clipped dark sides that leave the ears clear, a tall crest ridge on top
 // (no wider than the eye span) standing up and forward over a V widow's peak, swept back over the crown and narrowing to a
 // V at the nape above the collar. Clumped locks run from the hairline up and back, converging behind.
@@ -681,7 +709,7 @@ function hairline(ang){                                    // hairline height by
   if (A < 0.6) return 1.788 - 0.004*smooth(0.22,0.6,A);
   if (A < 1.25) return 1.784 - 0.064*smooth(0.6,1.25,A);                        // temples down to the sideburns
   if (A < 1.9) return 1.72;                                                      // clipped side above the ear
-  return 1.72 - 0.055*smooth(1.9,2.9,A);                                         // nape
+  return 1.72 - 0.07*smooth(1.9,2.9,A);                                         // nape
 }
 function hairT(u){                                         // thickness over the skull along u
   const ridge = Math.max(0, 1 - Math.pow(Math.abs(u.z)/1.0, 2.5)), front = Math.max(u.x,0), back = Math.max(-u.x,0);
@@ -696,7 +724,7 @@ function hairPt(u, out=0){
   P.addScaledVector(u, -0.004 + w*(hairT(u)*rise+0.004) + out).add(new T.Vector3(HKC[0],HKC[1],HKC[2]));
   P.y += w*0.01*Math.max(u.x,0)*smooth(0.25,0.7,u.y)*Math.max(0, 1 - Math.abs(u.z)/0.6);   // the front of the crest rises (up, not out over the brow)
   const top = hy(HAIR_TOP) - 0.035*smooth(0.0,-0.13,P.x); if (P.y > top) P.y = top + (P.y-top)*0.35;   // peak over the front third, sloping down over the crown
-  return P;
+  return headWarp(P);
 }
 { const g = new T.SphereGeometry(1,44,32), a = g.attributes.position, u = new T.Vector3();
   for (let i=0;i<a.count;i++){ u.fromBufferAttribute(a,i).normalize(); const v = hairPt(u); a.setXYZ(i,v.x,v.y,v.z); }
@@ -715,7 +743,7 @@ function hstrand(name,z0,z1,t0,t1,r,mat,out=0.003,tip=0,flat=0.6){
 }
 // [z0 (front), z1 (back), start angle, lift]: a dark parting in the middle, three clumps per side swept up and back
 [[0.09,0.03,0.45,0.01],[0.27,0.09,0.5,0.008],[0.45,0.16,0.6,0.006],[0.63,0.23,0.8,0.004],[0.8,0.3,1.1,0.002]].forEach(([z0,z1,t0,tip],i)=>{
-  for (const s of [1,-1]) hstrand('lock'+i+(s>0?'R':'L'),s*z0,s*z1,t0,Math.PI+0.95-0.06*i,0.016-0.0012*i,i%2?hairMat:hairLt,0.004,tip); });
+  for (const s of [1,-1]) hstrand('lock'+i+(s>0?'R':'L'),s*z0,s*z1,t0,Math.PI+0.95-0.06*i,0.016-0.0012*i,i===4?hairMat:(i%2?hairMat:hairLt),0.004,tip); });   // the outermost lock stays mid grey (no light rim round the hair: not a helmet)
 [[0.18,0.06,0.5],[0.36,0.125,0.58],[0.54,0.19,0.72],[0.72,0.26,0.95]].forEach(([z0,z1,t0],i)=>{
   for (const s of [1,-1]) hstrand('groove'+i+(s>0?'R':'L'),s*z0,s*z1,t0,Math.PI+0.9,0.005,hairSd,0.012,0,1); });
 // clipped sides: a few short locks swept back from the temple over the ear to the occiput
@@ -740,10 +768,11 @@ for (const sd of [1,-1]) [[0.16,1.1],[0.3,0.95],[0.46,0.85],[0.62,0.75]].forEach
   spike(cran,'backSpike'+i,0.014,h,i%2?hairMat:hairLt,P.x,P.y,P.z,rz,-zk*0.8); });
 // BEARD: short and boxed along the jaw: full cheeks from under the cheekbones down the jaw to a squared chin (1.556),
 // sideburns up to the clipped hair; a closed slab over the face, thickest at the chin. Mustache over a dark mouth line.
-const BEARD = { A:1.72 };
-const bTop = a => { const A = Math.abs(a); return A < 0.25 ? 1.614 : A < 0.55 ? 1.614 + 0.014*smooth(0.25,0.55,A) : A < 1.05 ? 1.628 + 0.017*smooth(0.55,1.05,A) : A < 1.4 ? 1.645 + 0.02*smooth(1.05,1.4,A) : 1.665 + 0.065*smooth(1.4,1.72,A); };   // under the mustache, a diagonal cheek line, thin sideburns
+const BEARD = { A:1.66 };
+const BT = [[0,1.614],[0.22,1.616],[0.38,1.642],[0.55,1.66],[0.8,1.672],[1.05,1.677],[1.3,1.682],[1.5,1.695],[1.66,1.715]];   // under the mustache, a diagonal top edge from the mouth corner up the cheek to the sideburn
+const bTop = a => { const A = Math.min(Math.abs(a),1.66); for (let i=1;i<BT.length;i++) if (A <= BT[i][0]){ const [a0,h0] = BT[i-1], [a1,h1] = BT[i]; return h0 + (h1-h0)*smooth(0,1,(A-a0)/(a1-a0)); } return 1.715; };   // full short beard over the cheeks (no chin strap)
 const bBot = a => { const A = Math.abs(a); return A < 0.45 ? 1.542 + 0.009*Math.pow(A/0.45,1.6) : 1.551 + 0.075*Math.pow(smooth(0.5,1.72,A),1.7); };   // rounded chin tuft below the jaw; covers the jaw side down to its lower edge (sheet A side)
-const bThk = a => { const A = Math.abs(a); return 0.004 + 0.018*Math.pow(1 - smooth(0.0,1.5,A), 1.6); };              // full at the chin, thin over the cheeks
+const bThk = a => { const A = Math.abs(a); return 0.0075 + 0.0145*Math.pow(1 - smooth(0.0,1.5,A), 1.6); };              // full at the chin, thin over the cheeks
 const bOut = (a,h) => { const s = Math.min(1,Math.max(0,(h-bBot(a))/(bTop(a)-bBot(a)))); return bThk(a)*(1 - 0.75*Math.pow(s,1.4))*(0.5 + 0.5*smooth(0,0.3,s)) + 0.002; };
 { const na = 34, ns = 7, P = [], I = [], L = 2*(ns+1);
   for (let j=0;j<=na;j++){ const a = -BEARD.A + 2*BEARD.A*j/na, h0 = bBot(a), h1 = bTop(a), t0 = bThk(a);
@@ -765,13 +794,13 @@ function onFace(par,name,pts,r,mat,out){                   // a tapered tube lyi
     for (let j=0;j<=rs;j++){ const idx=i*(rs+1)+j; w.fromBufferAttribute(A,idx).sub(c).multiplyScalar(kk).add(c); A.setXYZ(idx,w.x,w.y,w.z); } }
   g.computeVertexNormals(); return add(par,name,g,mat);
 }
-const beardLt = HM(['#0e0f0e','#2c2d2a','#4b4b46','#6c6b62'], [PAL.teal, PAL.grey, PAL.greyL, PAL.greyL], {hi:0.5, mid:0.05, lo:-0.4, tl:[0.45,-0.1,-0.5]});   // mustache / lit beard edge
+const beardLt = HM(['#0e0f0e','#2c2d2a','#4b4b46','#6c6b62'], [PAL.teal, PAL.teal, PAL.greyL, PAL.greyL], {hi:0.5, mid:0.05, lo:-0.4, tl:[0.45,-0.1,-0.5]});   // mustache / lit beard edge
 // scars (sheet C/A): two red diagonal cuts over the right brow down the cheek, one on the left cheek
 const scarMat = HM(['#3a0d08','#5a1610','#7a2016','#8c2a1c'], [PAL.skinD,PAL.skinD,PAL.skinD,PAL.skinD], {hi:0.6, mid:0.0, lo:-0.6});
 onFace(cran,'scar0',[[0.37,1.772],[0.42,1.748],[0.5,1.712],[0.58,1.675],[0.66,1.645]],0.0016,scarMat,0.0012);
 onFace(cran,'scar1',[[0.56,1.76],[0.62,1.73],[0.7,1.695]],0.0014,scarMat,0.0012);
 onFace(cran,'scar2',[[-0.5,1.69],[-0.56,1.665],[-0.62,1.64]],0.0014,scarMat,0.0012);
-onFace(cran,'mouth',[[-0.16,1.6155],[0,1.615],[0.16,1.6155]],0.0022,MAT.pupil,0.004);
+mouth = onFace(cran,'mouth',[[-0.16,1.6155],[0,1.615],[0.16,1.6155]],0.0022,MAT.pupil,0.004);
 onFace(cran,'mustache',[[-0.6,1.602,0.008],[-0.48,1.611],[-0.26,1.6215],[0,1.6245],[0.26,1.6215],[0.48,1.611],[0.6,1.602,0.008]],0.0095,beardLt,0.0075);   // full mustache over the mouth, drooping into the beard
 // strand clumps: irregular tufts at different heights converging on the chin tuft, two greys, jittered lengths
 [[-0.95,0.0,0.55],[-0.62,0.15,0.5],[-0.38,0.0,0.4],[-0.2,0.45,0.5],[0.0,0.1,0.35],[0.06,0.55,0.42],[0.22,0.2,0.45],[0.4,0.5,0.45],[0.64,0.05,0.5],[0.95,0.2,0.45]].forEach(([a,u0,l],i)=>{
@@ -782,10 +811,18 @@ for (const s of [1,-1]) [[0.25,0.0,0.7],[0.6,0.15,0.75],[0.85,0.3,0.6]].forEach(
   const pts = []; for (let k=0;k<=5;k++){ const u = u0 + l*k/5, a = s*(1.62 - 1.0*u), h = bBot(a) + (bTop(a) - bBot(a))*(f*(1 - 0.5*u)) ;
     pts.push([a, h, bOut(a,h) + 0.001]); }
   onFace(cran,'jawTuft'+s+i,pts,0.0034,i===1?beardDk:beardMat,0); });
+for (const s of [1,-1]) [[1.5,0.1,0.8,0],[1.25,0.0,0.85,1],[1.05,0.2,0.7,2],[0.8,0.1,0.75,1],[0.6,0.25,0.6,0]].forEach(([a0,u0,l,m],i)=>{   // cheek strands: the full cheek beard combed down towards the jaw
+  const pts = []; for (let k=0;k<=4;k++){ const u = u0 + l*k/4, a = s*a0*(1 - 0.12*u), h = bTop(a) + (bBot(a) - bTop(a))*u; pts.push([a, h, bOut(a,h) + 0.0012]); }
+  onFace(cran,'cheekTuft'+s+i,pts,0.0036,[beardMat,beardDk,beardLt][m],0); });
 for (const s of [1,-1]){                                    // lit upper edge of the cheek beard (a rolled lip catching the light)
   const pts = []; for (let k=0;k<=6;k++){ const a = s*(0.55 + 0.6*k/6), h = bTop(a) - 0.003; pts.push([a, h, bOut(a,h) + 0.0005]); }
   onFace(cran,'beardEdge'+s,pts,0.0028,beardLt,0); }
 for (const s of [1,-1]) onFace(cran,'jawGroove'+s,[[s*0.85,1.632],[s*1.05,1.615],[s*1.25,1.622]],0.0025,beardDk,bThk(s)+0.002);
+// sprite size only (64 px): the owner's read of the face: one continuous dark eye bar across the face with the red eyes in
+// it, dark teal locks hanging beside the face strip down to the cheekbones, and no mouth slit between mustache and beard
+SPR.push(onFace(cran,'eyeBar',[[-0.75,1.7],[-0.5,1.7],[-0.25,1.701],[0,1.704],[0.25,1.701],[0.5,1.7],[0.75,1.7]],0.02,MAT.pupil,0.006));
+for (const s of [1,-1]) [[0.3,1.725,0.013,hairSd],[0.58,1.72,0.014,hairMat],[0.88,1.685,0.016,hairSd]].forEach(([a0,h1,r,m],i)=>
+  SPR.push(onFace(cran,'faceLock'+s+i,[[s*(a0+0.08),1.80],[s*(a0+0.03),1.77],[s*a0,1.745],[s*(a0-0.02),h1]],r,m,0.007)));
 
 const arms = {};
 // arm lengths from the sheet: shoulder joint ±0.24 → elbow 0.27 (centre of the rolled cuff) → wrist 0.28 (FORE);
@@ -821,8 +858,8 @@ for (const s of [-1,1]){
 // It hangs from a hinge on top of the shoulder (by the collar) and swings with part of the upper-arm direction, so it
 // stays on the shoulder when the arm reaches forward and settles over the deltoid when the arm hangs (a narrow orange
 // strip on the far side in the 3/4 sprites).
-const PAULD_RIM = M('#271713', PAL.rust, '#662e16', '#8e411b', {hi:0.6, mid:0.0, lo:-0.5, spr:[PAL.orange, PAL.orange], id:0.9});   // rim tones from sheet C (#432315/#662e16/#8e411b); sprite size: part of the flat orange cap
-const PAULD = { follow:0.6, hy:0.03, hz:0.05, flat:0.65, short:0.85, drop:0.02, size:0.95, aimHold:0.5, aimDrop:0.03, sSize:0.92, sDx:-0.02, sDy:-0.02, sDz:-0.01 };   // s*: extra size / offset at sprite size only (LO): a 2-3 px glint on the far shoulder, HD keeps the full dome; swing share; hinge above / inboard of the joint; drop / size: sprite poses (a cap on the far shoulder edge)
+const PAULD_RIM = M('#271713', PAL.rust, '#662e16', '#8e411b', {hi:0.6, mid:0.0, lo:-0.5, spr:[PAL.rust, PAL.rust], id:0.9});   // rim tones from sheet C (#432315/#662e16/#8e411b); sprite size: the glint's rust lower edge
+const PAULD = { follow:0.6, hy:0.03, hz:0.05, flat:0.65, short:0.85, drop:0.02, size:0.95, aimHold:0.5, aimDrop:0.03, sSize:0.75, sDx:0.0, sDy:0.0, sDz:-0.09, sFollow:0.2, sShort:0.4, sDeep:0.7, sFlat:1.5 };   // s*: extra size / offset / swing / depth / flatness / length at sprite size only (LO): a 2x4 px glint on the far shoulder, HD keeps the full dome; swing share; hinge above / inboard of the joint; drop / size: sprite poses (a cap on the far shoulder edge)
 const pauldron = grp(chest,'pauldronPivot',0,SH_Y+PAULD.hy,-SH_Z+PAULD.hz);
 {
   const g = new T.SphereGeometry(1,28,16), a = g.attributes.position;
@@ -857,7 +894,7 @@ function makeRifle(){
   box(g,'mag',0.06,0.14,0.04,MAT.metal,0.13,-0.05,0,0,0,-0.18);
   box(g,'grip',0.04,0.1,0.04,MAT.metal,-0.01,-0.03,0,0,0,-0.3);
   g.userData = { grip:new T.Vector3(0.04,-0.045,0), support:new T.Vector3(-0.23,-0.22,-0.2), lowSupport:new T.Vector3(0.182,0.029,0.022), muzzle:new T.Vector3(0.63,0.05,0),
-    aimPos:new T.Vector3(0.58,0.54,-0.11), aimRot:0.12, aimYaw:0, lowPos:new T.Vector3(0.43,-0.044,0.286), lowRot:-0.8, lowYaw:1.5, shR:0.2, shL:0.0, poleR:new T.Vector3(-0.2,-0.4,1), rate:0.11, kick:0.035, glove:1 };
+    aimPos:new T.Vector3(0.58,0.54,-0.11), aimRot:0.12, aimYaw:0, lowPos:new T.Vector3(0.43,-0.044,0.286), lowRot:-0.8, lowYaw:1.5, shR:0.2, shL:0.0, poleR:new T.Vector3(-0.2,-0.4,1), rate:0.125, kick:0.05, climb:0.05, flashT:0.04, flashS:1, glove:1 };
   return g;
 }
 function makePistol(){
@@ -883,14 +920,19 @@ function makePistol(){
   for (let i=0;i<3;i++) box(gr,'gripTex'+i,0.04,0.008,0.037,MAT.metalL,0.002,-0.035-i*0.028,0);
   box(gr,'basePlate',0.062,0.014,0.04,MAT.metalL,-0.002,-0.124,0);
   g.userData = { grip:new T.Vector3(0,-0.02,0), support:new T.Vector3(-0.01,-0.03,-0.045), muzzle:new T.Vector3(0.4,0.058,0),
-    aimPos:new T.Vector3(-0.462,0.619,0.676), aimRot:0.25, aimYaw:-2.24, lowPos:new T.Vector3(0.2,0.0,0.2), lowRot:-1.15, lowYaw:0, shR:-0.1, shRy:-0.08, shL:-0.15, poleR:new T.Vector3(0.07,0.02,0.39), poleL:new T.Vector3(-0.06,-0.33,-0.26), rate:0.22, kick:0.06, freeHand:true, glove:0 };
+    aimPos:new T.Vector3(-0.462,0.619,0.676), aimRot:0.25, aimYaw:-2.24, lowPos:new T.Vector3(0.2,0.0,0.2), lowRot:-1.15, lowYaw:0, shR:-0.1, shRy:-0.08, shL:-0.15, poleR:new T.Vector3(0.07,0.02,0.39), poleL:new T.Vector3(-0.06,-0.33,-0.26), rate:0.25, kick:0.06, climb:0.12, flashT:0.05, flashS:0.85, freeHand:true, glove:0 };
   return g;
 }
 const weapons = { rifle: makeRifle(), pistol: makePistol() };
+// muzzle flash (shot frames): a cream core in an orange star -- a forward cone and four short side petals round the
+// barrel axis, ~4 px long at sprite size. Flat colours, own class, no despeckle; it never reaches back toward the face.
+const FLASH_O = M(PAL.orange, PAL.orange, PAL.orange, PAL.orange, {flat:true});
 const flash = new T.Group(); flash.name='flash';
-box(flash,'f1',0.2,0.06,0.06,MAT.flash,0.1,0,0);
-box(flash,'f2',0.12,0.12,0.03,MAT.flash,0.05,0,0,0,0,0.785);
-box(flash,'f3',0.08,0.04,0.04,MAT.flashC,0.04,0,0);
+{ const cone = (r,h,mat,x,rz,rx=0,n=4) => { const g = new T.ConeGeometry(r,h,n); g.translate(0,h/2,0); return add(flash,'flashCone',g,mat,x,0,0,rx,0,rz); };
+  cone(0.032,0.17,FLASH_O,0.03,-Math.PI/2);                                    // forward tongue
+  for (let k=0;k<4;k++) cone(0.024,0.08,FLASH_O,0.045,0,k*Math.PI/2,3);           // side petals (up / down / left / right)
+  blob(flash,'flashMid',0.06,0.042,0.042,MAT.flash,0.05,0,0);                      // amber burst round ...
+  blob(flash,'flashCore',0.045,0.03,0.03,MAT.flashC,0.06,0,0.012); }              // ... a cream core (nearer the view)
 flash.visible = false;
 
 // ---------- Trench coat: one continuous open garment from the shoulders to mid-calf, re-shaped every frame ----------
@@ -1121,14 +1163,14 @@ const renderer = new T.WebGLRenderer({canvas, antialias:false, alpha:true, prese
 renderer.setPixelRatio(1);
 const scene = new T.Scene(); scene.add(hero);
 const cam = new T.OrthographicCamera(-1,1,1,-1,0.1,20);
-let rt = null, rtK = null, rtO = null, rtP = null;
+let rt = null, rtK = null, rtO = null, rtP = null, rtU = null;
 const post = new T.ShaderMaterial({
-  uniforms:{ tC:{value:null}, tD:{value:null}, tK:{value:null}, tO:{value:null}, px:{value:new T.Vector2(1,1)}, uOutline:{value:1},
+  uniforms:{ tC:{value:null}, tD:{value:null}, tK:{value:null}, tO:{value:null}, tU:{value:null}, px:{value:new T.Vector2(1,1)}, uOutline:{value:1},
     bgTop:{value:new T.Color('#11181a')}, bgLow:{value:new T.Color('#0b0f10')}, floorC:{value:new T.Color('#1d211d')}, floorL:{value:new T.Color('#343027')},
-    groundY:{value:0}, shC:{value:new T.Vector2()}, shR:{value:new T.Vector2(1,1)}, uClear:{value:0}, uLo:LO },
+    groundY:{value:0}, uRimY:{value:0}, uRimW:{value:1}, shC:{value:new T.Vector2()}, shR:{value:new T.Vector2(1,1)}, uClear:{value:0}, uLo:LO },
   vertexShader:`varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.0,1.0); }`,
-  fragmentShader:`uniform sampler2D tC; uniform sampler2D tD; uniform sampler2D tK; uniform sampler2D tO; uniform vec2 px; uniform float uOutline;
-  uniform vec3 bgTop; uniform vec3 bgLow; uniform vec3 floorC; uniform vec3 floorL; uniform float groundY; uniform vec2 shC; uniform vec2 shR; uniform float uClear; uniform float uLo;
+  fragmentShader:`uniform sampler2D tC; uniform sampler2D tD; uniform sampler2D tK; uniform sampler2D tO; uniform sampler2D tU; uniform vec2 px; uniform float uOutline;
+  uniform vec3 bgTop; uniform vec3 bgLow; uniform vec3 floorC; uniform vec3 floorL; uniform float groundY; uniform vec2 shC; uniform vec2 shR; uniform float uClear; uniform float uLo; uniform float uRimY; uniform float uRimW;
   varying vec2 vUv;
   float D(vec2 o){ return texture2D(tD, vUv + o*px).r; }
   vec4 C(vec2 o){ return texture2D(tC, vUv + o*px); }
@@ -1147,6 +1189,11 @@ const post = new T.ShaderMaterial({
           vec2 nb = dd<0.9999 ? vec2(0.,-1.) : (dl<0.9999 ? vec2(-1.,0.) : vec2(1.,0.));
           vec2 q = vUv + nb*px;                                   // dark parts: one ramp step darker, bright parts (skin, hair, orange): two
           o = dot(texture2D(tC, q).rgb, vec3(0.299,0.587,0.114)) > 0.25 ? texture2D(tO, q).rgb : texture2D(tK, q).rgb;
+          if (uLo > 0.5 && nb.y < -0.5 && gl_FragCoord.y > uRimY && isId(texture2D(tC, q).a, 0.8)){   // sprite size: cloth tops keep a lit 1 px rim instead of a dark line (owner's sprites)
+            vec3 u = texture2D(tU, q).rgb;                        // ... only as a run of 2+ px along the edge (no lone light dots)
+            bool runL = D(vec2(-1.,0.)) >= 0.9999 && D(vec2(-1.,-1.)) < 0.9999 && same(texture2D(tU, q - vec2(px.x, 0.0)).rgb, u);
+            bool runR = D(vec2(1.,0.)) >= 0.9999 && D(vec2(1.,-1.)) < 0.9999 && same(texture2D(tU, q + vec2(px.x, 0.0)).rgb, u);
+            if (runL || runR) o = u; }
           skip = uLo > 0.5 && abs(texture2D(tC, q).a - 0.9) < 0.05;  // sprite size: the orange cap is its own edge (no rim)
         }
         if (!skip){ gl_FragColor = vec4(o,0.2); return; } }
@@ -1170,7 +1217,21 @@ const post = new T.ShaderMaterial({
     if (!isId(cc.a, 0.6) && ((isId(nl.a,0.6) && dl < dc) || (isId(nr.a,0.6) && dr < dc) || (isId(nu.a,0.6) && du < dc) || (isId(nd.a,0.6) && dd < dc))) col = vec3(0.0);
     float t = (uLo < 0.5 && isId(cc.a, 0.8)) ? 0.0045 : 0.0025;   // big views: shallow pleat steps inside the cloth draw no line (no thin streaks)
     float gap = dc - min(min(dl,dr),min(du,dd));
-    if (uOutline > 0.5 && gap > t && !(uLo > 0.5 && isId(cc.a, 0.9))) col = gap > 0.03 ? vec3(0.0) : texture2D(tK, vUv).rgb;   // inner lines stay on the palette
+    bool inner = uOutline > 0.5 && gap > t && !(uLo > 0.5 && isId(cc.a, 0.9));
+    if (inner) col = gap > 0.03 ? vec3(0.0) : texture2D(tK, vUv).rgb;   // inner lines stay on the palette
+    else if (uOutline > 0.5 && isId(cc.a, 0.8)){
+      // top-light rim (owner's sprites: 1 px light-olive edge on shoulders, sleeve tops, pack and lapels): a cloth pixel
+      // whose upper / left neighbour is background or a farther surface takes its own material one ramp step lighter
+      float tr = 0.002;
+      bool rim = false;                                                // top and top-left edges of the upper body (not the skirt steps);
+      for (int k = 1; k <= 4; k++){                                    // 1 px at sprite size, a 2-3 px soft edge light in the big views
+        if (float(k) > uRimW) break;
+        float fk = float(k);
+        if (D(vec2(0., fk)) - dc > tr || (D(vec2(-fk, 0.)) - dc > tr && D(vec2(-fk, fk)) - dc > tr)) rim = true;
+      }
+      rim = rim && gl_FragCoord.y > uRimY;
+      if (rim) col = texture2D(tU, vUv).rgb;
+    }
     if (uLo > 0.5 && !isId(cc.a, 0.9)){                                 // sprite size: no dark cracks through the orange cap
       float k = 0.0; vec3 oc = vec3(0.0);
       if (isId(nl.a,0.9) && dl < dc){ k += 1.0; oc = nl.rgb; } if (isId(nr.a,0.9) && dr < dc){ k += 1.0; oc = nr.rgb; }
@@ -1236,6 +1297,7 @@ function setSize(w,h,sc){
   rt = new T.WebGLRenderTarget(W,H,{minFilter:T.NearestFilter, magFilter:T.NearestFilter});
   if (rtK) rtK.dispose(); rtK = new T.WebGLRenderTarget(W,H,{minFilter:T.NearestFilter, magFilter:T.NearestFilter}); post.uniforms.tK.value = rtK.texture;
   if (rtO) rtO.dispose(); rtO = new T.WebGLRenderTarget(W,H,{minFilter:T.NearestFilter, magFilter:T.NearestFilter}); post.uniforms.tO.value = rtO.texture;
+  if (rtU) rtU.dispose(); rtU = new T.WebGLRenderTarget(W,H,{minFilter:T.NearestFilter, magFilter:T.NearestFilter}); post.uniforms.tU.value = rtU.texture;
   if (rtP) rtP.dispose(); rtP = new T.WebGLRenderTarget(W,H,{minFilter:T.NearestFilter, magFilter:T.NearestFilter, depthBuffer:false}); fin.uniforms.tP.value = rtP.texture; fin.uniforms.px.value.set(1/W,1/H);
   rt.depthTexture = new T.DepthTexture(W,H); rt.depthTexture.type = T.UnsignedIntType;
   post.uniforms.tC.value = rt.texture; post.uniforms.tD.value = rt.depthTexture;
@@ -1274,6 +1336,7 @@ function legAngles(side, t){
   const th = lerp(st.th,wTh,S.walk), kn = lerp(st.kn,wKn,S.walk);
   return [lerp(th,LEG.tpose.th,S.tp), lerp(kn,LEG.tpose.kn,S.tp)];
 }
+const FIRE = { decay:20, lift:0.0, shoulder:0.025, back:0.03 };   // recoil envelope (1/s) and its gun lift (m), shoulder kick (rad), chest set back (m)
 function update(dt){
   S.t += dt;
   const t = S.t;
@@ -1342,22 +1405,23 @@ function update(dt){
   g.rotation.z = lerp(u.lowRot,u.aimRot,S.aim);
   g.rotation.y = lerp(u.lowYaw||0,u.aimYaw||0,S.aim);
 
-  // firing
-  S.shotT += dt;
-  if (S.anim==='fire' && S.aim>0.9){
-    S.nextShot -= dt;
-    if (S.nextShot<=0){ S.nextShot = u.rate; S.shotT = 0; flash.rotation.x = Math.random()*Math.PI; }
-  }
-  const rec = Math.exp(-S.shotT*28);
-  g.position.x -= u.kick*rec; g.rotation.z += 0.09*rec*(S.weapon==='pistol'?2:1);
-  chest.rotation.z += 0.035*rec;                                                       // recoil: shoulders and head kick back, not forward
+  // firing: a fixed shot clock -- a shot on every multiple of u.rate of the anim time -- so every rendered / exported fire
+  // frame is deterministic: the frame right after a shot shows the flash and the full kick (gun and hands back, muzzle up,
+  // shoulders back), which then settles toward the aim pose before the next shot
+  const firing = S.anim==='fire' && S.aim>0.9, ph = ((t % u.rate) + u.rate) % u.rate;
+  S.shotT = firing ? ph : 9;
+  const rec = firing ? Math.exp(-ph*FIRE.decay) : 0;
+  g.position.x -= u.kick*rec; g.position.y += FIRE.lift*rec; g.rotation.z += u.climb*rec;
+  chest.rotation.z += FIRE.shoulder*rec; chest.position.x = AX - FIRE.back*rec; neck.rotation.z -= FIRE.shoulder*rec;           // recoil: shoulders and head kick back, not forward
   // keep the weapon where the upright pose put it (hips space) while the chest leans: rotate its chest-space pose back
   { const c = Math.cos(-leanD), sn = Math.sin(-leanD), ox = AX + chest.position.x, oy = chest.position.y;
     _gs.set(g.position.x + ox, g.position.y + oy, g.position.z);
     g.position.set(_gs.x*c - _gs.y*sn - ox, _gs.x*sn + _gs.y*c - oy, _gs.z); g.rotation.z -= leanD; }
   if (flash.parent!==g) g.add(flash);
   flash.position.copy(u.muzzle);
-  flash.visible = S.shotT < 0.045;
+  flash.visible = firing && ph < u.flashT;
+  flash.rotation.x = (Math.floor(t/u.rate) % 2)*Math.PI/4;                             // star turns between shots
+  flash.scale.setScalar(u.flashS*(ph < 1.5/60 ? 1 : 0.65));                         // full burst on the shot frame, smaller after
 
   // arms (IK onto the weapon); shoulders slide forward when reaching
   arms.R.sh.position.x = (u.shR||0)*S.aim; arms.R.sh.position.y = SH_Y + (u.shRy||0)*S.aim + hunch; arms.L.sh.position.x = (u.shL||0)*S.aim;
@@ -1380,10 +1444,11 @@ function update(dt){
   for (const k of ['R','L']){ const A = arms[k];                            // palms down, fingers straight and flat in the T-pose
     A.fing.scale.set(lerp(1, 0.6, S.tp), lerp(0.07, 0.13, S.tp), 1); A.hand.rotation.set(0, A.s*S.tp*Math.PI/2, 0); }
   _armDir.copy(DOWN).applyQuaternion(arms.L.up.quaternion);
-  pauldron.quaternion.identity().slerp(_oq.setFromUnitVectors(TP_DIR_L,_armDir), PAULD.follow*(1 - PAULD.aimHold*(S.aim-pistolA)));   // rifle: the dome stays on the far shoulder, not swung forward with the support arm
-  // off the T-pose the dome settles flatter onto the deltoid (sprites: a 2-3 px orange edge on the far shoulder)
+  // off the T-pose the dome settles flatter onto the deltoid; at sprite size (pls) it is a short cap that swings less, so
+  // the far shoulder shows one small solid glint (lit top, orange, rust lip) instead of a tall edge-on strip
   const pls = (1-S.tp)*LO.value, psz = lerp(PAULD.size,1,S.tp)*lerp(1,PAULD.sSize,pls);
-  PAULD.mesh.scale.set(psz, psz*lerp(PAULD.flat,1,S.tp), psz*lerp(PAULD.short,1,S.tp));
+  pauldron.quaternion.identity().slerp(_oq.setFromUnitVectors(TP_DIR_L,_armDir), PAULD.follow*(1 - PAULD.aimHold*(S.aim-pistolA))*lerp(1,PAULD.sFollow,pls));   // rifle: the dome stays on the far shoulder, not swung forward with the support arm
+  PAULD.mesh.scale.set(psz*lerp(1,PAULD.sDeep,pls), psz*lerp(PAULD.flat,1,S.tp)*lerp(1,PAULD.sFlat,pls), psz*lerp(PAULD.short,1,S.tp)*lerp(1,PAULD.sShort,pls));
   pauldron.position.set(PAULD.sDx*pls, SH_Y + PAULD.hy - (PAULD.drop + PAULD.aimDrop*(S.aim-pistolA))*(1-S.tp) + hunch + PAULD.sDy*pls, -SH_Z + PAULD.hz + PAULD.sDz*pls);
 
   // coat: damped springs chasing the legs (sub-stepped so big export steps stay stable)
@@ -1400,7 +1465,13 @@ function update(dt){
   if (S.spin && !S.dragging) S.yaw += dt*0.6;
   cam.position.set(Math.sin(S.yaw)*6, S.cy, Math.cos(S.yaw)*6);
   cam.lookAt(0,S.cy,0);
+  // shirt bands follow the chest front's screen light (dRef: square to the view, as in the front turnaround)
+  cam.updateMatrixWorld(); chest.updateWorldMatrix(true,false);
+  const dF = _sv.set(1,0,0).transformDirection(chest.matrixWorld).transformDirection(cam.matrixWorldInverse).dot(LIGHT.value);
+  const sh = Math.min(0, dF - SHIRT.dRef) + SHIRT.lo*LO.value, b = SHIRT.base.map((v,i)=>lerp(v,SHIRT.sBase[i],LO.value));   // HD: lifted charcoal planes; sprite size: the darker sprite bands
+  SHIRT.mat.uniforms.uT0.value.set(b[0]+sh, b[1]+sh, b[2]+sh, 0);
 }
+const _sv = new T.Vector3();
 
 function render(clear){
   cam.updateMatrixWorld();
@@ -1410,10 +1481,13 @@ function render(clear){
   // ground line + blob shadow in screen pixels
   const g0 = new T.Vector3(0,0,0).project(cam);
   post.uniforms.groundY.value = Math.round((g0.y*0.5+0.5)*H);
+  post.uniforms.uRimY.value = post.uniforms.groundY.value + 1.05*S.ppu;   // rims only above the belt
+  post.uniforms.uRimW.value = Math.max(1, Math.round(S.ppu*CHAR_H/90));   // rim width: 1 px at sprite size / 128 px, 2 px at 192 px
   post.uniforms.shC.value.set(Math.round((g0.x*0.5+0.5)*W), Math.round((g0.y*0.5+0.5)*H)-1);
   post.uniforms.shR.value.set(Math.max(3,0.42*S.ppu), Math.max(1.5,0.05*S.ppu));
   SHIFT.value = 1; renderer.setRenderTarget(rtK); renderer.setClearColor(0x000000,0); renderer.clear(); renderer.render(scene,cam);
-  SHIFT.value = 2; renderer.setRenderTarget(rtO); renderer.clear(); renderer.render(scene,cam); SHIFT.value = 0;
+  SHIFT.value = 2; renderer.setRenderTarget(rtO); renderer.clear(); renderer.render(scene,cam);
+  SHIFT.value = -1; renderer.setRenderTarget(rtU); renderer.clear(); renderer.render(scene,cam); SHIFT.value = 0;
   renderer.setRenderTarget(rt); renderer.setClearColor(0x000000,0); renderer.clear();
   renderer.render(scene,cam);
   renderer.setRenderTarget(rtP); renderer.clear();
