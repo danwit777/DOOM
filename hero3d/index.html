@@ -122,34 +122,69 @@ const PAL_LIST = Object.values(PAL);
 document.getElementById('pal').innerHTML = PAL_LIST.map(c=>`<i style="background:${c}" title="${c}"></i>`).join('');
 const NP = PAL_LIST.length;
 
-// ---------- Character shader: skinned, texture colour x light band, snapped to the palette ----------
+// ---------- Character shader: skinned, material class x light band -> per-material palette ramp ----------
 const LIGHT = { value: new T.Vector3(-0.45,0.75,0.5).normalize() };   // screen-fixed light (upper left, like the sprites)
+// Material classes. The colour texture is classified once on load (hue / saturation / value) into a class map; the shader refines a
+// few classes by bind-pose position (dark/navy on the torso = shirt, light grey on the head = hair, front of the knees = pads, feet = boots).
+// Each class maps the light band through its own ramp of palette colours: deep, dark, mid, light, rim.
+const CLS = { coat:0, shirt:1, skin:2, hair:3, boot:4, pad:5, orange:6, eye:7, metal:8, beard:9 };
+const RAMP = [
+  ['black','coatD','coatM','coatL','coatL'],      // coat: dark olive-grey planes, #5c5646 only in the light band
+  ['black','black','coatD','coatM','coatL'],      // shirt: black
+  ['skinS','skinM','skinL','skinL','skinL'],      // skin: tan with a darker side
+  ['tealD','tealD','teal','grey','greyL'],        // hair: teal-dark locks, grey / light-grey streaks
+  ['black','black','navy','navy','navyL'],        // boots, gloves: navy-black
+  ['coatD','coatM','coatL','greyL','greyL'],      // knee pads: grey (the only pale patch on the legs)
+  ['skinS','rust','orange','orange','amber'],     // pauldron: orange toward the light, rust shadow side, amber glint on top
+  ['black','skinS','eye','eye','eye'],            // eyes: dark bar, red pupils
+  ['black','coatD','coatM','grey','greyL'],       // weapons, metal: dark steel, grey lit faces, light bevels
+  ['tealD','teal','grey','grey','greyL']          // beard: heavy grey
+];
+const NCLS = RAMP.length;
+const SMOOTH_ITERS = 14;
 const SH = {
   uBands:{value:1}, uPalOn:{value:1},
-  uB:{value:new T.Vector4(0.55, 0.05, -0.45, 0)},       // n.l thresholds: light / mid / dark / deep
-  uLv:{value:new T.Vector4(1.18, 0.9, 0.62, 0.42)},    // brightness per band
-  uSat:{value:1.0}, uGain:{value:1.0},
-  uPal:{value:PAL_LIST.map(h=>new T.Color(h))}
+  uB:{value:new T.Vector4(0.82, 0.5, 0.05, 0)},        // n.l thresholds: light / mid / dark / deep
+  uLv:{value:new T.Vector4(1.18, 0.9, 0.62, 0.42)},    // brightness per band (palette off / weapons)
+  uSat:{value:1.0}, uGain:{value:1.0}, uDetail:{value:0.6}, uRim:{value:0.55}, uShirtV:{value:0.07}, uGreyOff:{value:0.2}, uEyeBar:{value:1.3}, uBO:{value:new T.Vector3(0.75, 0.4, -0.2)}, uBootOff:{value:-0.2}, uDbg:{value:0},
+  uPxM:{value:0.03},                                    // metres per output pixel (eye pupils stay at least one pixel)
+  uHair:{value:new T.Vector3(0.4, 4.0, 2.5)},           // hair strands: texture luminance pivot, gain for hair, gain for beard
+  uPal:{value:PAL_LIST.map(h=>new T.Color(h))},
+  uRamp:{value:[].concat(...RAMP.map(r=>r.map(k=>new T.Color(PAL[k]))))},
+  // per class: x = texture detail weight, y = tone offset (in ramp steps), z = normal smoothing (0 = mesh normal, 1 = smoothed)
+  uCD:{value:[[0.25,0],[0,0],[0.3,0.6],[0,0.1],[0,0],[0,0.65],[0.2,0.3],[0,0],[0,0.2],[0,0.35]].map(v=>new T.Vector2(v[0],v[1]))},
+  uNS:{value:[0.85,0.6,0.35,0.3,0.7,0.6,0.6,0,0,0.4]}
 };
 const CHAR_VS = `
 #include <common>
 #include <skinning_pars_vertex>
-varying vec2 vUv; varying vec3 vN;
+varying vec2 vUv; varying vec3 vN; varying vec3 vP; varying vec3 vNs;
+#ifdef SMOOTHN
+attribute vec3 sNormal;
+#endif
 void main(){
-  vUv = uv;
+  vUv = uv; vP = position;
   #include <beginnormal_vertex>
   #include <skinbase_vertex>
   #include <skinnormal_vertex>
+  vec3 sn = objectNormal;
+  #ifdef SMOOTHN
+    sn = sNormal;
+    #ifdef USE_SKINNING
+      sn = (skinMatrix * vec4(sNormal, 0.0)).xyz;
+    #endif
+  #endif
   #include <begin_vertex>
   #include <skinning_vertex>
-  vN = normalize(normalMatrix * objectNormal);
+  vN = normalize(normalMatrix * objectNormal); vNs = normalize(normalMatrix * sn);
   gl_Position = projectionMatrix * modelViewMatrix * vec4(transformed, 1.0);
 }`;
 const CHAR_FS = `
-uniform sampler2D map; uniform float uUseMap; uniform vec3 uColor; uniform float uFlat;
+uniform sampler2D map; uniform float uUseMap; uniform sampler2D uMat; uniform float uUseMat; uniform vec3 uColor; uniform float uFlat;
 uniform vec3 uL; uniform float uBands; uniform float uPalOn; uniform vec4 uB; uniform vec4 uLv; uniform float uSat; uniform float uGain;
-uniform vec3 uPal[${NP}]; uniform float uN;
-varying vec2 vUv; varying vec3 vN;
+uniform float uDetail; uniform float uRim; uniform float uShirtV; uniform float uGreyOff; uniform float uOff; uniform float uEyeBar; uniform vec3 uBO; uniform float uBootOff; uniform float uDbg; uniform float uCls;
+uniform vec3 uPal[${NP}]; uniform float uN; uniform vec3 uRamp[${NCLS*5}]; uniform vec2 uCD[${NCLS}]; uniform float uNS[${NCLS}]; uniform float uPxM; uniform vec3 uHair;
+varying vec2 vUv; varying vec3 vN; varying vec3 vP; varying vec3 vNs;
 vec3 snapPal(vec3 c){
   float bd = 1e9; vec3 b = c;
   for (int i = 0; i < ${NP}; i++){
@@ -160,28 +195,191 @@ vec3 snapPal(vec3 c){
   }
   return b;
 }
+vec3 ramp(float cls, float i){
+  int k = int(cls * 5.0 + clamp(floor(i + 0.5), 0.0, 4.0));
+  vec3 c = uRamp[0];
+  for (int j = 0; j < ${NCLS*5}; j++){ if (j == k) c = uRamp[j]; }
+  return c;
+}
 void main(){
-  vec3 n = normalize(vN); if (!gl_FrontFacing) n = -n;
+  vec3 n = normalize(vN), nS = normalize(vNs); if (!gl_FrontFacing){ n = -n; nS = -nS; }
   vec3 alb = uUseMap > 0.5 ? texture2D(map, vUv).rgb : uColor;
-  float l = dot(alb, vec3(0.299, 0.587, 0.114));
-  alb = mix(vec3(l), alb, uSat) * uGain;
   float d = dot(n, uL);
   float k;
   if (uFlat > 0.5) k = 1.0;
   else if (uBands > 0.5) k = d > uB.x ? uLv.x : (d > uB.y ? uLv.y : (d > uB.z ? uLv.z : uLv.w));
   else k = mix(uLv.w, uLv.x, clamp(d * 0.5 + 0.5, 0.0, 1.0));
+  if (uPalOn > 0.5 && (uUseMat > 0.5 || uCls > -0.5)){
+    float cls = uCls, g = 0.5, off = uOff, dw = 1.0, eyeT = -1.0;
+    if (uUseMat > 0.5){
+      vec4 m = texture2D(uMat, vUv);                   // r: class/16, g: smoothed value offset within the class, b: smoothed value
+      cls = floor(m.r * 16.0 + 0.5); g = m.g;
+      // position refinements (bind pose, metres; +Y up, +Z front)
+      bool torso = vP.y > 0.9 && vP.y < 1.5 && abs(vP.x) < 0.2 && vP.z > 0.0;
+      if (cls == ${CLS.boot}.0 && vP.y > 0.95 && vP.y < 1.5 && abs(vP.x) < 0.24) cls = ${CLS.shirt}.0;
+      if (cls == ${CLS.coat}.0 && torso && m.b < uShirtV) cls = ${CLS.shirt}.0;
+      bool headR = vP.y > 1.5 && abs(vP.x) < 0.17, armR = abs(vP.x) > 0.5;
+      if ((cls == ${CLS.orange}.0 || cls == ${CLS.eye}.0) && headR) cls = ${CLS.skin}.0;   // warm glow around the eyes: skin (the eye mask below draws the eyes)
+      // warm / navy texels outside their body parts (sleeve patch, stray brush strokes) fall back to cloth
+      if (cls == ${CLS.skin}.0 && !(headR || armR)) cls = ${CLS.coat}.0;
+      if (cls == ${CLS.orange}.0 && !(vP.x > 0.1 && vP.y > 1.3)) cls = ${CLS.coat}.0;
+      if (cls == ${CLS.boot}.0 && !(vP.y < 0.3 || abs(vP.x) > 0.6)) cls = ${CLS.coat}.0;
+      if (cls == ${CLS.pad}.0){                        // light neutral grey: hair on the head, lighter cloth bits elsewhere
+        if (vP.y > 1.52) cls = ${CLS.hair}.0; else { cls = ${CLS.coat}.0; off += uGreyOff; dw = 0.0; }
+      }
+      if (cls == ${CLS.coat}.0 && headR && vP.y > 1.6){                              // dark texels on the head: brows / sockets on the face, locks elsewhere
+        if (vP.z > 0.07 && vP.y < 1.735){ cls = ${CLS.skin}.0; off -= 1.0; } else cls = ${CLS.hair}.0;
+      }
+      // beard: grey on the lower face (chin, jaw, moustache, sideburns); hair above
+      if (cls == ${CLS.hair}.0 && vP.y < 1.665 && vP.z > -0.01) cls = ${CLS.beard}.0;
+      if (vP.y < 0.2){ cls = ${CLS.boot}.0; off = uOff + uBootOff; dw = 0.0; }   // boots: one clean navy-black material
+      // knee pads: front of each knee (the texture paints them as dark camo)
+      vec2 kq = vec2(abs(vP.x) - 0.175, vP.y - 0.49) / vec2(0.07, 0.065);
+      kq *= kq; if (cls == ${CLS.coat}.0 && dot(kq, kq) < 1.0 && vP.z > 0.06){ cls = ${CLS.pad}.0; off = uOff;
+        if (dot(kq, kq) > 1.0 - 0.5 * clamp((0.016 - uPxM) / 0.008, 0.0, 1.0)) off -= 1.5; }   // HD: dark pad rim, reads as a strapped plate
+      // eyes: a dark bar across the sockets with a red pupil in each (at least one output pixel wide)
+      vec2 eq = vec2(abs(vP.x) - 0.042, vP.y - 1.684) / vec2(max(0.03, 1.1 * uPxM), max(0.0085, 0.55 * uPxM));
+      if (vP.z > 0.08 && headR && dot(eq, eq) < 1.0){
+        vec2 pq = vec2(abs(vP.x) - 0.04, vP.y - 1.684) / vec2(max(0.008, 0.5 * uPxM), max(0.0055, 0.38 * uPxM));
+        cls = ${CLS.eye}.0; eyeT = dot(pq, pq) < 1.0 ? 3.0 : 0.6;
+      }
+      if (uDbg > 0.5){ vec3 dc[10]; dc[0]=vec3(.3,.3,.25); dc[1]=vec3(0.); dc[2]=vec3(1.,.7,.5); dc[3]=vec3(.8); dc[4]=vec3(.1,.1,.6);
+        dc[5]=vec3(0.,.8,.8); dc[6]=vec3(1.,.5,0.); dc[7]=vec3(1.,0.,0.); dc[8]=vec3(.8,0.,.8); dc[9]=vec3(.5,.9,.5);
+        vec3 o = dc[0]; for (int j=0;j<10;j++) if (float(j)==cls) o = dc[j]; if (dw < 0.5) o = vec3(.5,.5,.35); gl_FragColor = vec4(o,1.0); return; }
+    }
+    vec2 cd = uCD[0]; float ns = 0.0;
+    for (int j = 0; j < ${NCLS}; j++){ if (float(j) == cls){ cd = uCD[j]; ns = uNS[j]; } }
+    // per-material normal: cloth uses the smoothed normal (broad planes, no wrinkle speckle), faces keep the mesh detail
+    vec3 nn = normalize(mix(n, nS, ns)); d = dot(nn, uL);
+    // tone: light band (0 deep .. 3 light) + smoothed texture value offset; top-facing silhouette rim = one step up
+    float t = d > uB.x ? 3.0 : (d > uB.y ? 2.0 : (d > uB.z ? 1.0 : 0.0));
+    if (cls == ${CLS.orange}.0){   // armour: lit from above (orange cap, amber glint, rust lower half) so from any side it reads as a plate, not an orange ball
+      float dO = dot(nn, normalize(uL * 0.5 + vec3(0.0, 1.0, 0.0)));
+      t = dO > uBO.x ? 3.0 : (dO > uBO.y ? 2.0 : (dO > uBO.z ? 1.0 : 0.0));
+    }
+    if (uBands < 0.5) t = clamp((d - uB.z) / (uB.x - uB.z) + 1.0, 0.0, 3.0);
+    t += (g - 0.5) * 4.0 * uDetail * cd.x * dw + cd.y + off;
+    // hair and beard keep the unblurred texture strands (comb lines, locks) on top of the light band
+    if (cls == ${CLS.hair}.0 || cls == ${CLS.beard}.0){
+      t += (dot(alb, vec3(0.299, 0.587, 0.114)) - uHair.x) * (cls == ${CLS.hair}.0 ? uHair.y : uHair.z);
+      // combed locks at HD (fade out below ~128 px, where the sprite reads the hair as 2-3 tone clusters): swept-back strands that
+      // fan out from the crown, dark gaps between the locks, a lighter streak on each
+      float gs = clamp((0.016 - uPxM) / 0.008, 0.0, 1.0);
+      if (gs > 0.0){
+        float f = cls == ${CLS.hair}.0 ? fract(atan(vP.x, vP.y - 1.6) * 5.5 + sin(vP.z * 24.0) * 0.3 + sin(vP.y * 31.0) * 0.15)
+                                      : fract(vP.x * 48.0 + sin(vP.y * 70.0) * 0.35);
+        t += gs * (f < 0.2 ? -1.2 : (f > 0.48 && f < 0.66 ? 0.8 : 0.0));
+      }
+      t += clamp((0.03 - uPxM) / 0.015, 0.0, 1.0) * 0.6;   // above sprite size the hair reads mid grey like sheet C; at 64 px it stays teal-dark
+    }
+    t = clamp(t, 0.0, 3.0);
+    if (nn.y > 0.35 && abs(nn.z) < uRim && t > 1.5) t += 1.0;
+    if (cls == ${CLS.orange}.0 && abs(nn.z) < 0.2 * clamp((0.02 - uPxM) / 0.01, 0.0, 1.0)) t = min(t, 1.0);   // dark armour rim (HD only)
+    if (eyeT >= 0.0) t = eyeT;
+    // weapons at HD: bevelled box edges (one step lighter on lit faces, one darker on shadowed ones) so the parts read as machined metal
+    if (cls == ${CLS.metal}.0 && uUseMat < 0.5 && uPxM < 0.014){
+      vec2 ew = max(fwidth(vUv), vec2(1e-5)), ed = min(vUv, 1.0 - vUv) / ew;
+      if (min(ed.x, ed.y) < 1.0 + 0.004 / uPxM) t += d > 0.2 ? 1.0 : -1.0;
+    }
+    vec3 rc = ramp(cls, t);
+    if (uBands < 0.5){ float t0 = floor(t); rc = mix(ramp(cls, t0), ramp(cls, t0 + 1.0), t - t0); }   // smooth light: blend neighbouring ramp tones
+    gl_FragColor = vec4(rc, 1.0);
+    return;
+  }
+  float l = dot(alb, vec3(0.299, 0.587, 0.114));
+  alb = mix(vec3(l), alb, uSat) * uGain;
   vec3 c = alb * k;
   if (uPalOn > 0.5) c = snapPal(c);
   gl_FragColor = vec4(c, 1.0);
 }`;
 function charMat(opts){
   const m = new T.ShaderMaterial({
-    uniforms:{ map:{value:opts.map||null}, uUseMap:{value:opts.map?1:0}, uColor:{value:new T.Color(opts.color||'#343027')}, uFlat:{value:opts.flat?1:0},
-      uL:LIGHT, uBands:SH.uBands, uPalOn:SH.uPalOn, uB:SH.uB, uLv:SH.uLv, uSat:SH.uSat, uGain:SH.uGain, uPal:SH.uPal, uN:{value: opts.full ? NP : N_CHAR} },
-    vertexShader:CHAR_VS, fragmentShader:CHAR_FS, side: opts.double ? T.DoubleSide : T.FrontSide
+    uniforms:{ map:{value:opts.map||null}, uUseMap:{value:opts.map?1:0}, uMat:{value:opts.mat||null}, uUseMat:{value:opts.mat?1:0},
+      uColor:{value:new T.Color(opts.color||'#343027')}, uFlat:{value:opts.flat?1:0}, uCls:{value: opts.cls===undefined ? -1 : opts.cls}, uOff:{value:opts.off||0},
+      uL:LIGHT, uBands:SH.uBands, uPalOn:SH.uPalOn, uB:SH.uB, uLv:SH.uLv, uSat:SH.uSat, uGain:SH.uGain, uDetail:SH.uDetail, uRim:SH.uRim, uShirtV:SH.uShirtV, uGreyOff:SH.uGreyOff, uEyeBar:SH.uEyeBar, uBO:SH.uBO, uBootOff:SH.uBootOff, uDbg:SH.uDbg,
+      uPal:SH.uPal, uRamp:SH.uRamp, uCD:SH.uCD, uNS:SH.uNS, uPxM:SH.uPxM, uHair:SH.uHair, uN:{value: opts.full ? NP : N_CHAR} },
+    vertexShader:CHAR_VS, fragmentShader:CHAR_FS, side: opts.double ? T.DoubleSide : T.FrontSide, defines: opts.smooth ? {SMOOTHN:1} : {}, extensions:{derivatives:true}
   });
   m.skinning = !!opts.skinning;
   return m;
+}
+// Shading normals: the scanned mesh is full of small wrinkles that break the light band into speckle. Average the vertex normals
+// over the surface (position-welded across UV seams, a few Laplacian passes) into a 'sNormal' attribute the shader blends in per material.
+function addSmoothNormals(geo, iters){
+  const P = geo.attributes.position, Nn = geo.attributes.normal, n = P.count, idx = geo.index ? geo.index.array : null;
+  if (!Nn || !idx) return false;
+  const key = new Map(), weld = new Int32Array(n); let u = 0;
+  for (let i = 0; i < n; i++){ const k = Math.round(P.getX(i)*2e4)+','+Math.round(P.getY(i)*2e4)+','+Math.round(P.getZ(i)*2e4);
+    let w = key.get(k); if (w === undefined){ w = u++; key.set(k, w); } weld[i] = w; }
+  let A = new Float32Array(u*3);
+  for (let i = 0; i < n; i++){ const w = weld[i]*3; A[w] += Nn.getX(i); A[w+1] += Nn.getY(i); A[w+2] += Nn.getZ(i); }
+  const deg = new Int32Array(u+1), E = [];
+  for (let f = 0; f < idx.length; f += 3) for (let e = 0; e < 3; e++){ const a = weld[idx[f+e]], b = weld[idx[f+(e+1)%3]]; if (a !== b){ E.push(a, b); deg[a]++; deg[b]++; } }
+  const off = new Int32Array(u+1); for (let i = 0; i < u; i++) off[i+1] = off[i] + deg[i];
+  const adj = new Int32Array(off[u]), fill = off.slice(0, u);
+  for (let e = 0; e < E.length; e += 2){ adj[fill[E[e]]++] = E[e+1]; adj[fill[E[e+1]]++] = E[e]; }
+  const norm = B => { for (let i = 0; i < u; i++){ const l = Math.hypot(B[3*i],B[3*i+1],B[3*i+2]) || 1; B[3*i]/=l; B[3*i+1]/=l; B[3*i+2]/=l; } };
+  norm(A);
+  for (let it = 0; it < iters; it++){
+    const Bn = new Float32Array(u*3);
+    for (let i = 0; i < u; i++){ let x = A[3*i], y = A[3*i+1], z = A[3*i+2];
+      for (let j = off[i]; j < off[i+1]; j++){ const q = adj[j]*3; x += A[q]; y += A[q+1]; z += A[q+2]; }
+      Bn[3*i] = x; Bn[3*i+1] = y; Bn[3*i+2] = z; }
+    norm(Bn); A = Bn;
+  }
+  const out = new Float32Array(n*3); for (let i = 0; i < n; i++){ const w = weld[i]*3; out[3*i] = A[w]; out[3*i+1] = A[w+1]; out[3*i+2] = A[w+2]; }
+  geo.setAttribute('sNormal', new T.BufferAttribute(out, 3));
+  return true;
+}
+// Classify the colour texture into material classes once (r = class/16, g = smoothed value offset within the class, b = smoothed value).
+function buildMatTex(tex){
+  const img = tex.image, w = img.width, h = img.height;
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  const cx = cv.getContext('2d'); cx.drawImage(img, 0, 0);
+  const src = cx.getImageData(0, 0, w, h).data, N = w*h;
+  const cls = new Uint8Array(N), val = new Float32Array(N);
+  for (let i = 0; i < N; i++){
+    const r = src[i*4]/255, g = src[i*4+1]/255, b = src[i*4+2]/255;
+    const mx = Math.max(r,g,b), mn = Math.min(r,g,b), dl = mx-mn, s = mx > 0 ? dl/mx : 0;
+    let hue = 0;
+    if (dl > 1e-4) hue = mx===r ? (((g-b)/dl)%6+6)%6*60 : mx===g ? ((b-r)/dl+2)*60 : ((r-g)/dl+4)*60;
+    const v = 0.299*r + 0.587*g + 0.114*b; val[i] = v;
+    let c = CLS.coat;
+    if (r > 0.5 && g < 0.22 && b < 0.22 && s > 0.65) c = CLS.eye;
+    else if ((hue < 45 || hue > 345) && s > 0.58 && mx > 0.42) c = CLS.orange;
+    else if ((hue < 45 || hue > 340) && s > 0.16 && mx > 0.3) c = CLS.skin;
+    else if (hue > 195 && hue < 270 && s > 0.2 && mx < 0.35) c = CLS.boot;
+    else if (s < 0.16 && v > 0.36) c = CLS.pad;          // light neutral grey: hair, pads, light straps (refined in the shader)
+    cls[i] = c;
+  }
+  // per-class box blur of the value (radius R) so the camo / brush noise becomes broad planes
+  const R = 6, out = new Uint8Array(N*4);
+  const t1 = new Float32Array(N), t2 = new Float32Array(N);
+  const mean = new Float32Array(NCLS), mc = new Float32Array(NCLS);
+  for (let i = 0; i < N; i++){ mean[cls[i]] += val[i]; mc[cls[i]]++; }
+  for (let c = 0; c < NCLS; c++) mean[c] /= Math.max(1, mc[c]);
+  const sm = new Float32Array(N);
+  for (let c = 0; c < NCLS; c++){
+    if (!mc[c]) continue;
+    for (let y = 0; y < h; y++){ let a = 0, n = 0; const o = y*w;
+      for (let x = -R; x < w; x++){
+        const xi = x+R; if (xi < w && cls[o+xi]===c){ a += val[o+xi]; n++; }
+        const xo = x-R-1; if (xo >= 0 && cls[o+xo]===c){ a -= val[o+xo]; n--; }
+        if (x >= 0){ t1[o+x] = a; t2[o+x] = n; } } }
+    for (let x = 0; x < w; x++){ let a = 0, n = 0;
+      for (let y = -R; y < h; y++){
+        const yi = y+R; if (yi < h){ a += t1[yi*w+x]; n += t2[yi*w+x]; }
+        const yo = y-R-1; if (yo >= 0){ a -= t1[yo*w+x]; n -= t2[yo*w+x]; }
+        if (y >= 0 && cls[y*w+x]===c) sm[y*w+x] = a/Math.max(1,n); } }
+  }
+  for (let i = 0; i < N; i++){
+    const c = cls[i];
+    out[i*4] = Math.round(c/16*255); out[i*4+1] = Math.max(0, Math.min(255, Math.round((0.5 + (sm[i]-mean[c])) * 255)));
+    out[i*4+2] = Math.max(0, Math.min(255, Math.round(sm[i]*255))); out[i*4+3] = 255;
+  }
+  const t = new T.DataTexture(out, w, h, T.RGBAFormat);
+  t.minFilter = T.NearestFilter; t.magFilter = T.NearestFilter; t.generateMipmaps = false; t.flipY = tex.flipY; t.needsUpdate = true;
+  return t;
 }
 
 // ---------- Scene, camera, pixel pipeline ----------
@@ -194,11 +392,11 @@ const hero = new T.Group(); hero.name = 'Hero'; scene.add(hero);
 const cam = new T.OrthographicCamera(-1,1,1,-1,0.1,20);
 let rt = null;
 const post = new T.ShaderMaterial({
-  uniforms:{ tC:{value:null}, tD:{value:null}, px:{value:new T.Vector2(1,1)}, uOutline:{value:1}, uInner:{value:0.004}, uDesp:{value:1},
+  uniforms:{ tC:{value:null}, tD:{value:null}, px:{value:new T.Vector2(1,1)}, uOutline:{value:1}, uInner:{value:0.004}, uDesp:{value:1}, uOW:{value:1}, uEyeC:{value:new T.Color(PAL.eye)},
     bgTop:{value:new T.Color('#11181a')}, bgLow:{value:new T.Color('#0b0f10')}, floorC:{value:new T.Color('#1d211d')}, floorL:{value:new T.Color('#343027')},
     groundY:{value:0}, shC:{value:new T.Vector2()}, shR:{value:new T.Vector2(1,1)}, uClear:{value:0} },
   vertexShader:`varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.0,1.0); }`,
-  fragmentShader:`uniform sampler2D tC; uniform sampler2D tD; uniform vec2 px; uniform float uOutline; uniform float uInner; uniform float uDesp;
+  fragmentShader:`uniform sampler2D tC; uniform sampler2D tD; uniform vec2 px; uniform float uOutline; uniform float uInner; uniform float uDesp; uniform float uOW; uniform vec3 uEyeC;
   uniform vec3 bgTop; uniform vec3 bgLow; uniform vec3 floorC; uniform vec3 floorL; uniform float groundY; uniform vec2 shC; uniform vec2 shR; uniform float uClear;
   varying vec2 vUv;
   float D(vec2 o){ return texture2D(tD, vUv + o*px).r; }
@@ -208,8 +406,19 @@ const post = new T.ShaderMaterial({
     float dc = D(vec2(0.0));
     bool fg = dc < 0.9999;
     float dl=D(vec2(-1.,0.)), dr=D(vec2(1.,0.)), du=D(vec2(0.,1.)), dd=D(vec2(0.,-1.));
+    // outline width grows with the character's pixel height (1 px at sprite sizes, ~1 px per 240 px in HD)
+    bool near = dl<0.9999 || dr<0.9999 || du<0.9999 || dd<0.9999;
+    bool nearIn = false;
+    if (uOW > 1.5){
+      for (int i = -4; i <= 4; i++) for (int j = -4; j <= 4; j++){
+        float r = abs(float(i)) + abs(float(j)); if (r < 0.5 || r > uOW + 0.5) continue;
+        float dn = D(vec2(float(i), float(j)));
+        if (dn < 0.9999) near = true;
+        if (dn < dc - uInner * (1.0 + r) && r <= uOW - 0.5) nearIn = true;
+      }
+    }
     if (!fg){
-      if (uOutline > 0.5 && (dl<0.9999 || dr<0.9999 || du<0.9999 || dd<0.9999)) { gl_FragColor = vec4(0.0,0.0,0.0,1.0); return; }
+      if (uOutline > 0.5 && near) { gl_FragColor = vec4(0.0,0.0,0.0,1.0); return; }
       if (uClear > 0.5) { gl_FragColor = vec4(0.0); return; }
       vec2 f = gl_FragCoord.xy; vec3 c;
       if (f.y < groundY) {
@@ -223,12 +432,12 @@ const post = new T.ShaderMaterial({
       // a lone pixel takes the colour that at least 3 of its 4 neighbours share (sprite-size clean-up)
       vec3 a=C(vec2(-1.,0.)), b=C(vec2(1.,0.)), c2=C(vec2(0.,1.)), e=C(vec2(0.,-1.));
       bool fa=dl<0.9999, fb=dr<0.9999, fc=du<0.9999, fe=dd<0.9999;
-      if (fa&&fb&&fc&&fe && !same(col,a) && !same(col,b) && !same(col,c2) && !same(col,e)){
+      if (fa&&fb&&fc&&fe && !same(col,uEyeC) && !same(col,a) && !same(col,b) && !same(col,c2) && !same(col,e)){   // red eye pixels are kept
         if (same(a,b) && (same(a,c2)||same(a,e))) col = a;
         else if (same(c2,e) && (same(c2,a)||same(c2,b))) col = c2;
       }
     }
-    if (uOutline > 0.5 && (dl < dc-uInner || dr < dc-uInner || du < dc-uInner || dd < dc-uInner)) col = vec3(0.0);
+    if (uOutline > 0.5 && (nearIn || dl < dc-uInner || dr < dc-uInner || du < dc-uInner || dd < dc-uInner)) col = vec3(0.0);
     gl_FragColor = vec4(col,1.0);
   }`,
   depthTest:false, depthWrite:false
@@ -258,7 +467,7 @@ function setSize(w,h,sc){
   const ppu = S.pxChar===0 ? (H/1.55)/CHAR_H : S.pxChar/CHAR_H;
   const halfH = H/ppu/2, halfW = W/ppu/2;
   cam.left=-halfW; cam.right=halfW; cam.top=halfH; cam.bottom=-halfH; cam.updateProjectionMatrix();
-  S.ppu = ppu; S.cy = 0.95;
+  S.ppu = ppu; S.cy = 0.95; SH.uPxM.value = 1/ppu;
   post.uniforms.uDesp.value = (S.pxChar>0 && S.pxChar<=96) ? 1 : 0;
   updateHud();
 }
@@ -268,29 +477,70 @@ function updateHud(){
 }
 
 // ---------- Weapons (character space: +X forward, +Y up, +Z = character's right) ----------
-const GUNM = charMat({color:'#181712'}), GUNL = charMat({color:'#343027'}), FLASH1 = charMat({color:'#eba357', flat:true}), FLASH2 = charMat({color:'#ffce87', flat:true});
+const GUNM = charMat({color:'#181712', cls:CLS.metal, off:0.25}), GUNL = charMat({color:'#343027', cls:CLS.metal, off:1.2}), FLASH1 = charMat({color:'#eba357', flat:true}), FLASH2 = charMat({color:'#ffce87', flat:true});
 function box(parent,w,h,d,mat,x,y,z,rz=0){ const m=new T.Mesh(new T.BoxGeometry(w,h,d),mat); m.position.set(x,y,z); m.rotation.z=rz; parent.add(m); return m; }
+// side-profile extrusion (x forward, y up, depth along z) with a small chamfer, so the top edges catch the light band
+function prof(parent, mat, pts, w, x=0, y=0, z=0, bev=0.005, rz=0){
+  const sh = new T.Shape(); sh.moveTo(pts[0][0], pts[0][1]); for (let i=1;i<pts.length;i++) sh.lineTo(pts[i][0], pts[i][1]);
+  const d = Math.max(0.002, w-2*bev), geo = new T.ExtrudeGeometry(sh, {depth:d, bevelEnabled:bev>0, bevelThickness:bev, bevelSize:bev*0.7, bevelSegments:1});
+  geo.translate(0, 0, -d/2); geo.computeVertexNormals();
+  const m = new T.Mesh(geo, mat); m.position.set(x,y,z); m.rotation.z = rz; parent.add(m); return m;
+}
+// pose fields: pos (from the chest, character space), rot (pitch), yaw (+ turns the muzzle to the character's left),
+// wrist / suppWrist: where the wrist bones go (weapon space, the hand mesh reaches ~0.1 past the wrist)
 function makeRifle(){
   const g = new T.Group(); g.name='rifle';
-  box(g,0.34,0.075,0.05,GUNM,0.06,0.05,0); box(g,0.18,0.065,0.04,GUNM,-0.2,0.035,0); box(g,0.05,0.12,0.05,GUNM,-0.31,0.02,0);
-  box(g,0.24,0.07,0.06,GUNL,0.34,0.05,0); box(g,0.22,0.025,0.025,GUNM,0.56,0.055,0); box(g,0.05,0.04,0.04,GUNM,0.68,0.055,0);
-  box(g,0.06,0.15,0.04,GUNM,0.13,-0.05,0,-0.18); box(g,0.04,0.1,0.04,GUNM,-0.01,-0.03,0,0.3); box(g,0.16,0.04,0.04,GUNL,0.05,0.115,0);
-  g.userData = { grip:new T.Vector3(0,-0.02,0), support:new T.Vector3(0.32,0.0,0), muzzle:new T.Vector3(0.72,0.055,0),
-    aim:{pos:new T.Vector3(0.42,0.02,0.1), rot:0.0}, low:{pos:new T.Vector3(0.2,-0.3,0.06), rot:-0.75}, rate:0.125, kick:0.04 };
+  // stock with cheek rest + rubber butt pad
+  prof(g, GUNM, [[-0.25,-0.04],[-0.1,0.008],[-0.1,0.085],[-0.17,0.088],[-0.2,0.1],[-0.25,0.096]], 0.05);
+  prof(g, GUNL, [[-0.275,-0.046],[-0.25,-0.044],[-0.25,0.1],[-0.275,0.1]], 0.054, 0, 0, 0, 0.004);
+  // receiver (stepped ejection port), top rail, low optic
+  prof(g, GUNM, [[-0.1,0.0],[0.22,0.0],[0.22,0.094],[0.12,0.1],[0.05,0.1],[0.04,0.09],[-0.06,0.09],[-0.1,0.084]], 0.064);
+  box(g,0.27,0.016,0.032,GUNL,0.07,0.104,0);
+  prof(g, GUNM, [[-0.02,0.112],[0.1,0.112],[0.1,0.152],[0.08,0.16],[0.0,0.16],[-0.02,0.15]], 0.04);
+  box(g,0.012,0.034,0.03,GUNL,0.101,0.136,0);
+  // pistol grip, trigger guard, curved magazine
+  prof(g, GUNM, [[-0.03,0.0],[0.02,0.0],[-0.01,-0.12],[-0.055,-0.115]], 0.044);
+  box(g,0.075,0.012,0.024,GUNM,0.045,-0.014,0);
+  prof(g, GUNM, [[0.1,0.002],[0.165,0.002],[0.19,-0.16],[0.128,-0.172]], 0.044);
+  box(g,0.06,0.014,0.048,GUNL,0.16,-0.165,0,-0.12);
+  // handguard with vents, front sight, barrel, muzzle brake
+  prof(g, GUNL, [[0.22,0.008],[0.5,0.016],[0.52,0.03],[0.52,0.078],[0.5,0.09],[0.22,0.094]], 0.07);
+  for (let i=0;i<3;i++) box(g,0.045,0.018,0.074,GUNM,0.28+i*0.075,0.05,0);
+  box(g,0.17,0.03,0.03,GUNM,0.6,0.053,0); box(g,0.022,0.05,0.026,GUNM,0.495,0.115,0);
+  box(g,0.07,0.046,0.046,GUNM,0.705,0.053,0);
+  g.userData = { grip:new T.Vector3(0,-0.02,0), support:new T.Vector3(0.36,0.0,0), muzzle:new T.Vector3(0.74,0.053,0),
+    wrist:new T.Vector3(-0.05,-0.03,0.02), suppWrist:new T.Vector3(0.3,-0.03,-0.05),
+    aim:{pos:new T.Vector3(0.46,0.08,0.04), rot:0.0, yaw:0.36, supp:-0.04, poleR:new T.Vector3(-0.2,-1,0.9), poleL:new T.Vector3(0.2,-1,-0.6)},
+    low:{pos:new T.Vector3(0.1,-0.33,0.3), rot:-0.52, yaw:0.95, supp:-0.04, poleR:new T.Vector3(-1,-0.7,0.3), poleL:new T.Vector3(0.2,-1,-0.6)},
+    rate:0.125, kick:0.05 };
   return g;
 }
 function makePistol(){
   const g = new T.Group(); g.name='pistol';
-  box(g,0.26,0.055,0.035,GUNM,0.09,0.065,0); box(g,0.24,0.02,0.03,GUNL,0.1,0.1,0); box(g,0.17,0.035,0.03,GUNM,0.06,0.03,0);
-  box(g,0.05,0.12,0.035,GUNM,-0.005,-0.03,0,0.25);
-  g.userData = { grip:new T.Vector3(0,-0.02,0), support:new T.Vector3(-0.01,-0.03,-0.045), muzzle:new T.Vector3(0.24,0.065,0),
-    aim:{pos:new T.Vector3(0.55,0.08,0.02), rot:0.05}, low:{pos:new T.Vector3(0.12,-0.42,0.2), rot:-1.2}, rate:0.25, kick:0.06, freeHand:true };
+  // long slide (bevelled front), 2-tone top strip, under-barrel rail frame, barrel extension
+  prof(g, GUNM, [[-0.065,0.046],[0.25,0.046],[0.25,0.084],[0.235,0.094],[-0.055,0.094],[-0.065,0.086]], 0.032);
+  box(g,0.27,0.008,0.02,GUNL,0.09,0.097,0);
+  prof(g, GUNL, [[-0.04,0.018],[0.2,0.018],[0.23,0.026],[0.23,0.047],[-0.04,0.047]], 0.028, 0, 0, 0, 0.004);
+  for (let i=0;i<3;i++) box(g,0.012,0.006,0.03,GUNM,0.12+i*0.035,0.016,0);
+  box(g,0.07,0.026,0.026,GUNM,0.28,0.068,0);
+  box(g,0.018,0.018,0.022,GUNM,-0.05,0.102,0); box(g,0.014,0.016,0.012,GUNM,0.235,0.1,0);   // rear / front sight
+  // grip (stippled panel), trigger guard
+  prof(g, GUNM, [[-0.06,0.02],[-0.01,0.02],[-0.035,-0.1],[-0.08,-0.094]], 0.032);
+  prof(g, GUNL, [[-0.052,0.0],[-0.02,0.0],[-0.036,-0.075],[-0.066,-0.07]], 0.036, 0, 0, 0, 0.003);
+  box(g,0.06,0.008,0.016,GUNM,0.025,-0.008,0); box(g,0.008,0.024,0.016,GUNM,0.056,0.004,0);
+  g.userData = { grip:new T.Vector3(0,-0.02,0), support:new T.Vector3(-0.01,-0.03,-0.045), muzzle:new T.Vector3(0.315,0.068,0),
+    wrist:new T.Vector3(-0.1,0.0,0), wrap:[0.45,-0.1,1.2], suppWrist:new T.Vector3(-0.07,-0.05,-0.04),
+    aim:{pos:new T.Vector3(-0.3,0.33,0.56), rot:0.33, yaw:-2.05, poleR:new T.Vector3(0.3,-1,0.1), reach:new T.Vector3(-0.45,0.52,0.82), ext:0.97},
+    low:{pos:new T.Vector3(0.13,-0.41,0.23), rot:-1.25, yaw:0.0, poleR:new T.Vector3(-0.3,-1,0.5)},
+    rate:0.25, kick:0.07, freeHand:true };
   return g;
 }
 const weapons = { rifle: makeRifle(), pistol: makePistol() };
 for (const k in weapons) hero.add(weapons[k]);
 const flash = new T.Group();
-box(flash,0.18,0.06,0.06,FLASH1,0.09,0,0); const f2=box(flash,0.1,0.1,0.03,FLASH1,0.05,0,0); f2.rotation.x=0.785; box(flash,0.07,0.04,0.04,FLASH2,0.04,0,0);
+// muzzle flash: a cream core, an amber cone and four thin spikes (reads as a star at 64 px)
+box(flash,0.3,0.07,0.07,FLASH1,0.17,0,0); box(flash,0.12,0.1,0.1,FLASH2,0.06,0,0); box(flash,0.08,0.035,0.035,FLASH2,0.3,0,0);
+for (let i=0;i<4;i++){ const sp=box(flash,0.035,0.24,0.035,FLASH1,0.08,0,0); sp.rotation.set(i*Math.PI/4, 0, 0.35*(i%2?1:-1)); }
 flash.visible = false;
 
 // ---------- Bone helpers (world space, independent of the rig's local axes) ----------
@@ -313,15 +563,20 @@ function rotBoneWorld(bone, axisW, ang){
   bone.quaternion.copy(_q3.invert().multiply(_q.multiply(_q2)));
   bone.updateWorldMatrix(false,true);
 }
-function armIK(side, targetW, poleW, w){
+// blend a bone's world orientation toward qW (weight w)
+function setBoneWorldQ(bone, qW, w){
   if (w <= 0.001) return;
-  const up=B['upperarm_'+side], lo=B['lowerarm_'+side], ha=B['hand_'+side];
-  const a=LEN['up_'+side], b=LEN['lo_'+side];
+  bone.updateWorldMatrix(true,false); bone.getWorldQuaternion(_q2); _q2.slerp(qW, Math.min(1,w));
+  bone.parent.getWorldQuaternion(_q3); bone.quaternion.copy(_q3.invert().multiply(_q2));
+  bone.updateWorldMatrix(false,true);
+}
+function limbIK(up, lo, ha, a, b, targetW, poleW, w){
+  if (w <= 0.001) return;
   up.updateWorldMatrix(true,false); const Sp=up.getWorldPosition(new T.Vector3());
-  // blend the target from the current hand position so w<1 eases in
+  // blend the target from the current end position so w<1 eases in
   ha.updateWorldMatrix(true,false); const cur=ha.getWorldPosition(new T.Vector3());
   const tgt = cur.lerp(targetW, w);
-  const dv = _d.subVectors(tgt,Sp); let dist = Math.min(Math.max(dv.length(),0.05),(a+b)*0.995); dv.normalize();
+  const dv = new T.Vector3().subVectors(tgt,Sp); let dist = Math.min(Math.max(dv.length(),0.05),(a+b)*0.995); dv.normalize();
   const cosA=(a*a+dist*dist-b*b)/(2*a*dist), sinA=Math.sqrt(Math.max(0,1-cosA*cosA));
   _p.copy(poleW).addScaledVector(dv,-poleW.dot(dv)).normalize();
   const E = _e.copy(Sp).addScaledVector(dv,a*cosA).addScaledVector(_p,a*sinA);
@@ -330,12 +585,30 @@ function armIK(side, targetW, poleW, w){
   lo.updateWorldMatrix(true,false);
   pointBone(lo, ha, new T.Vector3().subVectors(T2, lo.getWorldPosition(new T.Vector3())));
 }
+function armIK(side, targetW, poleW, w){
+  limbIK(B['upperarm_'+side], B['lowerarm_'+side], B['hand_'+side], LEN['up_'+side], LEN['lo_'+side], targetW, poleW, w);
+}
+function legIK(side, targetW, poleW, w){
+  // keep the knee soft: a planted foot out of reach slides in toward the hip instead of lifting off the ground
+  const hip = B['thigh_'+side].getWorldPosition(new T.Vector3()), r = (LEN['th_'+side]+LEN['ca_'+side])*0.98;
+  const dy = hip.y - targetW.y, h = new T.Vector2(targetW.x-hip.x, targetW.z-hip.z), hm = Math.sqrt(Math.max(0, r*r-dy*dy));
+  if (h.length() > hm){ h.setLength(hm); targetW = new T.Vector3(hip.x+h.x, targetW.y, hip.z+h.y); }
+  limbIK(B['thigh_'+side], B['calf_'+side], B['foot_'+side], LEN['th_'+side], LEN['ca_'+side], targetW, poleW, w);
+}
 
 // ---------- Animation ----------
 const lerp=(a,b,k)=>a+(b-a)*k;
 let mixer=null, ACT={}, model=null;
 const FWD=new T.Vector3(1,0,0), UP=new T.Vector3(0,1,0), RIGHT=new T.Vector3(0,0,1);
-const POLE_R=new T.Vector3(-0.3,-1,0.5), POLE_L=new T.Vector3(-0.3,-1,-0.5), POLE_T=new T.Vector3(-1,-0.2,0);
+// standing layer (idle / aim): wide A-stance like the sprites, feet planted flat, knees soft, near shin leaning out
+const STANCE = {
+  idle:{ drop:0.08, hip:-0.34, twist:-0.24, lean:0.1, roll:0.12, shift:new T.Vector3(0.09,0,-0.07), footR:new T.Vector3(-0.1,0.155,0.37), footL:new T.Vector3(0.13,0.155,-0.25), kneeR:new T.Vector3(1,0,0.5), kneeL:new T.Vector3(1,0,-0.5) },
+  aim: { drop:0.08, hip:-0.24, twist:-0.16, lean:0.45, roll:-0.1, shift:new T.Vector3(0.2,0,-0.17), footR:new T.Vector3(-0.02,0.155,0.17), footL:new T.Vector3(0.33,0.155,-0.5),  kneeR:new T.Vector3(1,0,0.6), kneeL:new T.Vector3(1,0,-0.4) },
+  pistol:{ drop:0.07, hip:-0.36, twist:-0.3, lean:0.04, roll:-0.06, shift:new T.Vector3(0.05,0,-0.04), footR:new T.Vector3(-0.1,0.155,0.36), footL:new T.Vector3(0.12,0.155,-0.33), kneeR:new T.Vector3(1,0,0.5), kneeL:new T.Vector3(1,0,-0.5) }
+};
+// head direction per pose: [yaw (+ = to the character's left), pitch (+ = up)]
+const LOOK = { idle:[0.05,-0.05], rifle:[0.2,-0.04], pistol:[-1.35,0.2] };
+const _v=new T.Vector3(), _v2=new T.Vector3(), _qy=new T.Quaternion(), _qp=new T.Quaternion();
 function update(dt){
   if (!model) return;
   S.t += dt; const t = S.t;
@@ -343,6 +616,7 @@ function update(dt){
   const k8 = 1-Math.exp(-dt*8), k12 = 1-Math.exp(-dt*12);
   S.walk=lerp(S.walk,want.walk,k8); S.run=lerp(S.run,want.run,k8); S.aim=lerp(S.aim,want.aim,k12); S.tp=lerp(S.tp,want.tp,k12);
   const move = Math.min(1, S.walk+S.run);
+  const pistol = S.weapon==='pistol';
 
   // 1) base: rest pose blended with the walk / run clips (deterministic clip time)
   for (const n in BIND){ const b=B[n]; b.position.copy(BIND[n].p); b.quaternion.copy(BIND[n].q); }
@@ -350,28 +624,51 @@ function update(dt){
   ACT.walk.time = (t*1.0) % ACT.walk.getClip().duration; ACT.run.time = (t*1.0) % ACT.run.getClip().duration;
   mixer.update(0);
   model.updateMatrixWorld(true);
-
-  // 2) standing pose (idle/aim): A-stance, feet planted, slight knee bend
-  const stand = (1-move)*(1-S.tp);
-  if (stand > 0.001){
-    rotBoneWorld(B.thigh_r, FWD,  0.16*stand); rotBoneWorld(B.thigh_l, FWD, -0.16*stand);
-    rotBoneWorld(B.thigh_r, RIGHT, -0.12*stand); rotBoneWorld(B.thigh_l, RIGHT, 0.14*stand);
-    rotBoneWorld(B.calf_r, RIGHT, 0.10*stand); rotBoneWorld(B.calf_l, RIGHT, 0.06*stand);
-    // feet: undo the leg rotation so soles stay flat
+  // run: cap the knee bend so the rear heel stays under the coat hem instead of kicking up to hip height
+  if (S.run > 0.01){
     for (const s of ['l','r']){
-      const f=B['foot_'+s]; f.updateWorldMatrix(true,false);
-      const bindW = BIND['foot_'+s].w; f.getWorldQuaternion(_q2);
-      _q.copy(bindW).multiply(_q2.clone().invert());               // delta that brings the foot back to its bind world orientation
-      _q3.identity().slerp(_q, stand); f.parent.getWorldQuaternion(_q2);
-      f.quaternion.copy(_q2.clone().invert().multiply(_q3.multiply(f.getWorldQuaternion(new T.Quaternion()))));
-      f.updateWorldMatrix(false,true);
+      const th = B['thigh_'+s], ca = B['calf_'+s], ft = B['foot_'+s];
+      const p0 = th.getWorldPosition(new T.Vector3()), p1 = ca.getWorldPosition(new T.Vector3()), p2 = ft.getWorldPosition(new T.Vector3());
+      const d1 = p1.clone().sub(p0).normalize(), d2 = p2.clone().sub(p1).normalize(), ang = d1.angleTo(d2), cap = 1.25;
+      if (ang > cap){ const ax = new T.Vector3().crossVectors(d2, d1).normalize(); rotBoneWorld(ca, ax, (ang-cap)*Math.min(1,S.run)); }
     }
-    // breathing + aim lean
+  }
+
+  // 2) standing pose (idle/aim): pelvis down + turned toward the camera side, legs by IK onto planted feet
+  const stand = (1-move)*(1-S.tp);
+  const sA = STANCE.idle, sB = pistol ? STANCE.pistol : STANCE.aim, ka = S.aim;
+  const st = k => lerp(sA[k], sB[k], ka);
+  if (stand > 0.001){
+    const pw = B.pelvis.getWorldPosition(_v); pw.y -= st('drop')*stand;
+    pw.addScaledVector(_v2.lerpVectors(sA.shift, sB.shift, ka), stand);
+    B.pelvis.parent.worldToLocal(pw); B.pelvis.position.copy(pw);
+    rotBoneWorld(B.pelvis, UP, st('hip')*stand);
+    for (const s of ['l','r']){
+      const S2 = s==='r' ? 'R' : 'L';
+      const ft = _v2.lerpVectors(sA['foot'+S2], sB['foot'+S2], ka);
+      const kn = new T.Vector3().lerpVectors(sA['knee'+S2], sB['knee'+S2], ka);
+      legIK(s, ft, kn, stand);
+      // feet flat on the ground, toes turned out a little
+      _qy.setFromAxisAngle(UP, s==='r' ? -0.75 : -0.35);
+      setBoneWorldQ(B['foot_'+s], _qy.clone().multiply(BIND['foot_'+s].w), stand);
+    }
+    // torso: turn back toward the camera, lean into the aim, breathe
     const breath = Math.sin(t*2.1)*0.012*(1-S.aim);
-    rotBoneWorld(B.spine_02, RIGHT, (-0.08*S.aim + breath)*stand);
-    rotBoneWorld(B.neck_01, RIGHT, 0.06*S.aim*stand);
+    const tw = st('twist')*stand, ln = st('lean')*stand;
+    for (const n of ['spine_01','spine_02','spine_03']){ rotBoneWorld(B[n], UP, tw/3); rotBoneWorld(B[n], RIGHT, -ln/3); rotBoneWorld(B[n], FWD, st('roll')*stand/3); }
+    rotBoneWorld(B.spine_02, RIGHT, breath*stand);
   }
   // 3) T-pose: nothing more (rest pose)
+
+  // head: look where the weapon points (level for the rifle, 3/4 toward the raised pistol)
+  {
+    const lk = S.aim>0.001 ? (pistol ? LOOK.pistol : LOOK.rifle) : LOOK.idle;
+    const ly = lerp(LOOK.idle[0], lk[0], S.aim), lp = lerp(LOOK.idle[1], lk[1], S.aim);
+    _qy.setFromAxisAngle(UP, ly); _qp.setFromAxisAngle(RIGHT, lp); _qy.multiply(_qp);
+    const hw = (1-S.tp)*(1-move*0.6);
+    setBoneWorldQ(B.neck_01, _q.copy(_qy).slerp(new T.Quaternion(), 0.4).multiply(BIND.neck_01.w), hw);
+    setBoneWorldQ(B.head, _qy.clone().multiply(BIND.head.w), hw);
+  }
 
   // 4) weapon + arm IK (not in the T-pose)
   for (const k in weapons) weapons[k].visible = (k===S.weapon) && S.tp<0.5;
@@ -379,24 +676,58 @@ function update(dt){
   B.spine_03.updateWorldMatrix(true,false);
   const chestW = B.spine_03.getWorldPosition(new T.Vector3());
   const chest = hero.worldToLocal(chestW.clone());
-  const pose = { pos:new T.Vector3().lerpVectors(u.low.pos,u.aim.pos,S.aim), rot:lerp(u.low.rot,u.aim.rot,S.aim) };
-  g.position.copy(chest).add(pose.pos); g.rotation.set(0,0,pose.rot);
+  const pose = { pos:new T.Vector3().lerpVectors(u.low.pos,u.aim.pos,S.aim), rot:lerp(u.low.rot,u.aim.rot,S.aim), yaw:lerp(u.low.yaw,u.aim.yaw,S.aim) };
+  g.position.copy(chest).add(pose.pos); g.rotation.set(0,pose.yaw,pose.rot);
+  if (u.aim.reach && S.aim > 0.001){
+    // arm-extended aim: the wrist goes out along 'reach' from the shoulder, the gun is hung off the wrist
+    B.upperarm_r.updateWorldMatrix(true,false);
+    const wt = hero.worldToLocal(B.upperarm_r.getWorldPosition(new T.Vector3())).addScaledVector(u.aim.reach.clone().normalize(), (LEN.up_r+LEN.lo_r)*u.aim.ext);
+    g.updateMatrix(); const gp = wt.sub(u.wrist.clone().applyQuaternion(g.quaternion));
+    g.position.lerpVectors(new T.Vector3().copy(chest).add(u.low.pos), gp, S.aim);
+  }
   g.position.y += Math.abs(Math.sin(t*Math.PI*2*1.0))*0.02*move;
   // firing on a fixed clock so exported frames are deterministic
   if (S.anim==='fire' && S.aim>0.9) S.shotT = (t % u.rate); else S.shotT = 9;
-  const rec = Math.exp(-S.shotT*28);
-  g.position.x -= u.kick*rec; g.rotation.z += 0.08*rec*(S.weapon==='pistol'?2:1);
-  if (S.shotT<9) rotBoneWorld(B.spine_03, RIGHT, 0.03*rec);
+  const rec = Math.exp(-S.shotT*22);
+  g.rotation.z += 0.12*rec*(pistol?1.7:1); g.updateMatrix(); g.translateX(-u.kick*rec);
+  if (S.shotT<9){ rotBoneWorld(B.spine_03, RIGHT, 0.05*rec); if (pistol) rotBoneWorld(B.clavicle_r, FWD, -0.06*rec); }
   if (flash.parent!==g) g.add(flash);
-  flash.position.copy(u.muzzle); flash.visible = S.shotT < 0.05;
+  flash.position.copy(u.muzzle); flash.visible = S.shotT < 0.05; flash.rotation.x = S.t*7.3;
   g.updateMatrixWorld(true);
   const armW = 1 - S.tp;
-  const gripW = g.localToWorld(u.grip.clone());
-  armIK('r', gripW, hero.localToWorld(POLE_R.clone()).sub(hero.getWorldPosition(new T.Vector3())), armW);
-  let suppW = g.localToWorld(u.support.clone());
-  if (u.freeHand){ B.upperarm_l.updateWorldMatrix(true,false); suppW = B.upperarm_l.getWorldPosition(new T.Vector3()).add(new T.Vector3(0.08,-0.62,-0.06)); }
-  armIK('l', suppW, hero.localToWorld(POLE_L.clone()).sub(hero.getWorldPosition(new T.Vector3())), armW);
-
+  // two-handed: the far shoulder comes forward so the support hand reaches the handguard
+  if (!u.freeHand){ rotBoneWorld(B.clavicle_l, UP, -lerp(0.32,0.5,S.aim)*armW); rotBoneWorld(B.clavicle_r, UP, 0.3*S.aim*armW); }
+  const toW = v => hero.localToWorld(v.clone()).sub(hero.getWorldPosition(new T.Vector3()));
+  const poleR = new T.Vector3().lerpVectors(u.low.poleR, u.aim.poleR, S.aim);
+  armIK('r', g.localToWorld(u.wrist.clone()), toW(poleR), armW);
+  if (u.freeHand){
+    // free (far) arm hangs a little out from the coat so the glove reads
+    B.upperarm_l.updateWorldMatrix(true,false);
+    const suppW = B.upperarm_l.getWorldPosition(new T.Vector3()).add(new T.Vector3(lerp(0.12,0.1,S.aim),-0.4,lerp(-0.02,-0.12,S.aim)));
+    armIK('l', suppW, toW(new T.Vector3(-1,0.1,-0.3)), armW);
+  } else {
+    const poleL = new T.Vector3().lerpVectors(u.low.poleL, u.aim.poleL, S.aim);
+    const sw = u.suppWrist.clone(); sw.x += lerp(u.low.supp||0, u.aim.supp||0, S.aim);
+    armIK('l', g.localToWorld(sw), toW(poleL), armW);
+  }
+  // hands wrap the weapon: bend the wrist so the fingers run down the grip / under the handguard instead of sticking out
+  const gDown = new T.Vector3(0,-1,0).applyQuaternion(g.quaternion), gFwd = new T.Vector3(1,0,0).applyQuaternion(g.quaternion);
+  const gLat = new T.Vector3(0,0,1).applyQuaternion(g.quaternion);
+  const wrap = (side, kd, kf, kl, w, curl=1.0) => {
+    if (w <= 0.001) return;
+    const lo = B['lowerarm_'+side], ha = B['hand_'+side], fi = B['middle_01_'+side];
+    const fa = ha.getWorldPosition(new T.Vector3()).sub(lo.getWorldPosition(new T.Vector3())).normalize();
+    const cur = fi.getWorldPosition(new T.Vector3()).sub(ha.getWorldPosition(new T.Vector3())).normalize();
+    const d = fa.clone().multiplyScalar(0.5).addScaledVector(gDown, kd).addScaledVector(gFwd, kf).addScaledVector(gLat, kl).normalize();
+    if (kd || kf || kl) pointBone(ha, fi, cur.lerp(d, w));
+    // curl the finger chain toward the palm (palms face down in the bind T-pose)
+    ha.getWorldQuaternion(_q2).multiply(BIND['hand_'+side].w.clone().invert());
+    const ax = new T.Vector3(side==='r' ? 1 : -1, 0, 0).applyQuaternion(_q2).normalize();
+    for (const n of ['middle_01_','middle_02_','middle_03_']) rotBoneWorld(B[n+side], ax, curl*w);
+  };
+  const wr = u.wrap || [0.45, 0.3, -0.2];
+  wrap('r', wr[0], wr[1], wr[2], armW);
+  if (!u.freeHand) wrap('l', -0.1, 0.0, 0.8, armW); else wrap('l', 0, 0, 0, armW, 0.55);   // free hand: half-curled, not a splayed mannequin hand
   // camera orbit
   if (S.spin && !S.dragging) S.yaw += dt*0.6;
   cam.position.set(Math.sin(S.yaw)*6, S.cy, Math.cos(S.yaw)*6); cam.lookAt(0,S.cy,0);
@@ -410,6 +741,7 @@ function render(clear){
   post.uniforms.shC.value.set(Math.round((g0.x*0.5+0.5)*W), Math.round((g0.y*0.5+0.5)*H)-1);
   post.uniforms.shR.value.set(Math.max(3,0.42*S.ppu), Math.max(1.5,0.05*S.ppu));
   post.uniforms.uInner.value = S.pxChar===0 ? 0.0012 : 0.0035;
+  post.uniforms.uOW.value = Math.min(4, Math.max(1, Math.round((S.pxChar || H/1.55) / 240)));
   renderer.setRenderTarget(rt); renderer.setClearColor(0x000000,0); renderer.clear(); renderer.render(scene,cam);
   renderer.setRenderTarget(null); renderer.clear(); renderer.render(postScene,postCam);
 }
@@ -448,15 +780,165 @@ new ResizeObserver(resize).observe(stage);
 resize();
 requestAnimationFrame(loop);
 
+// ---------- Gear: backpack (sheet C back view, owner's sprites) + shoulder straps ----------
+// Built in character space at the rest pose (+X forward, +Y up, +Z = character's right). The pack is rigid and re-parented
+// to spine_03, so it follows the torso through every pose, the walk / run clips and the IK; the straps are skinned to the body.
+const GEAR = {
+  body:  charMat({color:'#2c2b16', full:true}),     // olive canvas, coat-dark: oliveM lit / oliveD shade
+  flap:  charMat({color:'#3c3a17', full:true}),     // lid, pockets: oliveL on the lit faces
+  strap: charMat({color:'#161509', full:true}),     // webbing, straps -> oliveD / black
+  dark:  charMat({color:'#0c0b05', full:true}),
+  metal: charMat({color:'#474747', full:true}),     // buckles
+  strapS: charMat({color:'#221f0c', full:true, skinning:true}),
+  metalS: charMat({color:'#474747', full:true, skinning:true})
+};
+// rounded box (chamfered edges, optional pillow bulge towards -X) in character space
+function gearBox(parent, mat, cx, cy, cz, dx, dy, dz, r=0.012, bulge=0, seg=[3,6,4]){
+  const g = new T.BoxGeometry(dx, dy, dz, seg[0], seg[1], seg[2]), p = g.attributes.position, v = new T.Vector3(), q = new T.Vector3();
+  const hx=dx/2, hy=dy/2, hz=dz/2, ix=Math.max(0,hx-r), iy=Math.max(0,hy-r), iz=Math.max(0,hz-r);
+  for (let i=0;i<p.count;i++){
+    v.fromBufferAttribute(p,i);
+    q.set(Math.min(ix,Math.max(-ix,v.x)), Math.min(iy,Math.max(-iy,v.y)), Math.min(iz,Math.max(-iz,v.z)));
+    const e = v.clone().sub(q); if (e.lengthSq()>1e-12) v.copy(q).addScaledVector(e.normalize(), r);
+    if (bulge){ const s = Math.max(0,-v.x/hx); v.x -= bulge*s*(1-(v.y/hy)**2)*(1-(v.z/hz)**2); }
+    p.setXYZ(i, v.x, v.y, v.z);
+  }
+  g.computeVertexNormals();
+  const m = new T.Mesh(g, mat); m.position.set(cx,cy,cz); m.frustumCulled = false; parent.add(m); return m;
+}
+// flat strap through character-space points (width along wDir, thickness along the outward normal)
+function gearStrap(parent, mat, pts, w, t, wDir=new T.Vector3(0,0,1)){
+  for (let i=0;i<pts.length-1;i++){
+    const A = new T.Vector3(...pts[i]), Bp = new T.Vector3(...pts[i+1]);
+    const e1 = Bp.clone().sub(A), len = e1.length(); e1.normalize();
+    const e3 = wDir.clone().addScaledVector(e1, -wDir.dot(e1)).normalize(), e2 = new T.Vector3().crossVectors(e3, e1);
+    const m = new T.Mesh(new T.BoxGeometry(len+t*1.2, t, w), mat);
+    m.quaternion.setFromRotationMatrix(new T.Matrix4().makeBasis(e1, e2, e3));
+    m.position.copy(A).add(Bp).multiplyScalar(0.5); m.frustumCulled = false; parent.add(m);
+  }
+}
+// merge a group of rest-pose character-space meshes into one SkinnedMesh on the body's skeleton:
+// weights from the nearest body vertices (rest pose), positions moved back to the bind pose by the inverse skin matrix
+function skinToBody(group, mat, name){
+  let sm = null; model.traverse(o=>{ if (o.isSkinnedMesh && !sm) sm = o; });
+  hero.updateMatrixWorld(true); sm.skeleton.update();
+  const toLocal = new T.Matrix4().copy(sm.matrixWorld).invert().multiply(hero.matrixWorld);
+  const P=[], N=[], I=[], v=new T.Vector3(), n=new T.Vector3();
+  group.children.forEach(m=>{
+    m.updateMatrix(); const M = new T.Matrix4().multiplyMatrices(toLocal, m.matrix), NM = new T.Matrix3().getNormalMatrix(M);
+    const g = m.geometry, gp = g.attributes.position, gn = g.attributes.normal, base = P.length/3;
+    for (let i=0;i<gp.count;i++){ v.fromBufferAttribute(gp,i).applyMatrix4(M); n.fromBufferAttribute(gn,i).applyMatrix3(NM).normalize(); P.push(v.x,v.y,v.z); N.push(n.x,n.y,n.z); }
+    const ix = g.index.array; for (let i=0;i<ix.length;i++) I.push(ix[i]+base);
+  });
+  // body vertices in the rest pose (candidates: not head / hands / forearms)
+  const bp = sm.geometry.attributes.position, bi = sm.geometry.attributes.skinIndex, bw = sm.geometry.attributes.skinWeight, bones = sm.skeleton.bones;
+  const skip = /head|hand|lowerarm|finger|thumb|index|middle|ring|pinky/i, cand = [];
+  for (let i=0;i<bp.count;i++){
+    let top=0, tw=-1; for (let k=0;k<4;k++){ const w=[bw.getX(i),bw.getY(i),bw.getZ(i),bw.getW(i)][k]; if (w>tw){ tw=w; top=k; } }
+    const bn = bones[[bi.getX(i),bi.getY(i),bi.getZ(i),bi.getW(i)][top]]; if (bn && skip.test(bn.name)) continue;
+    v.fromBufferAttribute(bp,i); sm.boneTransform(i,v); cand.push(i, v.x, v.y, v.z);
+  }
+  const boneM = bones.map((b,j)=>new T.Matrix4().multiplyMatrices(sm.bindMatrixInverse, new T.Matrix4().multiplyMatrices(b.matrixWorld, sm.skeleton.boneInverses[j])).multiply(sm.bindMatrix));
+  const SI=[], SW=[], K=4, nV=P.length/3, Sk=new T.Matrix4();
+  for (let a=0;a<nV;a++){
+    const x=P[3*a], y=P[3*a+1], z=P[3*a+2], best=[];
+    for (let c=0;c<cand.length;c+=4){
+      const d=(cand[c+1]-x)**2+(cand[c+2]-y)**2+(cand[c+3]-z)**2;
+      if (best.length<K || d<best[K-1][0]){ best.push([d,cand[c]]); best.sort((p,q)=>p[0]-q[0]); if (best.length>K) best.pop(); }
+    }
+    const acc = new Map();
+    for (const [d,i] of best){ const f=1/(Math.sqrt(d)+1e-4); const ids=[bi.getX(i),bi.getY(i),bi.getZ(i),bi.getW(i)], ws=[bw.getX(i),bw.getY(i),bw.getZ(i),bw.getW(i)];
+      for (let k=0;k<4;k++) if (ws[k]>0) acc.set(ids[k], (acc.get(ids[k])||0)+ws[k]*f); }
+    const top = [...acc.entries()].sort((p,q)=>q[1]-p[1]).slice(0,4); const sum = top.reduce((s,e)=>s+e[1],0);
+    while (top.length<4) top.push([0,0]);
+    top.forEach(([j,w])=>{ SI.push(j); SW.push(w/sum); });
+    // rest -> bind: invert the blended skin matrix of this vertex
+    const e = Sk.elements.fill(0); top.forEach(([j,w])=>{ if (w>0){ const be=boneM[j].elements; for (let k=0;k<16;k++) e[k]+=be[k]*w/sum; } });
+    const inv = Sk.clone().invert();
+    v.set(x,y,z).applyMatrix4(inv); P[3*a]=v.x; P[3*a+1]=v.y; P[3*a+2]=v.z;
+    n.set(N[3*a],N[3*a+1],N[3*a+2]).applyMatrix3(new T.Matrix3().getNormalMatrix(inv)).normalize(); N[3*a]=n.x; N[3*a+1]=n.y; N[3*a+2]=n.z;
+  }
+  const geo = new T.BufferGeometry();
+  geo.setAttribute('position', new T.Float32BufferAttribute(P,3)); geo.setAttribute('normal', new T.Float32BufferAttribute(N,3));
+  geo.setAttribute('skinIndex', new T.Uint16BufferAttribute(SI,4)); geo.setAttribute('skinWeight', new T.Float32BufferAttribute(SW,4)); geo.setIndex(I);
+  const skm = new T.SkinnedMesh(geo, mat); skm.name = name; skm.frustumCulled = false;
+  skm.position.copy(sm.position); skm.quaternion.copy(sm.quaternion); skm.scale.copy(sm.scale); sm.parent.add(skm);
+  skm.bind(sm.skeleton, sm.bindMatrix);
+  return skm;
+}
+function buildGear(){
+  const pack = new T.Group(); pack.name = 'backpack';
+  // main body (sheet C back view): ~3/4 of the back's width, top on the shoulder line so the high collar shows above it,
+  // bottom above the belt; the front face sits a little inside the coat so it hugs the back (no gap, no floating slab)
+  const X0 = -0.135, D = 0.165, Y0 = 1.11, Y1 = 1.525, HW = 0.175;          // front face x, depth, bottom, top, half width
+  const cx = X0 - D/2, cy = (Y0+Y1)/2, XB = X0 - D;                        // XB: back face
+  gearBox(pack, GEAR.body, cx, cy, 0, D, Y1-Y0, HW*2, 0.035, 0.012, [3,8,6]);
+  // top flap (lid): rounded, overhanging the back and the sides a little, with its dark edge
+  gearBox(pack, GEAR.flap, cx-0.008, Y1-0.03, 0, D+0.022, 0.085, HW*2+0.016, 0.034, 0.012, [3,3,6]);
+  gearBox(pack, GEAR.dark, XB-0.012, Y1-0.075, 0, 0.012, 0.012, HW*2-0.02, 0.004);
+  // grab handle on the lid
+  gearStrap(pack, GEAR.strap, [[cx+0.012,Y1+0.004,-0.045],[cx+0.004,Y1+0.026,-0.03],[cx+0.004,Y1+0.032,0.0],[cx+0.004,Y1+0.026,0.03],[cx+0.012,Y1+0.004,0.045]], 0.02, 0.012, new T.Vector3(1,0,0));
+  // centre pocket column (1/3 of the width): webbing ladder rungs down it, two buckled straps across it
+  const PY0 = Y0+0.03, PY1 = Y1-0.09, pcy = (PY0+PY1)/2, PW = 0.105;
+  gearBox(pack, GEAR.flap, XB-0.016, pcy, 0, 0.044, PY1-PY0, PW, 0.014, 0.008, [2,4,3]);
+  for (const s of [-1,1]) gearBox(pack, GEAR.dark, XB-0.006, pcy, s*(PW/2+0.006), 0.02, PY1-PY0+0.01, 0.01, 0.003);   // recessed seams
+  gearBox(pack, GEAR.dark, XB-0.006, Y0+0.012, 0, 0.02, 0.012, HW*2-0.05, 0.004);                                    // bottom seam
+  for (let k=0;k<6;k++) gearBox(pack, GEAR.dark, XB-0.037, PY1-0.035-k*0.042, 0, 0.008, 0.011, PW-0.026, 0.003);
+  for (const y of [PY1-0.098, PY0+0.06]){
+    gearBox(pack, GEAR.strap, XB-0.036, y, 0, 0.012, 0.026, PW+0.018, 0.004);
+    gearBox(pack, GEAR.metal, XB-0.043, y, 0, 0.008, 0.032, 0.024, 0.003);
+  }
+  // vertical straps framing the column (lid to bottom)
+  for (const z of [-0.085, 0.085])
+    gearStrap(pack, GEAR.dark, [[XB+0.006, Y1-0.02, z*1.25],[XB-0.011, Y1-0.12, z*1.25],[XB-0.013, cy-0.05, z*1.25],[XB-0.004, Y0+0.02, z*1.25]], 0.022, 0.012);
+  // narrow side pouches, side compression straps + buckles
+  for (const s of [-1,1]){
+    gearBox(pack, GEAR.flap, cx-0.01, Y1-0.2, s*(HW+0.026), D*0.78, 0.25, 0.054, 0.018, 0, [2,3,2]);
+    for (const [y,o] of [[Y1-0.13,0.054],[Y1-0.26,0.054]]){
+      gearBox(pack, GEAR.strap, cx-0.005, y, s*(HW+o), D+0.012, 0.022, 0.01, 0.004);
+      gearBox(pack, GEAR.metal, XB*0.5+cx*0.5, y, s*(HW+o+0.006), 0.026, 0.03, 0.007, 0.003);
+    }
+  }
+  // hug the back: bake every part into pack space, then follow the coat's back curve (bind pose, centre line)
+  const BACK = [[1.05,-0.149],[1.15,-0.153],[1.25,-0.152],[1.35,-0.16],[1.40,-0.158],[1.45,-0.147],[1.50,-0.134]];
+  const backX = y => { if (y<=BACK[0][0]) return BACK[0][1]; for (let i=1;i<BACK.length;i++) if (y<=BACK[i][0]){ const [y0,x0]=BACK[i-1],[y1,x1]=BACK[i], f=(y-y0)/(y1-y0); return x0+(x1-x0)*f; } return BACK[BACK.length-1][1]; };
+  pack.children.forEach(m=>{
+    m.updateMatrix(); m.geometry.applyMatrix4(m.matrix); m.position.set(0,0,0); m.quaternion.identity();
+    const gp = m.geometry.attributes.position;
+    for (let i=0;i<gp.count;i++){ const y = gp.getY(i); gp.setX(i, gp.getX(i) + (backX(y) - (-0.152))); }
+    m.geometry.computeVertexNormals();
+  });
+  // shoulder straps: out of the lid, under the collar, out below the lapels and down the chest (right side, mirrored).
+  // Skinned to the body (weights of the nearest coat vertices) so they stay on the coat when the shoulders and chest move.
+  const SP = [[-0.17,1.43,0.1],[-0.152,1.49,0.11],[-0.13,1.535,0.12],[-0.09,1.565,0.13],[-0.03,1.578,0.14],[0.04,1.56,0.148],
+              [0.10,1.515,0.155],[0.145,1.475,0.16],[0.182,1.425,0.165],[0.203,1.365,0.165],[0.202,1.30,0.165],[0.19,1.215,0.165]];
+  const straps = new T.Group(), locks = new T.Group();
+  for (const s of [-1,1]){
+    gearStrap(straps, GEAR.strap, SP.map(([x,y,z])=>[x,y,s*z]), 0.046, 0.014);
+    gearBox(locks, GEAR.metal, 0.203, 1.262, s*0.165, 0.012, 0.03, 0.05, 0.004);       // ladder lock
+  }
+  skinToBody(straps, GEAR.strapS, 'shoulderStraps'); skinToBody(locks, GEAR.metalS, 'strapLocks');
+  // re-parent to spine_03 keeping the bind-pose placement
+  const bone = B.spine_03; hero.updateMatrixWorld(true); bone.updateWorldMatrix(true,false);
+  const M = new T.Matrix4().copy(bone.matrixWorld).invert().multiply(hero.matrixWorld);
+  M.decompose(pack.position, pack.quaternion, pack.scale);
+  bone.add(pack);
+  return pack;
+}
+
 // ---------- Load the mesh ----------
 const hud = document.getElementById('hud');
 hud.textContent = 'ładowanie modelu…';
-new T.GLTFLoader().load('hero.glb', gltf => {
+// hero.json (self-contained glTF) is what the published page ships; hero.glb is the same model for engines/Blender
+const MODEL_URLS = ['hero.json', 'hero.glb'];
+function loadModel(i, onLoad, onErr){ new T.GLTFLoader().load(MODEL_URLS[i], onLoad, undefined, e => i+1 < MODEL_URLS.length ? loadModel(i+1, onLoad, onErr) : onErr(e)); }
+loadModel(0, gltf => {
   model = gltf.scene; model.rotation.y = Math.PI/2;          // the mesh faces +Z; the rig convention here is +X forward
   hero.add(model);
   model.traverse(o => {
     if (o.isSkinnedMesh || o.isMesh){
-      o.material = charMat({ map:o.material.map, skinning:o.isSkinnedMesh, double:true });
+      const map = o.material.map, smooth = addSmoothNormals(o.geometry, SMOOTH_ITERS);
+      o.material = charMat({ map, mat: map && map.image ? buildMatTex(map) : null, skinning:o.isSkinnedMesh, double:true, smooth });
       o.frustumCulled = false;
     }
     if (o.isBone) B[o.name] = o;
@@ -464,13 +946,15 @@ new T.GLTFLoader().load('hero.glb', gltf => {
   model.updateMatrixWorld(true);
   for (const n in B) BIND[n] = { p:B[n].position.clone(), q:B[n].quaternion.clone(), w:B[n].getWorldQuaternion(new T.Quaternion()) };
   const wp = n => B[n].getWorldPosition(new T.Vector3());
-  for (const s of ['l','r']){ LEN['up_'+s] = wp('upperarm_'+s).distanceTo(wp('lowerarm_'+s)); LEN['lo_'+s] = wp('lowerarm_'+s).distanceTo(wp('hand_'+s)); }
+  for (const s of ['l','r']){ LEN['up_'+s] = wp('upperarm_'+s).distanceTo(wp('lowerarm_'+s)); LEN['lo_'+s] = wp('lowerarm_'+s).distanceTo(wp('hand_'+s));
+    LEN['th_'+s] = wp('thigh_'+s).distanceTo(wp('calf_'+s)); LEN['ca_'+s] = wp('calf_'+s).distanceTo(wp('foot_'+s)); }
   mixer = new T.AnimationMixer(model);
   for (const c of gltf.animations){ const a = mixer.clipAction(c); a.play(); a.setEffectiveWeight(0); ACT[c.name.toLowerCase().startsWith('run')?'run':'walk'] = a; }
+  buildGear();
   updateHud();
-  window.HERO = { T, hero, model, B, S, SH, LIGHT, post, weapons, flash, update, render, setAnim, setWeapon, setSize,
+  window.HERO = { T, hero, model, B, S, SH, LIGHT, PAL, RAMP, CLS, post, weapons, flash, update, render, setAnim, setWeapon, setSize,
     frame(w,h,px){ S.pxChar=px; setSize(w,h,1); } };
   window.HERO_READY = true;
-}, undefined, err => { hud.textContent = 'Nie udało się wczytać modelu: ' + (err && err.message || err); });
+}, err => { hud.textContent = 'Nie udało się wczytać modelu: ' + (err && err.message || err); });
 })();
 </script>
