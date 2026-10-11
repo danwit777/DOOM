@@ -454,18 +454,22 @@ for (const s of [-1,1]){
 // tall stand-up collar: a tube 0.35 W x 0.25 D, open in front for the beard (0.17 m gap), rolled lit rim on top
 const CSX = 0.83;                                                            // collar depth / width (0.25 D x 0.30 W, sheet C)
 const collarG = grp(chest,'collarRig',0,0,0);
-const collar = shell(collarG,'collar',0.148,0.152,0.115,0.5,MAT.collar,0.5125,CSX); collar.position.x = -0.075;   // set back: the beard hangs in front of it (sheet C side)
-const rimG = new T.TorusGeometry(0.148,0.012,5,20,Math.PI*2-1.0); rimG.rotateX(Math.PI/2); rimG.rotateY(-0.5); rimG.scale(CSX,1,1);
+// collar cloth: a broad mid plane on the back and lit side (sheet C back: one mid-grey band, darker toward the far edge);
+// its inside is coat-dark, not a black hole (the owner's sprites: the beard merges into a mid-grey collar mass)
+const collarMat = M(PAL.black, PAL.coatD, PAL.coatM, PAL.coatL, {id:0.8, hi:0.72, mid:0.28, lo:-0.25, gs:[12,5,12], grit:[0.6,0.82], double:true, hd:[0.8,2,0]});
+const collarIn  = M(PAL.black, PAL.coatD, PAL.coatM, PAL.coatM, {id:0.8, hi:0.85, mid:-0.35, lo:-0.9, double:true});   // inside: coat mid / dark, never a black hood behind the head
+const collar = shell(collarG,'collar',0.132,0.15,0.115,0.5,collarMat,0.5125,CSX); collar.position.x = -0.075;   // set back: the beard hangs in front of it (sheet C side)
+const rimG = new T.TorusGeometry(0.132,0.011,5,20,Math.PI*2-1.0); rimG.rotateX(Math.PI/2); rimG.rotateY(-0.5); rimG.scale(CSX,1,1);
 add(collarG,'collarRim',rimG,MAT.cuff,collar.position.x,0.57,0);
 // the collar's rim slants: it stands highest at the back of the neck and falls towards the front tips, so in the 3/4
 // sprite poses it frames the jaw instead of hiding the beard; the side walls still rise to the jaw in the front view
-const COLLAR = { front:0.125, back:0.03, side:-0.05, h:0.115 };
+const COLLAR = { front:0.09, back:-0.025, side:-0.02, h:0.115 };
 function collarSlant(g, full){
   const a = g.attributes.position;
   for (let i=0;i<a.count;i++){
     const x = a.getX(i)/CSX, z = a.getZ(i), c = x/Math.max(1e-6,Math.hypot(x,z));
     const t = full ? 1 : Math.min(1,Math.max(0,(a.getY(i)+COLLAR.h/2)/COLLAR.h));
-    a.setY(i, a.getY(i) + t*(-COLLAR.front*Math.pow(Math.max(c,0),0.7) + COLLAR.back*Math.max(-c,0) + COLLAR.side*(1-Math.abs(c))));
+    a.setY(i, a.getY(i) + t*(-COLLAR.front*Math.pow(Math.max(c,0),2.5) + COLLAR.back*Math.max(-c,0) + COLLAR.side*(1-Math.abs(c))));
   }
   g.computeVertexNormals();
 }
@@ -474,7 +478,17 @@ collarSlant(collar.geometry, false); collarSlant(rimG, true);
   const g = collar.geometry.clone(), a = g.attributes.position, ix = g.index.array;
   for (let i=0;i<a.count;i++){ const x = a.getX(i), z = a.getZ(i), r = Math.hypot(x/CSX,z), k = Math.max(0,r-0.006)/Math.max(r,1e-6); a.setX(i,x*k); a.setZ(i,z*k); }
   for (let i=0;i<ix.length;i+=3){ const t = ix[i+1]; ix[i+1] = ix[i+2]; ix[i+2] = t; }
-  g.computeVertexNormals(); add(collarG,'collarInner',g,MAT.lining,collar.position.x,collar.position.y,0);
+  g.computeVertexNormals(); add(collarG,'collarInner',g,collarIn,collar.position.x,collar.position.y,0);
+}
+{ // the collar's thickness behind the neck: a sloping shelf from the rim in to the neck, so the 3/4 views show a solid
+  // stand collar (sheet C side) instead of a ring round an empty hole
+  const P = [], I = [], n = 24, g0 = 0.5, H2 = 0.115/2;
+  for (let j=0;j<=n;j++){ const th = Math.PI/2 + g0 + (2*Math.PI - 2*g0)*j/n, c = Math.sin(th);
+    const off = -COLLAR.front*Math.pow(Math.max(c,0),2.5) + COLLAR.back*Math.max(-c,0) + COLLAR.side*(1-Math.abs(c));
+    P.push(0.127*CSX*c, H2 + off - 0.004, 0.127*Math.cos(th),  0.05 + 0.06*c, H2 + off - 0.035, 0.06*Math.cos(th)); }
+  for (let j=0;j<n;j++){ const a = 2*j; I.push(a, a+1, a+2,  a+1, a+3, a+2); }
+  const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(P,3)); g.setIndex(I); g.computeVertexNormals();
+  add(collarG,'collarShelf',g,collarIn,collar.position.x,collar.position.y,0);
 }
 // backpack (sheet C back view; olive-dark): centred on the spine, sitting on the coat back (coat back at chest x -0.178),
 // top under the collar at shoulder height (1.58), bottom at the belt (1.04). Upper body 0.27 W, top flap, a webbing
@@ -526,7 +540,7 @@ const neck = grp(chest,'neck',0.03,0.565,0);
 // In the sprite poses the face is turned a little towards the camera (3/4: hair mass behind, face column in front, dark eye
 // slit, as in the owner's sprites) and looks towards the raised pistol; in the T-pose it faces straight ahead, as on the sheet.
 const HEAD0 = new T.Vector3(-0.056,0,0), HY = 1.655;
-const POSE = { headYaw:-0.3, headUp:-0.01, headFwd:0.06, drop:0.03, collarFwd:0.055, collarTilt:-0.3, chin:0.0, coatBack:0.12 };          // sprite poses: head facing forward in 3/4 profile, chin tucked, coat tail trailing
+const POSE = { headYaw:-0.3, headUp:-0.01, headFwd:0.06, drop:0.03, collarFwd:0.055, collarTilt:-0.1, chin:0.0, coatBack:0.12 };          // sprite poses: head facing forward in 3/4 profile, chin tucked, coat tail trailing
 const head = grp(neck,'head',HEAD0.x,HEAD0.y,HEAD0.z);
 neck.updateMatrixWorld = function(force){
   const k = 1-S.tp, pistol = S.weapon==='pistol' ? S.aim : 0, fwd = (0.5*(1-S.aim) + 0.9*(S.aim-pistol) + 1.0*pistol)*0.0305*k;   // screen px -> m along screen-right
@@ -572,15 +586,15 @@ function HM(hd, lo, o={}){
   return m;
 }
 const SKIN_HD = ['#21150e','#4a3123','#6d4c39','#8c6850'], SKIN_LO = [PAL.skinS, PAL.skinD, PAL.skinM, PAL.skinL];
-const faceMat = HM(SKIN_HD, SKIN_LO, {hi:0.66, mid:0.3, lo:-0.25, tl:[0.56,-0.05,-0.5]});        // lit plane only on up/left-facing planes
-const neckMat = HM(['#140c08','#21150e','#21150e','#4a3123'], [PAL.skinS,PAL.skinS,PAL.skinS,PAL.skinD], {hi:0.7, mid:0.35, lo:-0.3});   // throat in the beard's shadow
+const faceMat = HM(SKIN_HD, SKIN_LO, {hi:0.6, mid:0.33, lo:-0.25, tl:[0.63,-0.05,-0.5]});        // lit plane only on up/left-facing planes
+const neckMat = HM(['#140c08','#21150e','#21150e','#4a3123'], [PAL.black,PAL.black,PAL.black,PAL.skinS], {hi:0.7, mid:0.35, lo:-0.3});   // throat in the beard's shadow
 const sockMat = HM(['#120b07','#120b07','#120b07','#120b07'], ['#000000','#000000','#000000','#000000'], {flat:true});   // deep eye sockets under the brow
 const HAIR_LO = [PAL.tealD, PAL.teal, PAL.grey, PAL.greyL];
-const hairMat = HM(['#101413','#232a27','#373d39','#5b5d54'], HAIR_LO, {hi:0.62, mid:0.22, lo:-0.3, tl:[0.7,0.3,-0.2]});
-const hairLt  = HM(['#101413','#2b322e','#454a44','#6a6b61'], HAIR_LO, {hi:0.5, mid:0.05, lo:-0.45, tl:[0.6,0.15,-0.3]});     // the clumps' lit tops
-const hairSd  = HM(['#0c0f0e','#1b201e','#2c322f','#41463f'], [PAL.tealD,PAL.tealD,PAL.teal,PAL.grey], {hi:0.75, mid:0.3, lo:-0.35, tl:[9,0.35,-0.3]});   // clipped sides / grooves: darker
-const beardMat = HM(['#141815','#323833','#4c524b','#6d7264'], [PAL.tealD,PAL.teal,PAL.grey,PAL.greyL], {hi:0.66, mid:0.2, lo:-0.35, tl:[0.72,0.3,-0.2], double:true});
-const beardDk = HM(['#0d100e','#1e2320','#30362f','#4c524b'], [PAL.tealD,PAL.tealD,PAL.teal,PAL.grey], {hi:0.8, mid:0.3, lo:-0.3});
+const hairMat = HM(['#101413','#232a27','#373d39','#6f7068'], HAIR_LO, {hi:0.62, mid:0.22, lo:-0.3, tl:[0.55,0.12,-0.3]});
+const hairLt  = HM(['#101413','#2b322e','#4a4f49','#85867c'], HAIR_LO, {hi:0.5, mid:0.05, lo:-0.45, tl:[0.38,-0.05,-0.4]});     // the clumps' lit tops
+const hairSd  = HM(['#0c0f0e','#1b201e','#2c322f','#41463f'], [PAL.tealD,PAL.teal,PAL.teal,PAL.greyL], {hi:0.75, mid:0.3, lo:-0.35, tl:[0.6,-0.15,-0.5]});   // clipped sides / grooves: darker; sprite size: teal mass, light grey on the top planes
+const beardMat = HM(['#0e0f0e','#232422','#353633','#575750'], [PAL.tealD,PAL.grey,PAL.grey,PAL.greyL], {hi:0.72, mid:0.28, lo:-0.3, tl:[0.66,-0.05,-0.45], double:true});
+const beardDk = HM(['#0a0b0a','#191a19','#262826','#393b38'], [PAL.tealD,PAL.tealD,PAL.teal,PAL.grey], {hi:0.8, mid:0.3, lo:-0.3});
 const cran = grp(head,'cranium',0,0,0);
 // closed loft: rings around Y. ring(i, a) -> [x,y,z] for row i (0..rows-1), a in [0,2pi); rows 0 and rows-1 should be caps
 function loft(parent,name,rows,na,ring,mat){
@@ -594,17 +608,17 @@ function loft(parent,name,rows,na,ring,mat){
 // square jaw, cheekbones widest at eye level, a straight heavy brow ledge, the forehead sloping back into the hair, and a jaw
 // line that runs diagonally from under the ear down to the chin (side view)
 const FACE = [
-  [1.566,0.096,0.044,0.07,0.045,0.6],
-  [1.578,0.105,0.056,0.05,0.02,0.5],
-  [1.595,0.108,0.061,0.03,-0.01,0.5],
-  [1.625,0.108,0.063,0.02,-0.035,0.5],
-  [1.655,0.104,0.064,0.02,-0.055,0.55],
-  [1.68,0.100,0.068,0.02,-0.065,0.62],
-  [1.70,0.098,0.071,0.02,-0.065,0.7],
-  [1.712,0.104,0.069,0.02,-0.065,0.55],
-  [1.724,0.111,0.067,0.02,-0.065,0.42],
-  [1.736,0.106,0.065,0.02,-0.065,0.5],
-  [1.765,0.095,0.063,0.02,-0.065,0.6],
+  [1.566,0.096,0.042,0.07,0.045,0.6],
+  [1.578,0.104,0.052,0.05,0.02,0.5],
+  [1.595,0.107,0.056,0.03,-0.01,0.5],
+  [1.625,0.107,0.058,0.02,-0.035,0.5],
+  [1.655,0.102,0.06,0.02,-0.055,0.55],
+  [1.675,0.098,0.066,0.02,-0.065,0.6],
+  [1.692,0.098,0.072,0.02,-0.065,0.5],
+  [1.708,0.100,0.070,0.02,-0.065,0.55],
+  [1.722,0.117,0.068,0.02,-0.065,0.4],
+  [1.734,0.110,0.066,0.02,-0.065,0.45],
+  [1.765,0.096,0.064,0.02,-0.065,0.55],
   [1.795,0.074,0.058,0.02,-0.065,0.65],
   [1.815,0.045,0.045,0.01,-0.05,0.8]];
 function faceRow(h){
@@ -614,8 +628,13 @@ function faceRow(h){
 }
 function facePt(h, a){                                     // a: 0 front, +pi/2 the character's right (+Z)
   const r = faceRow(h), c = Math.cos(a), s = Math.sin(a);
-  const x = c >= 0 ? r[3] + (r[1]-r[3])*spow(c, r[5]) : r[3] + (r[3]-r[4])*spow(c, 0.8);
-  return new T.Vector3(x, h-HY, r[2]*spow(s, c >= 0 ? r[5] : 0.8));
+  let x = c >= 0 ? r[3] + (r[1]-r[3])*spow(c, r[5]) : r[3] + (r[3]-r[4])*spow(c, 0.8);
+  const A = Math.acos(Math.max(-1,Math.min(1,c)));        // eye sockets: recessed under the brow ledge, the nose bridge between them stays
+  x -= 0.013*smooth(1.682,1.698,h)*(1-smooth(1.712,1.721,h))*smooth(0.1,0.22,A)*(1-smooth(0.6,0.85,A));
+  const kb = 0.009*Math.exp(-Math.pow((h-1.686)/0.01,2))*smooth(0.35,0.7,A)*(1-smooth(1.25,1.6,A))   // cheekbones: a ridge under the sockets (lit top, shadowed hollow below)
+    - 0.008*smooth(1.6,1.635,h)*(1-smooth(1.655,1.676,h))*smooth(0.3,0.6,A)*(1-smooth(1.25,1.55,A))      // cheek hollow under it (faces down / away: the shadow plane)
+    - 0.005*smooth(1.735,1.75,h)*(1-smooth(1.775,1.795,h))*smooth(0.75,1.0,A)*(1-smooth(1.35,1.6,A));   // flat temple plane
+  return new T.Vector3(x + kb*c, h-HY, r[2]*spow(s, c >= 0 ? r[5] : 0.8) + kb*s);
 }
 function faceN(h, a){                                      // outward normal (finite differences)
   const e = 1e-3, da = facePt(h, a+e).sub(facePt(h, a-e)), dh = facePt(h+e, a).sub(facePt(h-e, a));
@@ -624,48 +643,59 @@ function faceN(h, a){                                      // outward normal (fi
 { const hs = FACE.map(r=>r[0]), rows = [hs[0]-0.002, ...hs, hs[hs.length-1]+0.004];
   loft(cran,'face',rows.length,28,(i,a)=>{
     if (i===0 || i===rows.length-1){ const r = faceRow(rows[i]); return [r[3], rows[i]-HY, 0]; }
-    const p = facePt(rows[i], a); return [p.x,p.y,p.z]; }, faceMat); }
+    const p = facePt(rows[i], a); return [p.x,p.y,p.z]; }, faceMat);
+  const fm = cran.getObjectByName('face'), g = fm.geometry.toNonIndexed(); g.computeVertexNormals(); fm.geometry = g; }
 // skull: long front-to-back, its top and back under the hair; a real neck under it, its top hidden in the jaw
-const HK = [0.1,0.088,0.071,0.85], HKC = [-0.025,hy(1.742),0];
+const HK = [0.1,0.088,0.075,0.85], HKC = [-0.025,hy(1.742),0];
 rblob(cran,'skull',HK[0],HK[1],HK[2],HK[3],faceMat,HKC[0],HKC[1],HKC[2]);
 limb(neck,'neckMesh',0.05,0.058,0.2,neckMat,0.0).position.x = HEAD0.x - 0.006;
 // straight heavy brow: one bar across the face (lit top plane), deep dark sockets under it with the red eyes
-rblob(cran,'brow',0.013,0.0095,0.064,0.4,faceMat,0.104,hy(1.727),0, 0,0,-0.25);
-for (const s of [1,-1]) rblob(cran,'eyebrow'+s,0.007,0.0055,0.025,0.6,hairSd,0.111,hy(1.729),s*0.035, -s*0.08,0,-0.2);
-for (const s of [1,-1]) rblob(cran,'socket'+s,0.012,0.0115,0.026,0.6,sockMat,0.094,hy(1.707),s*0.036, 0,0,0.15);
+rblob(cran,'brow',0.013,0.0085,0.056,0.45,faceMat,0.106,hy(1.7235),0, 0,0,-0.35);
+for (const s of [1,-1]) rblob(cran,'eyebrow'+s,0.0055,0.0048,0.024,0.6,hairSd,0.1135,hy(1.7255),s*0.034, s*0.16,-s*0.12,-0.45);   // flush on the brow ledge, angled down to the nose (scowl)
+const sockets = [1,-1].map(s=>rblob(cran,'socket'+s,0.007,0.0095,0.022,0.6,sockMat,0.084,hy(1.708),s*0.036, 0,0,0.15));
 const eyeMat = M('#b3261b', '#b3261b', '#b3261b', '#b3261b', {flat:true, spr:['#69231c','#69231c']});   // red eyes (sheet C); muted maroon slit at sprite size (owner's sprites)
-for (const s of [1,-1]) box(cran,'eye'+s,0.008,0.0065,0.014,eyeMat,0.104,hy(1.706),s*0.036);
+const eyes = [1,-1].map(s=>box(cran,'eye'+s,0.005,0.004,0.0065,eyeMat,0.0905,hy(1.704),s*0.038));
+// sprite size: the sockets merge into one dark eye bar under the brow and the red eyes grow to ~1 px, so the 64 px head
+// keeps the owner's dark eye row with red in it (the big views keep small glints deep in the sockets)
+cran.updateMatrixWorld = function(force){
+  const k = LO.value;
+  for (const m of sockets) m.scale.set(1 + 0.6*k, 1 + 0.8*k, 1 + 0.55*k);
+  for (const m of eyes){ m.scale.set(1, 1 + 2.4*k, 1 + 1.3*k); m.position.x = 0.0905 + 0.0055*k; }
+  T.Object3D.prototype.updateMatrixWorld.call(this, force);
+};
 // straight nose: a wedge from the brow down to a firm tip (lit ridge, shaded far side)
-{ const N0 = [0.11,1.716], N1 = [0.141,1.656];
+{ const N0 = [0.11,1.714], N1 = [0.128,1.66];
   loft(cran,'nose',6,4,(i,a)=>{
     const t = 1 - Math.min(1,Math.max(0,(i-1)/3)), x = N0[0]+(N1[0]-N0[0])*t, y = N0[1]+(N1[1]-N0[1])*t - HY, b = 0.009 + 0.011*t, d = 0.03;
     if (i===5) return [x-0.02, y+0.004, 0]; if (i===0) return [x-0.012, y-0.006, 0];
     const k = Math.round(a/(Math.PI/2))%4;                 // 0 ridge, 1 right side, 2 back, 3 left side
     return k===0 ? [x, y, 0] : k===2 ? [x-d, y, 0] : [x-0.012, y-0.002, (k===1?1:-1)*b]; }, faceMat); }
-for (const s of [1,-1]) rblob(cran,'ear'+s,0.017,0.027,0.01,0.75,faceMat,-0.028,hy(1.69),s*0.072, s*0.2,0,-0.12);
+for (const s of [1,-1]) rblob(cran,'ear'+s,0.014,0.021,0.01,0.75,faceMat,-0.024,hy(1.699),s*0.077, s*0.2,0,-0.12);
 // HAIR: slicked back. A shell grown out of the skull: clipped dark sides that leave the ears clear, a tall crest ridge on top
 // (no wider than the eye span) standing up and forward over a V widow's peak, swept back over the crown and narrowing to a
 // V at the nape above the collar. Clumped locks run from the hairline up and back, converging behind.
-const HAIR_TOP = 1.822;
+const HAIR_TOP = 1.836;
 function hairline(ang){                                    // hairline height by azimuth (0 front, ±pi/2 sides, ±pi back)
   const A = Math.abs(ang);
   if (A < 0.22) return 1.772 + 0.016*smooth(0,0.22,A);                          // widow's peak
   if (A < 0.6) return 1.788 - 0.004*smooth(0.22,0.6,A);
   if (A < 1.25) return 1.784 - 0.064*smooth(0.6,1.25,A);                        // temples down to the sideburns
-  if (A < 2.0) return 1.72;                                                      // clipped side above the ear
-  return 1.72 - 0.05*smooth(2.0,2.9,A);                                          // nape
+  if (A < 1.9) return 1.72;                                                      // clipped side above the ear
+  return 1.72 - 0.055*smooth(1.9,2.9,A);                                         // nape
 }
 function hairT(u){                                         // thickness over the skull along u
   const ridge = Math.max(0, 1 - Math.pow(Math.abs(u.z)/1.0, 2.5)), front = Math.max(u.x,0), back = Math.max(-u.x,0);
-  return 0.0035 + ridge*(0.024*smooth(0.15,0.8,u.y + 0.2*front) + 0.02*Math.pow(front,1.5)*smooth(0.12,0.55,u.y) + 0.014*back*smooth(-0.35,0.35,u.y)) + 0.008*back*smooth(-0.2,0.4,u.y)*(1-ridge);
+  return 0.0035 + ridge*(0.026*smooth(0.2,0.75,u.y)*(0.55 + 0.45*smooth(-0.6,0.45,u.x)) + 0.008*Math.pow(front,1.5)*smooth(0.25,0.6,u.y) + 0.005*back*smooth(-0.35,0.35,u.y)) + 0.004*back*smooth(-0.2,0.4,u.y)*(1-ridge) + 0.016*(1-ridge)*smooth(-0.25,0.45,u.y)*(0.3 + 0.7*smooth(0.3,-0.5,u.x))
+    + 0.012*Math.pow(back,1.5)*(1 - smooth(-0.55,0.25,u.y));   // fuller upper sides (sheet C back: hair wider than the face); the back falls straight to the nape (no bun / undercut)
 }
 function hairPt(u, out=0){
   const q = HK[3], P = new T.Vector3(spow(u.x,q)*HK[0], spow(u.y,q)*HK[1], spow(u.z,q)*HK[2]);
   const yy = P.y + HKC[1] + HY, ang = Math.atan2(u.z, u.x);
-  const w = smooth(hairline(ang)-0.006, hairline(ang)+0.008, yy);
-  P.addScaledVector(u, -0.004 + w*(hairT(u)+0.004) + out).add(new T.Vector3(HKC[0],HKC[1],HKC[2]));
-  P.x += w*0.012*Math.max(u.x,0)*smooth(0.35,0.8,u.y)*Math.max(0, 1 - Math.abs(u.z)/0.6);   // the crest stands forward over the brow
-  const top = hy(HAIR_TOP); if (P.y > top) P.y = top + (P.y-top)*0.3;           // crest height capped (sheet C: crest 1.86)
+  const w = smooth(hairline(ang)-0.006, hairline(ang)+0.008, yy), fr = smooth(1.5,0.6,Math.abs(ang));
+  const rise = smooth(hairline(ang) - 0.004, hairline(ang) + 0.028 + 0.012*fr, yy);   // the hair grows out of the forehead slope / clipped sides (no visor edge, no slab rim)
+  P.addScaledVector(u, -0.004 + w*(hairT(u)*rise+0.004) + out).add(new T.Vector3(HKC[0],HKC[1],HKC[2]));
+  P.y += w*0.01*Math.max(u.x,0)*smooth(0.25,0.7,u.y)*Math.max(0, 1 - Math.abs(u.z)/0.6);   // the front of the crest rises (up, not out over the brow)
+  const top = hy(HAIR_TOP) - 0.035*smooth(0.0,-0.13,P.x); if (P.y > top) P.y = top + (P.y-top)*0.35;   // peak over the front third, sloping down over the crown
   return P;
 }
 { const g = new T.SphereGeometry(1,44,32), a = g.attributes.position, u = new T.Vector3();
@@ -674,7 +704,7 @@ function hairPt(u, out=0){
 // locks: tapered, flattened tubes over the shell from the hairline up over the crest and back to the nape, converging
 function hstrand(name,z0,z1,t0,t1,r,mat,out=0.003,tip=0,flat=0.6){
   const pts = []; for (let k=0;k<=14;k++){ const u=k/14, t=t0+(t1-t0)*u, zz = z0+(z1-z0)*smooth(0.4,1,u);
-    pts.push(hairPt(new T.Vector3(Math.cos(t),Math.sin(t),zz).normalize(), out + tip*Math.sin(Math.PI*Math.min(u*1.6,1)))); }
+    pts.push(hairPt(new T.Vector3(Math.cos(t),Math.sin(t) - 0.45*Math.abs(z0)*smooth(0.45,1,u),zz).normalize(), out + tip*Math.sin(Math.PI*Math.min(u*1.6,1)))); }   // outer locks curve down to the nape
   const g = new T.TubeGeometry(new T.CatmullRomCurve3(pts), 22, r, 6, false), a = g.attributes.position;
   const n = g.parameters.tubularSegments, rs = g.parameters.radialSegments, c = new T.Vector3(), v = new T.Vector3(), o = new T.Vector3(HKC[0],HKC[1],HKC[2]), rad = new T.Vector3();
   for (let i=0;i<=n;i++){ g.parameters.path.getPointAt(i/n, c); const kk = Math.min(1, 0.55 + 3*i/n)*(1-0.75*i/n); rad.copy(c).sub(o).normalize();
@@ -684,13 +714,13 @@ function hstrand(name,z0,z1,t0,t1,r,mat,out=0.003,tip=0,flat=0.6){
   return add(cran,name,g,mat);
 }
 // [z0 (front), z1 (back), start angle, lift]: a dark parting in the middle, three clumps per side swept up and back
-[[0.09,0.05,0.45,0.01],[0.27,0.14,0.5,0.008],[0.45,0.24,0.6,0.006],[0.63,0.34,0.8,0.004],[0.8,0.44,1.1,0.002]].forEach(([z0,z1,t0,tip],i)=>{
+[[0.09,0.03,0.45,0.01],[0.27,0.09,0.5,0.008],[0.45,0.16,0.6,0.006],[0.63,0.23,0.8,0.004],[0.8,0.3,1.1,0.002]].forEach(([z0,z1,t0,tip],i)=>{
   for (const s of [1,-1]) hstrand('lock'+i+(s>0?'R':'L'),s*z0,s*z1,t0,Math.PI+0.95-0.06*i,0.016-0.0012*i,i%2?hairMat:hairLt,0.004,tip); });
-[[0.18,0.09,0.5],[0.36,0.19,0.58],[0.54,0.29,0.72],[0.72,0.39,0.95]].forEach(([z0,z1,t0],i)=>{
+[[0.18,0.06,0.5],[0.36,0.125,0.58],[0.54,0.19,0.72],[0.72,0.26,0.95]].forEach(([z0,z1,t0],i)=>{
   for (const s of [1,-1]) hstrand('groove'+i+(s>0?'R':'L'),s*z0,s*z1,t0,Math.PI+0.9,0.005,hairSd,0.012,0,1); });
 // clipped sides: a few short locks swept back from the temple over the ear to the occiput
 function sideLock(name,sd,y0,a0,a1,r,mat){
-  const pts = []; for (let k=0;k<=12;k++){ const u=k/12, a=a0+(a1-a0)*u, yy = y0 + 0.08*Math.sin(Math.PI*u) - 0.25*smooth(0.6,1,u)*(1-y0);
+  const pts = []; for (let k=0;k<=12;k++){ const u=k/12, a=a0+(a1-a0)*u, yy = y0 + 0.1*Math.sin(Math.PI*u) - 0.5*smooth(0.45,1,u)*(1-y0);
     pts.push(hairPt(new T.Vector3(Math.cos(a), yy, sd*Math.sin(a)).normalize(), 0.002)); }
   const g = new T.TubeGeometry(new T.CatmullRomCurve3(pts), 18, r, 6, false), a = g.attributes.position;
   const n = g.parameters.tubularSegments, rs = g.parameters.radialSegments, c = new T.Vector3(), v = new T.Vector3();
@@ -698,12 +728,12 @@ function sideLock(name,sd,y0,a0,a1,r,mat){
     for (let j=0;j<=rs;j++){ const idx=i*(rs+1)+j; v.fromBufferAttribute(a,idx).sub(c).multiplyScalar(kk).add(c); a.setXYZ(idx,v.x,v.y,v.z); } }
   g.computeVertexNormals(); return add(cran,name,g,mat);
 }
-for (const sd of [1,-1]) [[0.16,1.1],[0.3,0.95],[0.46,0.85],[0.62,0.75]].forEach(([y0,a0],i)=>sideLock('sideLock'+sd+i,sd,y0,a0,2.65-0.1*i,0.008,i%2?hairMat:hairLt));
+for (const sd of [1,-1]) [[0.16,1.1],[0.3,0.95],[0.46,0.85],[0.62,0.75]].forEach(([y0,a0],i)=>sideLock('sideLock'+sd+i,sd,y0,a0,2.65-0.1*i,0.0065,i%2?hairSd:hairMat));
 // crest tips flicking up and back at the front top (sheet A/C), and points converging over the nape
 [[0.9,0.08,0.05,0.25],[0.95,-0.12,0.05,0.3],[1.0,0.3,0.05,0.35],[1.0,-0.34,0.05,0.38],[1.1,0.55,0.045,0.45],[1.1,-0.58,0.045,0.5],[1.25,0.8,0.04,0.6],[1.25,-0.82,0.04,0.62],
  [1.45,0.2,0.045,0.8],[1.45,-0.25,0.045,0.85],[1.6,0.55,0.04,0.95],[1.6,-0.55,0.04,1.0]].forEach(([t,zk,h,rz],i)=>{
   const P = hairPt(new T.Vector3(Math.cos(t),Math.sin(t),zk).normalize(), -0.006), rx = -zk*0.9;
-  h = Math.max(0.02, Math.min(h, (hy(1.86)-P.y)/Math.max(0.3,Math.cos(rz)*Math.cos(rx))));
+  h = Math.max(0.022, Math.min(h, (hy(1.868)-P.y)/Math.max(0.3,Math.cos(rz)*Math.cos(rx))));
   spike(cran,'crestSpike'+i,0.017,h,i%3===1?hairMat:hairLt,P.x,P.y,P.z,rz,rx); });
 [[2.6,0.0,0.03,2.2],[2.4,0.4,0.026,2.0],[2.4,-0.4,0.026,2.0],[2.1,0.65,0.024,1.8],[2.1,-0.65,0.024,1.8]].forEach(([t,zk,h,rz],i)=>{
   const P = hairPt(new T.Vector3(Math.cos(t),Math.sin(t),zk).normalize(), -0.008);
@@ -711,33 +741,51 @@ for (const sd of [1,-1]) [[0.16,1.1],[0.3,0.95],[0.46,0.85],[0.62,0.75]].forEach
 // BEARD: short and boxed along the jaw: full cheeks from under the cheekbones down the jaw to a squared chin (1.556),
 // sideburns up to the clipped hair; a closed slab over the face, thickest at the chin. Mustache over a dark mouth line.
 const BEARD = { A:1.72 };
-const bTop = a => { const A = Math.abs(a); return A < 0.3 ? 1.621 + 0.007*smooth(0,0.3,A) : A < 0.55 ? 1.628 + 0.024*smooth(0.3,0.55,A) : A < 1.0 ? 1.652 + 0.024*smooth(0.55,1.0,A) : A < 1.45 ? 1.676 + 0.01*smooth(1.0,1.45,A) : 1.686 + 0.054*smooth(1.45,1.72,A); };
-const bBot = a => { const A = Math.abs(a); return A < 0.5 ? 1.56 : 1.56 + 0.076*Math.pow(smooth(0.5,1.72,A),1.2); };
-const bThk = a => { const A = Math.abs(a); return 0.004 + 0.012*Math.pow(1 - smooth(0.0,1.6,A), 1.3); };
+const bTop = a => { const A = Math.abs(a); return A < 0.25 ? 1.614 : A < 0.55 ? 1.614 + 0.014*smooth(0.25,0.55,A) : A < 1.05 ? 1.628 + 0.017*smooth(0.55,1.05,A) : A < 1.4 ? 1.645 + 0.02*smooth(1.05,1.4,A) : 1.665 + 0.065*smooth(1.4,1.72,A); };   // under the mustache, a diagonal cheek line, thin sideburns
+const bBot = a => { const A = Math.abs(a); return A < 0.45 ? 1.542 + 0.009*Math.pow(A/0.45,1.6) : 1.551 + 0.075*Math.pow(smooth(0.5,1.72,A),1.7); };   // rounded chin tuft below the jaw; covers the jaw side down to its lower edge (sheet A side)
+const bThk = a => { const A = Math.abs(a); return 0.004 + 0.018*Math.pow(1 - smooth(0.0,1.5,A), 1.6); };              // full at the chin, thin over the cheeks
+const bOut = (a,h) => { const s = Math.min(1,Math.max(0,(h-bBot(a))/(bTop(a)-bBot(a)))); return bThk(a)*(1 - 0.75*Math.pow(s,1.4))*(0.5 + 0.5*smooth(0,0.3,s)) + 0.002; };
 { const na = 34, ns = 7, P = [], I = [], L = 2*(ns+1);
   for (let j=0;j<=na;j++){ const a = -BEARD.A + 2*BEARD.A*j/na, h0 = bBot(a), h1 = bTop(a), t0 = bThk(a);
     const ring = [];
     for (let k=0;k<=ns;k++){ const s = k/ns, h = h0 + (h1-h0)*s, hc = Math.max(h, 1.588);
       const p = facePt(hc, a), n = faceN(hc, a); p.y = h-HY;
-      ring.push(p.clone().addScaledVector(n, t0*(1 - 0.75*Math.pow(s,1.4)) + 0.002)); }
+      ring.push(p.clone().addScaledVector(n, t0*(1 - 0.75*Math.pow(s,1.4))*(0.5 + 0.5*smooth(0,0.3,s)) + 0.002)); }   // rounded tuft under the chin, thinning to the cheeks
     for (let k=ns;k>=0;k--){ const s = k/ns, h = h0 + (h1-h0)*s, hc = Math.max(h, 1.588);
       const p = facePt(hc, a), n = faceN(hc, a); p.y = h-HY; ring.push(p.addScaledVector(n, -0.006)); }
     ring.forEach(v=>P.push(v.x,v.y,v.z)); }
   for (let j=0;j<na;j++) for (let k=0;k<L;k++){ const a = j*L+k, b = a+L, a1 = j*L+(k+1)%L, b1 = a1+L; I.push(a,a1,b, b,a1,b1); }
   const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(P,3)); g.setIndex(I); g.computeVertexNormals();
   add(cran,'beard',g,beardMat); }
-function onFace(par,name,pts,r,mat,out){                   // a tapered tube lying on the face: pts = [a, h] pairs
-  const v = pts.map(([a,h])=>{ const hc = Math.max(h,1.588), p = facePt(hc,a), n = faceN(hc,a); p.y = h-HY; return p.addScaledVector(n, out); });
+function onFace(par,name,pts,r,mat,out){                   // a tapered tube lying on the face: pts = [a, h(, out)] triples
+  const v = pts.map(([a,h,o])=>{ const hc = Math.max(h,1.588), p = facePt(hc,a), n = faceN(hc,a); p.y = h-HY; return p.addScaledVector(n, o ?? out); });
   const g = new T.TubeGeometry(new T.CatmullRomCurve3(v), 14, r, 6, false), A = g.attributes.position;
   const n = g.parameters.tubularSegments, rs = g.parameters.radialSegments, c = new T.Vector3(), w = new T.Vector3();
   for (let i=0;i<=n;i++){ g.parameters.path.getPointAt(i/n, c); const kk = 0.45 + 0.55*Math.sin(Math.PI*i/n);
     for (let j=0;j<=rs;j++){ const idx=i*(rs+1)+j; w.fromBufferAttribute(A,idx).sub(c).multiplyScalar(kk).add(c); A.setXYZ(idx,w.x,w.y,w.z); } }
   g.computeVertexNormals(); return add(par,name,g,mat);
 }
-onFace(cran,'mouth',[[-0.3,1.629],[0,1.627],[0.3,1.629]],0.004,MAT.pupil,0.0);
-onFace(cran,'mustache',[[-0.52,1.615],[-0.42,1.631],[-0.2,1.64],[0,1.642],[0.2,1.64],[0.42,1.631],[0.52,1.615]],0.0085,beardMat,0.006);
-[-0.6,-0.25,0.25,0.6].forEach((a,i)=>onFace(cran,'beardGroove'+i,[[a*1.2,1.625],[a*1.05,1.6],[a*0.8,1.578]],0.003,beardDk,bThk(a)+0.0015));   // dark strand grooves (cheek -> chin)
-for (const s of [1,-1]) onFace(cran,'jawGroove'+s,[[s*0.8,1.648],[s*1.05,1.625],[s*1.3,1.63]],0.003,beardDk,bThk(s)+0.002);
+const beardLt = HM(['#0e0f0e','#2c2d2a','#4b4b46','#6c6b62'], [PAL.teal, PAL.grey, PAL.greyL, PAL.greyL], {hi:0.5, mid:0.05, lo:-0.4, tl:[0.45,-0.1,-0.5]});   // mustache / lit beard edge
+// scars (sheet C/A): two red diagonal cuts over the right brow down the cheek, one on the left cheek
+const scarMat = HM(['#3a0d08','#5a1610','#7a2016','#8c2a1c'], [PAL.skinD,PAL.skinD,PAL.skinD,PAL.skinD], {hi:0.6, mid:0.0, lo:-0.6});
+onFace(cran,'scar0',[[0.37,1.772],[0.42,1.748],[0.5,1.712],[0.58,1.675],[0.66,1.645]],0.0016,scarMat,0.0012);
+onFace(cran,'scar1',[[0.56,1.76],[0.62,1.73],[0.7,1.695]],0.0014,scarMat,0.0012);
+onFace(cran,'scar2',[[-0.5,1.69],[-0.56,1.665],[-0.62,1.64]],0.0014,scarMat,0.0012);
+onFace(cran,'mouth',[[-0.16,1.6155],[0,1.615],[0.16,1.6155]],0.0022,MAT.pupil,0.004);
+onFace(cran,'mustache',[[-0.6,1.602,0.008],[-0.48,1.611],[-0.26,1.6215],[0,1.6245],[0.26,1.6215],[0.48,1.611],[0.6,1.602,0.008]],0.0095,beardLt,0.0075);   // full mustache over the mouth, drooping into the beard
+// strand clumps: irregular tufts at different heights converging on the chin tuft, two greys, jittered lengths
+[[-0.95,0.0,0.55],[-0.62,0.15,0.5],[-0.38,0.0,0.4],[-0.2,0.45,0.5],[0.0,0.1,0.35],[0.06,0.55,0.42],[0.22,0.2,0.45],[0.4,0.5,0.45],[0.64,0.05,0.5],[0.95,0.2,0.45]].forEach(([a,u0,l],i)=>{
+  const pts = []; for (let k=0;k<=4;k++){ const u = u0 + l*k/4, aa = a*(1 - 0.4*u), h0 = bTop(a) - 0.004, h1 = bBot(aa) + 0.002, h = h0 + (h1-h0)*u;
+    pts.push([aa, h, bOut(aa,h) + 0.0012]); }
+  onFace(cran,'beardTuft'+i,pts,0.0046 - 0.001*(i%2),i%3===1?beardDk:(i%3===2?beardLt:beardMat),0); });
+for (const s of [1,-1]) [[0.25,0.0,0.7],[0.6,0.15,0.75],[0.85,0.3,0.6]].forEach(([f,u0,l],i)=>{   // jaw-line tufts: sideburn -> chin, breaking the flat side plane
+  const pts = []; for (let k=0;k<=5;k++){ const u = u0 + l*k/5, a = s*(1.62 - 1.0*u), h = bBot(a) + (bTop(a) - bBot(a))*(f*(1 - 0.5*u)) ;
+    pts.push([a, h, bOut(a,h) + 0.001]); }
+  onFace(cran,'jawTuft'+s+i,pts,0.0034,i===1?beardDk:beardMat,0); });
+for (const s of [1,-1]){                                    // lit upper edge of the cheek beard (a rolled lip catching the light)
+  const pts = []; for (let k=0;k<=6;k++){ const a = s*(0.55 + 0.6*k/6), h = bTop(a) - 0.003; pts.push([a, h, bOut(a,h) + 0.0005]); }
+  onFace(cran,'beardEdge'+s,pts,0.0028,beardLt,0); }
+for (const s of [1,-1]) onFace(cran,'jawGroove'+s,[[s*0.85,1.632],[s*1.05,1.615],[s*1.25,1.622]],0.0025,beardDk,bThk(s)+0.002);
 
 const arms = {};
 // arm lengths from the sheet: shoulder joint ±0.24 → elbow 0.27 (centre of the rolled cuff) → wrist 0.28 (FORE);
@@ -774,7 +822,7 @@ for (const s of [-1,1]){
 // stays on the shoulder when the arm reaches forward and settles over the deltoid when the arm hangs (a narrow orange
 // strip on the far side in the 3/4 sprites).
 const PAULD_RIM = M('#271713', PAL.rust, '#662e16', '#8e411b', {hi:0.6, mid:0.0, lo:-0.5, spr:[PAL.orange, PAL.orange], id:0.9});   // rim tones from sheet C (#432315/#662e16/#8e411b); sprite size: part of the flat orange cap
-const PAULD = { follow:0.6, hy:0.03, hz:0.05, flat:0.65, short:0.85, drop:0.02, size:0.95 };   // swing share; hinge above / inboard of the joint; drop / size: sprite poses (a cap on the far shoulder edge)
+const PAULD = { follow:0.6, hy:0.03, hz:0.05, flat:0.65, short:0.85, drop:0.02, size:0.95, aimHold:0.5, aimDrop:0.03, sSize:0.92, sDx:-0.02, sDy:-0.02, sDz:-0.01 };   // s*: extra size / offset at sprite size only (LO): a 2-3 px glint on the far shoulder, HD keeps the full dome; swing share; hinge above / inboard of the joint; drop / size: sprite poses (a cap on the far shoulder edge)
 const pauldron = grp(chest,'pauldronPivot',0,SH_Y+PAULD.hy,-SH_Z+PAULD.hz);
 {
   const g = new T.SphereGeometry(1,28,16), a = g.attributes.position;
@@ -809,7 +857,7 @@ function makeRifle(){
   box(g,'mag',0.06,0.14,0.04,MAT.metal,0.13,-0.05,0,0,0,-0.18);
   box(g,'grip',0.04,0.1,0.04,MAT.metal,-0.01,-0.03,0,0,0,-0.3);
   g.userData = { grip:new T.Vector3(0.04,-0.045,0), support:new T.Vector3(-0.23,-0.22,-0.2), lowSupport:new T.Vector3(0.182,0.029,0.022), muzzle:new T.Vector3(0.63,0.05,0),
-    aimPos:new T.Vector3(0.66,0.5,-0.11), aimRot:0.12, aimYaw:0, lowPos:new T.Vector3(0.43,-0.044,0.286), lowRot:-0.8, lowYaw:1.5, shR:0.1, shL:0.0, rate:0.11, kick:0.035, glove:1 };
+    aimPos:new T.Vector3(0.58,0.54,-0.11), aimRot:0.12, aimYaw:0, lowPos:new T.Vector3(0.43,-0.044,0.286), lowRot:-0.8, lowYaw:1.5, shR:0.2, shL:0.0, poleR:new T.Vector3(-0.2,-0.4,1), rate:0.11, kick:0.035, glove:1 };
   return g;
 }
 function makePistol(){
@@ -1210,8 +1258,9 @@ const lerp=(a,b,k)=>a+(b-a)*k;
 // forward lean (rad) of the torso by pose (walkK: share kept while walking), rise: chest lift (x 0.03 m) with the rifle up,
 // shoulder rise (m), share of the extra lean the neck takes back so the face stays near level, extra chin-down (rifle),
 // chest shift back (m per rad of extra lean) so the head stays over the feet
-const LEAN = { rise:1, idle:0.14, aim:0.5, pistol:0.12, walkK:0.6, hunchIdle:0.018, hunch:0.04, hunchPistol:0.015,
-  headLevel:0.7, headDown:0.03, back:0.35, backIdle:0.0, protract:0.03 };   // protract: neck pushed forward over the chest (m, rifle aim)
+const LEAN = { rise:-0.5, idle:0.14, aim:0.28, pistol:0.1, walkK:0.6, hunchIdle:0.018, hunch:0.0, hunchPistol:0.0,
+  headLevel:1.0, headDown:0.0, back:0.2, backIdle:0.0, protract:0.03, neckUp:0.06, neckUpPistol:0.04, chinUpPistol:0.06, risePistol:-1, turnPistol:-0.2, collarPistol:0.8, neckUpIdle:0.05, pxBackIdle:1.0, pxBackAim:1.5 };   // protract: neck pushed forward over the chest (m, rifle aim); neckUp*: head lifted out of the collar (m); turnPistol: neck yaw (rad, capped: face stays 3/4 to the view); pxBack*: head set back (sprite px)
+const PACK = { drop:0.0, dropAim:0.05, back:0.0, upright:1.0 };   // pack mount offsets in the game poses (m; share of the lean undone)
 const NECK0 = neck.position.clone();
 const _gs = new T.Vector3();
 const POLE_R = new T.Vector3(0.36,-0.16,0.06), POLE_R_LOW = new T.Vector3(-0.03,-0.4,-0.06), POLE_L = new T.Vector3(-0.09,-0.36,-0.17), POLE_L_LOW = new T.Vector3(0.11,-0.38,0.01), _pole = new T.Vector3(), _poleL = new T.Vector3(), _oq = new T.Quaternion(), _oq2 = new T.Quaternion(), Y_AXIS = new T.Vector3(0,1,0);
@@ -1268,16 +1317,20 @@ function update(dt){
   const rz0 = (-0.02 - 0.08*S.walk - 0.1*S.aim)*gp;                              // the old upright pitch the aim anchors were fitted to
   spine.rotation.z = (-0.02 - 0.08*S.walk*(1-LEAN.walkK) - lean*(1-S.walk*LEAN.walkK))*gp;
   const leanD = spine.rotation.z - rz0;
-  spine.position.y = 0.12 - 0.03*S.aim + 0.03*LEAN.rise*(S.aim-pistolA)*gp - POSE.drop*(1-S.aim)*gp;
+  spine.position.y = 0.12 - 0.03*S.aim + 0.03*(LEAN.rise*(S.aim-pistolA) + LEAN.risePistol*pistolA)*gp - POSE.drop*(1-S.aim)*gp;
   spine.position.x = lerp(LEAN.backIdle, LEAN.back, S.aim)*leanD*gp;                                     // hips stay back under the forward-pitched chest
   chest.position.y = breath*0.006;
-  neck.position.set(NECK0.x + LEAN.protract*(S.aim-pistolA)*gp, NECK0.y, NECK0.z);   // rifle: head pushed forward behind the sights, not bowed
+  { const nb = (LEAN.pxBackIdle*(1-S.aim) + LEAN.pxBackAim*(S.aim-pistolA))*0.0305*gp;   // head set back over the collar (screen px along the 3/4 view; rifle: the stock stays in front of the beard)
+    neck.position.set(NECK0.x + LEAN.protract*(S.aim-pistolA)*gp - 0.622*nb, NECK0.y + (LEAN.neckUpIdle*(1-S.aim) + LEAN.neckUp*(S.aim-pistolA) + LEAN.neckUpPistol*pistolA)*gp, NECK0.z + 0.783*nb); }   // rifle: head pushed forward behind the sights, not bowed
   chest.rotation.z = breath*0.01;
   chest.rotation.y = Math.sin(t*Math.PI*2*1.3)*-0.08*S.walk;
   const hunch = lerp(LEAN.hunchIdle, lerp(LEAN.hunch, LEAN.hunchPistol, pf), S.aim)*gp;
   neck.rotation.z = (POSE.chin + 0.05*S.aim + Math.sin(t*0.7)*0.02*(1-S.aim) - leanD*LEAN.headLevel)*gp;
-  head.rotation.z = -0.04*S.aim - LEAN.headDown*(S.aim-pistolA)*gp;
-  { const a = POSE.collarTilt*(1-S.tp), px = collar.position.x, py = 0.455;              // collar leans forward with the craned neck, hinged at its base
+  head.rotation.z = -0.04*S.aim - LEAN.headDown*(S.aim-pistolA)*gp + LEAN.chinUpPistol*pistolA*gp;   // pistol: head upright, face to the view
+  neck.rotation.y = LEAN.turnPistol*pistolA*gp;                               // pistol: face 3/4 towards the raised gun, hair mass behind it
+  pack.position.set(-0.178 - PACK.back*S.aim*gp, -(PACK.drop + PACK.dropAim*(S.aim-pistolA))*gp, 0);   // pack rides at shoulder height, not up behind the head
+  pack.rotation.z = -leanD*PACK.upright*S.aim;                                                 // ... and hangs plumb instead of pitching up with the lean
+  { const a = POSE.collarTilt*(1-S.tp)*(1-LEAN.collarPistol*pistolA), px = collar.position.x, py = 0.455;            // collar leans forward with the craned neck, hinged at its base
     collarG.rotation.z = a; collarG.position.set(px - (px*Math.cos(a) - py*Math.sin(a)) + POSE.collarFwd*(1-S.tp), py - (px*Math.sin(a) + py*Math.cos(a)), 0); }
 
   // weapon pose
@@ -1297,7 +1350,7 @@ function update(dt){
   }
   const rec = Math.exp(-S.shotT*28);
   g.position.x -= u.kick*rec; g.rotation.z += 0.09*rec*(S.weapon==='pistol'?2:1);
-  chest.rotation.z += -0.02*rec;
+  chest.rotation.z += 0.035*rec;                                                       // recoil: shoulders and head kick back, not forward
   // keep the weapon where the upright pose put it (hips space) while the chest leans: rotate its chest-space pose back
   { const c = Math.cos(-leanD), sn = Math.sin(-leanD), ox = AX + chest.position.x, oy = chest.position.y;
     _gs.set(g.position.x + ox, g.position.y + oy, g.position.z);
@@ -1327,11 +1380,11 @@ function update(dt){
   for (const k of ['R','L']){ const A = arms[k];                            // palms down, fingers straight and flat in the T-pose
     A.fing.scale.set(lerp(1, 0.6, S.tp), lerp(0.07, 0.13, S.tp), 1); A.hand.rotation.set(0, A.s*S.tp*Math.PI/2, 0); }
   _armDir.copy(DOWN).applyQuaternion(arms.L.up.quaternion);
-  pauldron.quaternion.identity().slerp(_oq.setFromUnitVectors(TP_DIR_L,_armDir), PAULD.follow);
+  pauldron.quaternion.identity().slerp(_oq.setFromUnitVectors(TP_DIR_L,_armDir), PAULD.follow*(1 - PAULD.aimHold*(S.aim-pistolA)));   // rifle: the dome stays on the far shoulder, not swung forward with the support arm
   // off the T-pose the dome settles flatter onto the deltoid (sprites: a 2-3 px orange edge on the far shoulder)
-  const psz = lerp(PAULD.size,1,S.tp);
+  const pls = (1-S.tp)*LO.value, psz = lerp(PAULD.size,1,S.tp)*lerp(1,PAULD.sSize,pls);
   PAULD.mesh.scale.set(psz, psz*lerp(PAULD.flat,1,S.tp), psz*lerp(PAULD.short,1,S.tp));
-  pauldron.position.y = SH_Y + PAULD.hy - PAULD.drop*(1-S.tp) + hunch;
+  pauldron.position.set(PAULD.sDx*pls, SH_Y + PAULD.hy - (PAULD.drop + PAULD.aimDrop*(S.aim-pistolA))*(1-S.tp) + hunch + PAULD.sDy*pls, -SH_Z + PAULD.hz + PAULD.sDz*pls);
 
   // coat: damped springs chasing the legs (sub-stepped so big export steps stay stable)
   const thR = legs.R.thigh.rotation.z, thL = legs.L.thigh.rotation.z;
