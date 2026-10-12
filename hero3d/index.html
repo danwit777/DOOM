@@ -58,6 +58,11 @@ kbd{font-family:var(--f-display);font-size:10px;color:var(--muted);margin-left:4
         <button id="a-aim" data-anim="aim" aria-pressed="false">Cel<kbd>3</kbd></button>
         <button id="a-fire" data-anim="fire" aria-pressed="false">Ogień<kbd>4</kbd></button>
         <button id="a-tpose" data-anim="tpose" aria-pressed="false">T-poza<kbd>5</kbd></button>
+        <button id="a-jump_up" data-anim="jump_up" aria-pressed="false">Skok<kbd>7</kbd></button>
+        <button id="a-jump_apex" data-anim="jump_apex" aria-pressed="false">Szczyt<kbd>8</kbd></button>
+        <button id="a-fall" data-anim="fall" aria-pressed="false">Spadanie<kbd>9</kbd></button>
+        <button id="a-land" data-anim="land" aria-pressed="false">Lądowanie<kbd>0</kbd></button>
+        <button id="a-climb" data-anim="climb" aria-pressed="false">Wspinaczka<kbd>W</kbd></button>
       </div>
     </div>
     <div class="group">
@@ -117,17 +122,21 @@ const PAL = {
   tealD:'#131a1a', teal:'#313d39', grey:'#474747', hairL:'#9a958a',
   orange:'#eb7f1c', amber:'#eba357', cream:'#ffce87',
   // accessory-only tones (backpack, eyes): not used when snapping the character mesh
-  oliveD:'#1a190a', oliveM:'#2e2c12', oliveL:'#49471c', eye:'#ae4135'
+  oliveD:'#1a190a', oliveM:'#2e2c12', oliveL:'#49471c', eye:'#ae4135',
+  // pauldron weathering (ramp tones only, never snapped to): burnt / dusty orange paint, dirty rust brown, dark rust brown, grime
+  burnt:'#c0652a', rustL:'#8a4224', rustD:'#482111', grime:'#55472b'
 };
 const N_CHAR = 19;
 const PAL_LIST = Object.values(PAL);
+const N_SNAP = PAL_LIST.indexOf(PAL.burnt);   // the snapped accessories (backpack, straps, buckles) never pick the weathering tones
 document.getElementById('pal').innerHTML = PAL_LIST.map(c=>`<i style="background:${c}" title="${c}"></i>`).join('');
 const NP = PAL_LIST.length;
 
 // ---------- Character shader: skinned, material class x light band -> per-material palette ramp ----------
 const LIGHT = { value: new T.Vector3(-0.45,0.75,0.5).normalize() };   // screen-fixed light (upper left, like the sprites)
 // Material classes. The colour texture is classified once on load (hue / saturation / value) into a class map; the shader refines a
-// few classes by bind-pose position (dark/navy on the torso = shirt, light grey on the head = hair, front of the knees = pads, feet = boots).
+// few classes by bind-pose position (dark/navy on the torso = shirt, light grey on the head = hair, feet = boots). The texture's light-grey
+// texels are labelled 'pad' only until the shader sorts them into hair / cloth; the class itself shades the knee guards' armour plates.
 // Each class maps the light band through its own ramp of palette colours: deep, dark, mid, light, rim.
 const CLS = { coat:0, shirt:1, skin:2, hair:3, boot:4, pad:5, orange:6, eye:7, metal:8, beard:9, trou:10 };
 const RAMP = [
@@ -136,8 +145,8 @@ const RAMP = [
   ['skinS','skinM','skinL','skinL','skinL'],      // skin: tan with a darker side
   ['teal','grey','greyL','hairL','hairL'],        // hair: light silver-grey, darker teal-grey strands between the locks
   ['black','black','navy','navy','navyL'],        // boots, gloves: navy-black
-  ['coatD','grey','greyL','greyL','hairL'],       // knee pads: neutral grey (the only pale patch on the legs)
-  ['skinS','rust','orange','orange','amber'],     // pauldron: orange toward the light, rust shadow side, amber glint on top
+  ['black','coatD','coatM','coatL','greyL'],      // knee guards: dark olive steel (frame coatM / coatD), khaki boss (coatL / greyL)
+  ['skinS','rust','burnt','orange','amber'],      // pauldron: weathered paint - orange toward the light, burnt orange below, rust shadow side
   ['black','skinS','eye','eye','eye'],            // eyes: dark bar, red pupils
   ['black','coatD','coatM','grey','greyL'],       // weapons, metal: dark steel, grey lit faces, light bevels
   ['tealD','teal','grey','greyL','hairL'],        // beard: heavy grey, silver on the lit side
@@ -147,18 +156,25 @@ const RAMP = [
 // The coat is a warm grey-brown, the trousers a cooler, lighter olive, the vest a modelled near-black, the hair neutral silver.
 const RAMP_HD = [
   ['#0d0c0a','#1a1814','#302b24','#4c4639','#615a49'],   // coat
-  ['#0a0c0c','#141817','#202523','#313733','#46504b'],   // vest / undershirt: dark but modelled (pure black is for lines only)
+  ['#030303','#0b0a09','#151412','#22201c','#34312a'],   // vest / undershirt: the sheet's warm near-black faces (index 2), black seams
   ['#2c1813','#66311f','#8d5245','#b18465','#c99e7c'],   // skin
   ['#25282a','#3d4143','#5f625e','#8e8c85','#b6b4ac'],   // hair: neutral silver-grey, near-neutral dark strands
   ['#020204','#05060b','#0c0f20','#13172e','#1e2544'],   // boots, gloves: navy-black, a small glint
-  ['#232320','#474744','#6c6b66','#94928a','#b3b1a8'],   // knee pads: neutral light grey
-  ['skinS','rust','orange','orange','amber'],            // pauldron
+  ['#0e0e0b','#1e1d18','#34322a','#615a4d','#8a8170'],   // knee guards: dark steel frame (below the trousers), lit bevel, khaki boss, glint
+  ['skinS','rust','burnt','orange','amber'],             // pauldron (rust, grime and chips on top: WEAR)
   ['black','skinS','eye','eye','eye'],                   // eyes
   ['black','coatD','coatM','grey','greyL'],              // metal
   ['#25282a','#3d4143','#62645f','#908e87','#b3b1a9'],   // beard
   ['#10110e','#1f201b','#35372d','#4f5245','#636658']    // trousers: cooler and one step lighter than the coat
 ];
 const NCLS = RAMP.length;
+// Pauldron weathering: where the procedural masks in CHAR_FS put rust, grime or a paint chip, these ramps replace the paint's,
+// indexed by the same light band (deep, dark, mid, light, rim)
+const WEAR = [
+  ['skinS','rustD','rust','rustL','rustL'],     // rust: dirty brown-red on the lit and mid bands, dark rust brown in the shadow (pits one step down)
+  ['skinS','rustD','grime','grime','grime'],    // grime: dusty olive-brown dirt in the light, dark rust brown in the shadow (warm, no soot)
+  ['black','coatD','coatD','coatM','greyL']     // chipped paint: bare dark steel (warm), a dull 1 px glint on a few lit chips
+];
 const SMOOTH_ITERS = 14;
 const SH = {
   uBands:{value:1}, uPalOn:{value:1},
@@ -166,31 +182,36 @@ const SH = {
   uLv:{value:new T.Vector4(1.18, 0.9, 0.62, 0.42)},    // brightness per band (palette off / weapons)
   uSat:{value:1.0}, uGain:{value:1.0}, uDetail:{value:0.6}, uRim:{value:0.55}, uShirtV:{value:0.07}, uGreyOff:{value:0.2}, uEyeBar:{value:1.3}, uBO:{value:new T.Vector3(0.75, 0.4, -0.2)}, uBootOff:{value:-0.2}, uDbg:{value:0},
   uPxM:{value:0.03},                                    // metres per output pixel (eye pupils stay at least one pixel)
+  uSBv:{value:[new T.Vector3(1,1,1), new T.Vector3(1,1,1)]},   // shirt / belt seams drawn this frame, per side (shirtSeams)
   uHair:{value:new T.Vector3(0.4, 4.0, 2.5)},           // hair strands: texture luminance pivot, gain for hair, gain for beard
   uPal:{value:PAL_LIST.map(h=>new T.Color(h))},
   uRamp:{value:[].concat(...RAMP.map(r=>r.map(k=>new T.Color(PAL[k]))))},
   uRampH:{value:[].concat(...RAMP_HD.map(r=>r.map(k=>new T.Color(PAL[k] || k))))},
+  uWear:{value:[].concat(...WEAR.map(r=>r.map(k=>new T.Color(PAL[k]))))},
   // per class: x = texture detail weight, y = tone offset (in ramp steps), z = normal smoothing (0 = mesh normal, 1 = smoothed)
-  uCD:{value:[[0.25,0],[0,0],[0.3,0.6],[0,-0.4],[0,0],[0,0.65],[0,0.3],[0,0],[0,0.2],[0,0],[0.25,0]].map(v=>new T.Vector2(v[0],v[1]))},
-  uNS:{value:[0.85,0.6,0.35,0.3,0.7,0.6,0.6,0,0,0.4,0.85]},
+  uCD:{value:[[0.25,0],[0,0],[0.3,0.6],[0,-0.4],[0,0],[0,0],[0,0.3],[0,0],[0,0.2],[0,0],[0.25,0]].map(v=>new T.Vector2(v[0],v[1]))},
+  uNS:{value:[0.85,0.6,0.35,0.3,0.7,0,0.6,0,0,0.4,0.85]},
   // HD shading (fades in above sprite size, off at 64 px): normal-map strength, hue shift, rim light, cavity, specular
   uNrm:{value:new T.Vector2(1,-1)}, uNrmK:{value:2.2}, uNrmB:{value:3.0}, uHue:{value:1.0}, uRimK:{value:1.0}, uCav:{value:new T.Vector2(1.0, 1.0)}, uSpec:{value:1.0},
-  uNK:{value:[0.45,0.6,0.55,0.8,0.8,0.8,0.35,0,0.6,0.8,0.45]},     // per class normal-map weight
-  uRimW:{value:[0.45,0.5,0.6,1.0,0.0,0.6,0.5,0.0,0.8,0.8,0.4]},    // per class rim / back-light weight (none on boots)
+  uNK:{value:[0.45,0.6,0.55,0.8,0.8,0,0.35,0,0.6,0.8,0.45]},       // per class normal-map weight
+  uRimW:{value:[0.45,0.5,0.6,1.0,0.0,0.3,0.5,0.0,0.8,0.8,0.4]},    // per class rim / back-light weight (none on boots)
   uFill:{value:new T.Vector3(0.55, -0.2, 0.6).normalize()},          // bounce / fill light direction (view space)
   uRimC:{value:new T.Color('#86a59b')}, uCool:{value:new T.Color('#16302c')}, uWarm:{value:new T.Color('#ffce87')}
 };
+// shirt: its straight vertical seams, x = a + b (y - 1.092) on |x| (bind metres): the abs column (narrowing toward the belt) and
+// the oblique side seam toward the ribs - drawn by CHAR_FS (shirtBelt), their on-screen spacing measured by shirtSeams()
+const SB_LINES = { col:[0.044, 0.11], side:[0.13, -0.078] };
 const CHAR_VS = `
 #include <common>
 #include <skinning_pars_vertex>
-varying vec2 vUv; varying vec3 vN; varying vec3 vP; varying vec3 vNs; varying vec3 vV; varying vec2 vCav;
+varying vec2 vUv; varying vec3 vN; varying vec3 vP; varying vec3 vNs; varying vec3 vV; varying vec2 vCav; varying vec3 vNb; varying float vRim;
 #ifdef SMOOTHN
-attribute vec3 sNormal; attribute vec2 aCav;
+attribute vec3 sNormal; attribute vec2 aCav; attribute float aRim;
 #endif
 void main(){
-  vUv = uv; vP = position; vCav = vec2(0.0);
+  vUv = uv; vP = position; vCav = vec2(0.0); vNb = normal; vRim = 1.0;   // vNb: bind-pose normal (smoothed when there is one), like vP stable under skinning
   #ifdef SMOOTHN
-    vCav = aCav;
+    vCav = aCav; vNb = sNormal; vRim = aRim;   // vRim: distance over the surface to the pauldron's outline (addPlateRim)
   #endif
   #include <beginnormal_vertex>
   #include <skinbase_vertex>
@@ -214,8 +235,10 @@ uniform vec3 uL; uniform float uBands; uniform float uPalOn; uniform vec4 uB; un
 uniform float uDetail; uniform float uRim; uniform float uShirtV; uniform float uGreyOff; uniform float uOff; uniform float uEyeBar; uniform vec3 uBO; uniform float uBootOff; uniform float uDbg; uniform float uCls;
 uniform vec3 uPal[${NP}]; uniform float uN; uniform vec3 uRamp[${NCLS*5}]; uniform vec3 uRampH[${NCLS*5}]; uniform float uRimW[${NCLS}]; uniform vec2 uCD[${NCLS}]; uniform float uNS[${NCLS}]; uniform float uPxM; uniform vec3 uHair;
 uniform sampler2D nMap; uniform float uUseN; uniform sampler2D mrMap; uniform float uUseMR; uniform vec2 uNrm; uniform float uNrmK; uniform float uNrmB; uniform float uNK[${NCLS}];
-uniform float uHue; uniform float uRimK; uniform vec2 uCav; uniform float uSpec; uniform vec3 uRimC; uniform vec3 uCool; uniform vec3 uWarm; uniform vec3 uFill;
-varying vec2 vUv; varying vec3 vN; varying vec3 vP; varying vec3 vNs; varying vec3 vV; varying vec2 vCav;
+uniform float uHue; uniform float uRimK; uniform vec2 uCav; uniform float uSpec; uniform vec3 uRimC; uniform vec3 uCool; uniform vec3 uWarm; uniform vec3 uFill; uniform float uPart;
+uniform vec3 uSBv[2];   // shirt / belt, per side (-x, +x), this frame: abs column, side seam, outer belt loop drawn (shirtSeams)
+uniform vec3 uWear[${WEAR.length*5}];
+varying vec2 vUv; varying vec3 vN; varying vec3 vP; varying vec3 vNs; varying vec3 vV; varying vec2 vCav; varying vec3 vNb; varying float vRim;
 // tangent-free normal mapping (screen-space derivatives of view position and uv)
 vec3 perturbN(vec3 p, vec3 N, vec3 mapN, float fd){
   vec3 q0 = dFdx(p), q1 = dFdy(p); vec2 st0 = dFdx(vUv), st1 = dFdy(vUv);
@@ -235,6 +258,13 @@ vec3 finish(vec3 rc, float t, vec3 nr, float hd, bool tint){
     rc = mix(rc, uWarm * (lr / dot(uWarm, lw)), 0.22 * hl * hd * uHue);
   }
   return rc;
+}
+// value noise on the bind-pose position (worn paint on the knee guards: stays put on the plate however it moves)
+float hash3k(vec3 p){ p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p, p.yxz + 33.33); return fract((p.x + p.y) * p.z); }
+float vnoiseK(vec3 x){
+  vec3 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(hash3k(i), hash3k(i + vec3(1.0, 0.0, 0.0)), f.x), mix(hash3k(i + vec3(0.0, 1.0, 0.0)), hash3k(i + vec3(1.0, 1.0, 0.0)), f.x), f.y),
+             mix(mix(hash3k(i + vec3(0.0, 0.0, 1.0)), hash3k(i + vec3(1.0, 0.0, 1.0)), f.x), mix(hash3k(i + vec3(0.0, 1.0, 1.0)), hash3k(i + vec3(1.0, 1.0, 1.0)), f.x), f.y), f.z);
 }
 float toneOf(float d){   // n.l -> light band (0 deep .. 3 light); the deep shadow stays one flat tone up to a narrow terminator
   return d > uB.y ? 2.0 + (d - uB.y) / (uB.x - uB.y) : (d > uB.z ? 1.0 + (d - uB.z) / (uB.y - uB.z) : max(0.0, 1.0 + (d - uB.z) / 0.15));
@@ -263,8 +293,453 @@ float legD(vec3 p){
   float d = min(segD(q, vec3(0.125, 0.957, 0.006), vec3(0.174, 0.578, 0.011)), segD(q, vec3(0.174, 0.578, 0.011), vec3(0.21, 0.155, -0.01)));
   return d - 0.05 * smoothstep(0.02, 0.09, p.z);
 }
+// ---- pauldron weathering: value noise on the bind pose (anchored to the mesh, so nothing swims while the shoulder moves) ----
+float hash3(vec3 p){ p = fract(p * 0.3183099 + vec3(0.71, 0.113, 0.419)); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+float vnoise(vec3 x){
+  vec3 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(hash3(i), hash3(i + vec3(1.0, 0.0, 0.0)), f.x), mix(hash3(i + vec3(0.0, 1.0, 0.0)), hash3(i + vec3(1.0, 1.0, 0.0)), f.x), f.y),
+             mix(mix(hash3(i + vec3(0.0, 0.0, 1.0)), hash3(i + vec3(1.0, 0.0, 1.0)), f.x), mix(hash3(i + vec3(0.0, 1.0, 1.0)), hash3(i + vec3(1.0, 1.0, 1.0)), f.x), f.y), f.z);
+}
+// one noise octave (lattice 1/f metres, centred on 0), faded out once its blobs shrink under ~2 output pixels: coherent clumps at
+// sprite size, never salt-and-pepper speckle
+float oct(vec3 p, float f){ return (vnoise(p * f) - 0.5) * clamp(0.5 / (f * uPxM) - 1.0, 0.0, 1.0); }
+// paint chip (HD): a few cells of a 4 cm lattice hold one flake each - an ellipse in the surface plane, ~2 x 3 px at 300 px and
+// never under 2 px, around a jittered centre kept inside its cell (one cell test is enough). dens: share of the cells that chip.
+float chipAt(vec3 p, vec3 nb, float dens){
+  vec3 c = floor(p * 25.0), h = vec3(hash3(c + 0.5), hash3(c + 17.5), hash3(c + 41.5));
+  if (hash3(c + 63.5) > dens) return 0.0;
+  vec3 q = p - (c + 0.3 + 0.4 * h) / 25.0; q -= nb * dot(q, nb);   // offset from the flake's centre, in the surface plane
+  float qa = dot(q, normalize(h - 0.5)), r = max(0.011, 1.6 * uPxM);
+  return step(dot(q, q) + qa * qa, r * r);                         // shorter along its (random) axis
+}
+// which weathering covers this pauldron fragment: x = 0 paint, 1 rust, 2 grime, 3 chipped paint (bare steel, HD only);
+// y = tone shift: dark pits in the rust, a dull glint on a few chips, and on the paint one step up (the worn edge, the lit lower lip
+// of a chip). p: bind-pose position, nb: bind-pose normal, t: light band, rim: distance over the surface to the plate's outline.
+// The bind pose has the arms out: the shell's outer end (over the upper arm, x > ~0.28) turns down with the arm and becomes the
+// lower plate, its 'down' then runs along +x.
+vec2 wearOf(vec3 p, vec3 nb, float hd, float t, float rim){
+  float hs = smoothstep(0.3, 0.8, hd);                           // sprite palette -> HD (as gHd)
+  float lip = smoothstep(0.55, -0.1, nb.y);
+  float low = max(lip, 0.75 * smoothstep(0.25, 0.39, p.x));      // sprite: 0 over the cap .. 1 on the lip and the outer end
+  float lowE = smoothstep(0.27, 0.36, p.x);                      // the outer end (lower plate)
+  float sh = hs * step(t, 1.5);                                  // HD shadow side
+  float rimT = 1.0 - smoothstep(0.006, 0.075 - 0.025 * sh, rim); // 1 along the plate's outline .. 0 from 7.5 cm in (5 in the shadow)
+  float fc = clamp((0.0105 - uPxM) / 0.003, 0.0, 1.0);           // HD details (chips, pits): from ~190 px up, full from ~260 px
+  if (hd > 0.5){
+    // worn edge: on the lit side a thin broken line of paint one step up runs ~2 cm inside the outline (the raised rolled edge
+    // rubbed bright - it keeps the lip of the lower plate and the cap's edge reading as plates, without any gloss)
+    if (t > 2.5 && rim > 0.012 && rim < 0.012 + max(0.013, 1.8 * uPxM) && vnoise(p * 12.0 + 7.7) > 0.4) return vec2(0.0, 1.0);
+    // grime packed into the gap where the plate's inner edge meets the collar and the harness
+    if (rim < 0.02 && p.x < 0.2 && vnoise(p * 14.0 + 1.1) > 0.4) return vec2(2.0, 0.0);
+  }
+  // rust: at sprite size a few coherent blotches on the lip and the outer end; in HD a ragged band eating in from the plate's
+  // outline (the noise breaks its inner edge into bays and tongues), a few dark blotches on the lower plate and only rare spots
+  // on the cap. The shadow side keeps most of its paint (one broad warm plane, like the rest of the figure's shadows): there the
+  // band along the outline thins out
+  float n = 0.8 * oct(p, 9.0) + oct(p, 23.0) + 0.15 * oct(p, 50.0);
+  float r = n + mix(0.35 * low, 0.62 * rimT * (1.0 - 0.3 * sh) + 0.08 * lowE, hs) - mix(0.34, 0.3, hd) - 0.06 * sh;
+  if (r > 0.0) return vec2(1.0, fc > 0.0 && r > 0.14 && vnoise(p * 40.0 + 2.3) > 1.0 - 0.3 * fc ? -1.0 : 0.0);   // pits: 2 - 3 px dark clumps
+  if (hd < 0.5) return vec2(0.0);
+  // chipped paint: flakes of bare steel where the paint gives out along the outline (a ring ~2 - 6 cm in, around the inner edge
+  // of the rust band; lit and mid bands only); the paint just below a chip catches the light (one step up) - the pixel-art bevel
+  // that makes it read as a chip and not as dirt - and a few chips get a dull glint on their lower edge
+  float dens = fc * 0.75 * (smoothstep(0.012, 0.02, rim) - smoothstep(0.05, 0.065, rim)) * step(1.5, t);
+  vec3 up = normalize(mix(vec3(0.0, 1.0, 0.0), vec3(-1.0, 0.0, 0.0), lowE)) * 1.3 * uPxM;   // one pixel up the hanging shell
+  if (chipAt(p, nb, dens) > 0.5) return vec2(3.0, chipAt(p - up, nb, dens) < 0.5 && hash3(floor(p * 25.0) + 5.5) > 0.75 ? 1.0 : 0.0);
+  // rust streaks (lit and mid bands - the shadow stays calm - and only while a 1 cm column is still over a pixel wide): 1 px runs
+  // down from an edge - on the outer end from the fold between the plates out along +x (columns ~1 cm wide across z on its outer
+  // face, across y on its front and back), on the cap's front and back from its crest down -y (columns across x) - each column
+  // with its own start and length
+  if (t > 1.5 && fc > 0.5){
+    bool capF = abs(nb.z) > 0.45 && p.x < 0.27;
+    float ax = capF ? p.x : (abs(nb.z) > 0.5 ? p.y : p.z), cz = floor(ax * 95.0), hsr = hash3(vec3(cz, capF ? 5.5 : 3.5, 1.5));
+    float s0 = capF ? 1.6 - 0.04 * hash3(vec3(cz, 7.5, 2.5)) - p.y : p.x - 0.27 - 0.05 * hash3(vec3(cz, 9.5, 2.5));   // distance below the start
+    if (hsr > 0.78 && (capF || nb.y > 0.3 || abs(nb.z) > 0.5) && s0 > 0.0 && s0 < 0.015 + 0.2 * (hsr - 0.78)) return vec2(1.0, 0.0);
+  }
+  // grime: dusty dirt in a few patches, most on the lower plate and toward the outline
+  float g = oct(p + 3.7, 15.0) + 0.5 * oct(p + 3.7, 36.0) + 0.2 * lowE + 0.12 * rimT - 0.42 - 0.22 * sh;
+  if (g > 0.0) return vec2(2.0, 0.0);
+  return vec2(0.0, chipAt(p + up, nb, dens));
+}
+vec3 wearRamp(float w, float i){
+  int k = int((w - 1.0) * 5.0 + clamp(floor(i + 0.5), 0.0, 4.0));
+  vec3 c = uWear[0];
+  for (int j = 0; j < ${WEAR.length*5}; j++){ if (j == k) c = uWear[j]; }
+  return c;
+}
+// ---- Trousers (CLS.trou): hand-pixelled cloth detail on the inner layer around the legs, in whole / half ramp steps of the tone ----
+// Everything is anchored to the bind pose (vP), so it rides the legs through every pose and never swims: a dark olive camo (clusters of
+// short horizontal dashes, like the sheet and the owner's sprites), the trousers bloused over the boots (stacked rolls), creases behind /
+// above the knee and at the groin, diagonal pull folds on the thigh, the fly, the outer side seam and inseam, a cargo pocket on the front
+// of each thigh (plain patch, flap with a lit edge, snap). A crease is a dark line (its width from the screen derivative, so it stays 1 or
+// 2 px at any size and slant) with a lighter lip on the side facing the key light. Value discipline: the sheet's trousers are a DARK
+// mottle and the knee guards are the only light patch on the legs, so nothing here lifts the cloth above its plain lit tone (sprite: coatM;
+// HD: ramp step 2, the old flat lit tone, with the plain lit cloth itself half a step lower; only the bloused rolls' lit tops reach past
+// it, as the base's lit bulge did) - the pattern is mostly darker patches.
+// Sprite size: the owner's horizontal hatching (1 px rows of short dashes: mid-tone ones over about a third of the shadow side, darker
+// ones on the lit side), cleared round every stroke so the deliberate folds lead, and on the shadow side the folds in black ink; HD (from
+// ~125 px) adds the clusters' extra tones (chunky two-row blocks below the knee), more folds, the seams, the raised pocket, the rolls as
+// lit puffs. The front of the knee (knee guards) and the coat's shell (classed as trousers where it hugs the hip and thigh) are left alone.
+float trouHash(vec3 p){ p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+// value noise on the leg chart, periodic round the leg (x: 'per' cells per turn, so the pattern closes behind the leg without a seam;
+// y: smooth (trouVN) or one row, constant across it (trouVR)); k: seed
+float trouVN(vec2 x, float per, float k){
+  vec2 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
+  float i0 = mod(i.x, per), i1 = mod(i.x + 1.0, per);
+  return mix(mix(trouHash(vec3(i0, i.y, k)), trouHash(vec3(i1, i.y, k)), f.x), mix(trouHash(vec3(i0, i.y + 1.0, k)), trouHash(vec3(i1, i.y + 1.0, k)), f.x), f.y);
+}
+float trouVR(float x, float row, float per, float k){
+  x += 7.0 * trouHash(vec3(row, k, 1.0));   // each row starts its cells somewhere else (staggered dashes, not columns)
+  float i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
+  return mix(trouHash(vec3(mod(i, per), row, k)), trouHash(vec3(mod(i + 1.0, per), row, k)), f);
+}
+// camo field at turn 'a' round the leg and height y (n cells per turn, rows h tall; seed s): big smooth clusters (half as many cells round
+// the leg, ~2.6 rows tall) plus a field that is constant along each row - thresholded, the patches are stacks of horizontal dashes with
+// flat tops and bottoms (the sheet's chunky pixel clusters), not round blobs
+float trouCamo(float a, float y, float n, float h, float s){
+  float nc = max(2.0, floor(0.5 * n + 0.5)), r = floor(y / h);
+  return 0.65 * trouVN(vec2(a * nc, y / (2.6 * h)), nc, s) + 0.35 * trouVR(a * n, r, n, s + 1.0);
+}
+// The strokes take their 1 - 2 px width from the screen gradient of their distance field. That comes from the chain rule on the screen
+// derivatives of the bind position (taken at the top of main(), in uniform control flow: dFdx inside the per-pixel class branch is
+// undefined on real GPUs), not from dFdx here - which also keeps it exact across the leg chart's angle wrap behind the leg.
+// one stroke along the zero line of d (signed distance, metres; g = its screen gradient; w = core width in pixels): x = dark core, y = the
+// lip pixel next to it toward the key light (screen space, upper left), z = near (the core, the lip and a pixel either side: kept clear of
+// the camo at sprite size)
+vec3 trouStroke(float d, vec2 g, float w, float on){
+  float fw = max(abs(g.x) + abs(g.y), 1e-7), x = d / fw * (dot(g, uL.xy) < 0.0 ? -1.0 : 1.0), hw = 0.5 * w;
+  return on * vec3(step(abs(x), hw), step(hw, x) * step(x, hw + 1.0), step(abs(x - 0.5), hw + 1.5));
+}
+// periodic strokes, lines at the integers of s (gs: its screen gradient, w: core width in pixels): (dark, lip, index of the line this pixel
+// is the core of, index of the line it is the lip of). The lip is the pixel next to a core toward the light, so it holds however close
+// the lines are packed.
+vec4 trouRings(float s, vec2 gs, float w){
+  float fw = max(abs(gs.x) + abs(gs.y), 1e-7), sl = s - (dot(gs, uL.xy) < 0.0 ? -fw : fw) * (0.5 * w + 0.5);   // sl: s just past the core, away from the light
+  float k0 = floor(s + 0.5), k1 = floor(sl + 0.5);
+  return vec4(step(abs(s - k0), 0.5 * w * fw), step(abs(sl - k1), 0.5 * fw), k0, k1);
+}
+// stroke along a-b in the (u, y) leg chart, bowed by 'bend' (metres) at its middle; J: the chart's screen Jacobian (columns: the screen
+// gradients of u and y)
+vec3 trouArc(vec2 a, vec2 b, float bend, vec2 x, mat2 J, float w, float on){
+  vec2 e = b - a, n = normalize(vec2(-e.y, e.x)); float ee = dot(e, e), t = dot(x - a, e) / ee, d = dot(x - a, n) - bend * 4.0 * t * (1.0 - t);
+  return trouStroke(d, J * (n - bend * 4.0 * (1.0 - 2.0 * t) * e / ee), w, on * step(0.0, t) * step(t, 1.0));
+}
+// p: bind position, px / py: its screen derivatives (dFdx / dFdy, from main); cls: the class, switched to the coat's for the sprite-size
+// fold cores on the shadow plane (the coat ramp's black, the owner's ink line: the trousers' own ramp stops at coatD) - so main() calls
+// this after any other garment's detail that keys on the coat's class
+float trouDetail(vec3 p, vec3 px, vec3 py, float hd, float tc0, float t, inout float cls){   // returns the new tone t
+  // hs: HD styling (half steps, the full set of folds) from ~125 px up; below it the sprite styling holds (whole palette steps, few
+  // strokes), so the mid sizes do not get every fine stroke at once
+  float fine = smoothstep(0.6, 0.9, hd), hs = step(0.5, fine), side = p.x > 0.0 ? 1.0 : -1.0, L = step(0.0, p.x), w2 = 1.0 + hs;
+  // leg chart: th = angle around the leg axis (hip - knee - ankle, as legD) from the front, + toward the outer side; u = arc length.
+  // Its screen gradients by the chain rule: gth (the axis slides sideways with height: slope sa), gu, gy; J = the chart's Jacobian
+  vec3 q = vec3(abs(p.x), p.y, p.z);
+  bool up = q.y > 0.578;
+  vec2 ax = up ? mix(vec2(0.174, 0.011), vec2(0.125, 0.006), clamp((q.y - 0.578) / 0.379, 0.0, 1.0))
+               : mix(vec2(0.21, -0.01), vec2(0.174, 0.011), clamp((q.y - 0.155) / 0.423, 0.0, 1.0));
+  vec2 sa = (up ? vec2(-0.049, -0.005) / 0.379 : vec2(-0.036, 0.021) / 0.423) * step(0.155, q.y) * step(q.y, 0.957);
+  float X = q.x - ax.x, Z = q.z - ax.y, th = atan(X, Z), u = th * 0.075;
+  vec2 gy = vec2(px.y, py.y), gx = side * vec2(px.x, py.x) - sa.x * gy, gz = vec2(px.z, py.z) - sa.y * gy;
+  vec2 gth = (Z * gx - X * gz) / max(X * X + Z * Z, 1e-6), gu = 0.075 * gth;
+  mat2 J = mat2(gu, gy);
+  vec2 uy = vec2(u, q.y);
+  // camo: a dark field and a light one. Sprite size: dashes ~4 px long, rows ~1.7 px tall (cells round the leg rounded to a whole number
+  // per turn); HD: dashes ~7 cm, rows ~1.7 cm (the sheet's pixel: ~2.5 px at 300 px), clusters ~16 x 4.5 cm, and the field is looked up
+  // once per row-high block of the chart, so the patches are built of the sheet's big square pixels (stepped edges, no smooth blobs).
+  // HD, below the knee guards (y 0.408, a block boundary): blocks two rows tall (~5 px), as the sheet's chunky clusters on the calves -
+  // one-row streaks on the shins and the stacked rolls read as a knitted pinstripe. bz: the bloused band itself (below y 0.34)
+  float cn = floor(mix(0.471 / (4.2 * uPxM), 7.0, fine) + 0.5), ch = mix(1.7 * uPxM, 0.017, fine), ca = th / 6.2832, cy = q.y;
+  float bz = hs * step(q.y, 0.34), cb = ch * (1.0 + hs * step(q.y, 0.408));   // cb: the row height
+  if (hs > 0.5){ float nb = floor(0.471 / ch + 0.5); ca = (floor(ca * nb) + 0.5) / nb; cy = (floor(cy / cb) + 0.5) * cb; }
+  float vd = trouCamo(ca, cy, cn, cb, 3.7 * side), vl = trouCamo(ca + 0.37, cy + 0.5 * cb, cn, cb, 3.7 * side + 11.0);
+  vec3 st = vec3(0.0);   // (dark, lip, near) of all strokes
+  // bloused over the boots: stacked rolls above the boot tops, wavy round the leg and broken in places (staggered from roll to roll, so
+  // they never read as even stripes), 6 cm apart. Sprite size: 2 crease lines from y 0.23 (a gap a third of the way round); HD: the
+  // creases at y ~0.25 / 0.31 part three puffs (the boot-top roll, a middle one, the shin above), shaded in the tone term below
+  float s = (q.y - mix(0.17, 0.19, hs)) / 0.06 + mix(0.3, 0.2, hs) * sin(2.0 * th + side);
+  vec2 gs = gy / 0.06 + mix(0.6, 0.4, hs) * cos(2.0 * th + side) * gth; vec4 r = trouRings(s, gs, w2);
+  vec2 km = step(1.0, r.zw) * step(r.zw, vec2(2.0)) * step(-0.5, sin(th + 2.1 * r.zw + 1.7 * side)) * (1.0 - hs);
+  st = max(st, vec3(r.xy * km, step(abs(s - r.z), (0.5 * w2 + 2.0) * (abs(gs.x) + abs(gs.y))) * km.x));
+  // creases behind the knee (back half of the leg, curving up toward the sides): the middle one at every size (2 px at HD), one either
+  // side of it at HD
+  float kh = mix(0.1, 0.035, fine), ck = cos(th), sk = (q.y - 0.5 - 0.025 * (1.0 + ck)) / kh + 1.0, kb = step(ck, -0.3);
+  vec2 gk = (gy + 0.025 * sin(th) * gth) / kh;
+  r = trouRings(sk, gk, w2); km = step(abs(r.zw - 1.0), vec2(0.1)) * kb;
+  st = max(st, vec3(r.xy * km, step(abs(sk - 1.0), (0.5 * w2 + 2.0) * (abs(gk.x) + abs(gk.y))) * kb));
+  r = trouRings(sk, gk, 1.0); km = step(0.9, abs(r.zw - 1.0)) * step(abs(r.zw - 1.0), vec2(1.1)) * kb * hs;
+  st = max(st, vec3(r.xy * km, 0.0));
+  // groin: two creases per leg, clearly unlike each other (no drawn starburst): a long one from beside the crotch up and out toward the
+  // hip (2 px at HD), a shorter pull fold from the crotch down and out across the thigh. They start a third of the way out from the fly
+  // and differ leg to leg (heights, angles, lengths), so they read as cloth pulls, not a fishbone
+  st = max(st, trouArc(mix(vec2(-0.065, 0.812), vec2(-0.06, 0.79), L), mix(vec2(0.025, 0.9), vec2(0.03, 0.852), L), 0.008, uy, J, w2, 1.0));
+  st = max(st, trouArc(mix(vec2(-0.07, 0.775), vec2(-0.075, 0.75), L), mix(vec2(-0.012, 0.73), vec2(-0.025, 0.7), L), -0.006 * side, uy, J, 1.0, 1.0));
+  // above the knee (just over the knee guard): the cloth bunches toward the inner side (two short creases, HD: at sprite size a level
+  // 4 px stroke would read as one more camo dash)
+  st = max(st, trouArc(vec2(-0.085, 0.607), vec2(-0.02, 0.625), 0.004, uy, J, 1.0, hs));
+  st = max(st, trouArc(vec2(-0.075, 0.64), vec2(-0.03, 0.655), 0.003, uy, J, 1.0, hs));
+  // fly: a line beside the centre front, belt to crotch
+  st = max(st, trouStroke(p.x - 0.012, vec2(px.x, py.x), 1.0, step(0.85, p.y) * step(p.y, 0.985) * step(0.0, p.z)));
+  // seams (HD): outer side seam, hip to boot; inseam, crotch to boot
+  st = max(st, trouStroke(u - 0.1178, gu, 1.0, hs * step(q.y, 0.95)));
+  st = max(st, trouStroke(u + 0.1178, gu, 1.0, hs * step(q.y, 0.8)));
+  // cargo pocket on the front of the thigh. HD: a raised patch - dark seam all round, a lit band inside the edges that face the light,
+  // a 1 px cast shadow outside the others - and a snap; turned more than ~37 degrees from the view (the far thigh in a 3/4 view: the
+  // chart's arc length foreshortened by more than 1 / 0.8) only the seam and the flap line stay, so it does not crumble into a squiggle of
+  // light pixels. Every size: the flap's lower edge (dark line, lit lip); at sprite size the pocket is plain cloth (no camo, no snap: a
+  // lone pixel would blink in the walk), so its 3 - 4 px read as a patch
+  vec2 pc = uy - vec2(0.03, 0.69), pa = abs(pc) - vec2(0.033, 0.06);
+  float pb = max(pa.x, pa.y); vec2 pg = pa.x > pa.y ? sign(pc.x) * gu : sign(pc.y) * gy;
+  float pp = pb / max(abs(pg.x) + abs(pg.y), 1e-7), pl = step(0.0, dot(pg, uL.xy));   // pp: pixels outside the pocket's edge
+  float pf = hs * step(0.8, uPxM * inversesqrt(max(dot(gu, gu), 1e-14)));               // HD, the pocket faces the view
+  st = max(st, hs * vec3(max(step(abs(pp), 0.5), step(0.5, pp) * step(pp, 1.5) * (1.0 - pl) * pf), step(-1.5, pp) * step(pp, -0.5) * pl * pf, 0.0));
+  st = max(st, trouArc(vec2(-0.003, 0.71), vec2(0.063, 0.71), 0.0, uy, J, 1.0, 1.0));
+  if (pf > 0.5 && length(pc - vec2(0.0, 0.038)) < max(0.0065, 0.55 * uPxM)) st = vec3(0.0, 1.0, 0.0);
+  // left as they are: the coat's shell where the class takes it in (the outer side of the hip, and of the thigh down to the hem, standing
+  // off the leg) ...
+  float ld = legD(p);
+  if ((th > 0.7 && (p.y > 0.8 || (ld > 0.1 && p.y > 0.42))) || (ld > 0.112 && th > -0.3)) return t;
+  // ... and the front of the knee, where only the HD value shift applies: the knee guards' footprint (cap ~11 x 12 cm over the knee, the
+  // lame under it: y ~0.43 - 0.6), a rounded square so no plain halo shows round the plates
+  float tl = t - hs * (1.0 - bz) * clamp(t - 1.5, 0.0, 0.5);   // HD: the plain lit cloth half a step down, so the light patches and lips fit
+                                                               // under the cap (not on the bloused band: its lit bulge keeps the base tone)
+  vec2 kq = vec2(abs(p.x) - 0.175, p.y - 0.515) / vec2(0.065, 0.088); kq *= kq;
+  if (dot(kq, kq) < 1.0 && p.z > 0.02) return tl;
+  float b = floor(t + 0.5);
+  if (hs > 0.5){
+    // HD camo tone: dark clusters (half a step, a whole step at their cores) and light ones (half a step, toward the light a little more
+    // often, so the lit side of the leg keeps its form); on the bloused band fewer, dark ones only - the puffs' lit tops are the light there
+    float c = vd > 0.67 + 0.07 * bz ? -1.0 : (vd > 0.56 + 0.08 * bz ? -0.5 : (vl > 0.62 + 0.04 * step(tc0, 1.5) + bz ? 0.5 : 0.0));
+    if (pp > 0.5 && pp < 3.0) c = min(c, 0.0);   // no light patch hugging the pocket (its lit edges stay the only light there)
+    // dark core: a step below the cloth round it; lip: half a step up; the flap stands half a step proud of the pocket
+    float o = st.x > 0.5 ? min(c, 0.0) - 1.0 : (st.y > 0.5 ? max(c, 0.0) + 0.5 : c);
+    o += 0.5 * pf * step(pb, 0.0) * step(0.02, pc.y);
+    o *= mix(1.0, 0.5, 1.0 - step(1.0, tc0));   // half strength in the deep shadow plane
+    // bloused band, the puffs: under each crease the top of the roll below it catches the light (a lit band 2 px tall over the camo, up
+    // to half a step past the cap: the base's lit bulge), the roll above it turns away (a px of shade over the crease), the crease itself
+    // 2 px; a broken crease merges the two rolls there (no band, no shade either)
+    float fs = max(abs(gs.x) + abs(gs.y), 1e-7), k1 = ceil(s), da = (k1 - s) / fs, db = (s - k1 + 1.0) / fs;
+    float on1 = step(1.0, k1) * step(k1, 2.0) * step(-0.35, sin(2.0 * th + 2.3 * k1 + 1.7 * side)), on0 = step(2.0, k1) * step(k1, 3.0) * step(-0.35, sin(2.0 * th + 2.3 * k1 - 2.3 + 1.7 * side));
+    if ((da < 1.0 && on1 > 0.5) || (db < 1.0 && on0 > 0.5)) o = min(c, 0.0) - 1.0;
+    else if (on1 > 0.5 && da < 3.0) return min(tl + max(o, 0.0) + 0.5, max(tl, 2.5));
+    else if (on0 > 0.5 && db < 2.0) o -= 0.5;
+    // on the continuous tone (quantised to half steps later), never above the cap
+    return o > 0.0 ? min(tl + o, max(tl, 2.0)) : tl + o;
+  }
+  // Sprite size: the owner's horizontal hatching. Rows exactly one pixel tall every ~2.25 px (lines at the integers of q.y / hp, so a row
+  // moves as a whole and never breaks up), cut into dashes ~3 px long, staggered from row to row: mid-tone dashes on the shadow plane
+  // (about a third of it), dark ones on the lit plane (a sixth or so), denser in the camo's clusters; none round a stroke or on the
+  // pocket. Whole
+  // ramp steps from the tone the ramp would pick, so a dash is exactly one palette step whatever the dirt / cavity terms left; the
+  // trousers' two darkest steps are the same colour, so a step up from either lands on the mid tone, and never past it (no coatL: that is
+  // the knee guards' tone)
+  float hp = 2.25 * uPxM, hn = floor(0.471 / (3.0 * uPxM) + 0.5);
+  vec4 hr = trouRings(q.y / hp, gy / hp, 1.0);
+  float hx = th / 6.2832 * hn + 7.0 * trouHash(vec3(hr.z, side, 2.0)), hh = trouHash(vec3(mod(floor(hx), hn), hr.z, 5.0 + side));
+  float c = hr.x * (1.0 - st.z) * step(0.0, pb) * (b > 1.5 ? -step(0.72 - 0.9 * (vd - 0.5), hh) : step(0.32 - 0.9 * (vl - 0.5), hh));
+  // fold cores: on the shadow plane the owner's black ink line (the coat ramp's black: one palette step below coatD); a step below the
+  // cloth on the lit plane. Lips: a step up (on the shadow plane the mid tone, a clear light line along the black)
+  if (st.x > 0.5 && b < 1.5){ cls = ${CLS.coat}.0; return 0.0; }
+  float o = st.x > 0.5 ? -1.0 : (st.y > 0.5 ? 1.0 : c);
+  return o > 0.0 ? min(max(b, 1.0) + o, max(b, 2.0)) : b + o;
+}
+// ---------- Shirt + belt: hand-pixelled detail in the coat's open front (bind pose vP, so it rides the body and never swims) ----------
+// The scan paints the vest as one flat black area and the belt as a blurred band; both are redrawn here as pixel-art shapes:
+//  - shirt (the sculpted compression top of the canonical sheet): a collar band; two big pec plates whose lower edge dips to the
+//    sternum and curves up to the armpits; under them three rows of smaller abs blocks (from ~110 px; two rows from ~80 px) split
+//    by the centre zip (a metal pull under the collar at HD), their columns narrowing toward the belt; long oblique side panels
+//    toward the ribs, half a step darker than the abs at HD, split by a bevelled seam. Seams are black 1 px lines; the pec plates
+//    cast a 2 px shadow on the abs below. From ~170 px every panel face is a low dome lit by the key light and posterised: its
+//    upper, light-facing part a step lighter as a clump (a half-step ring round it), its lower / far part half a step down; the
+//    pec plates sit half a step above the abs, so they read as the big shapes (smaller: flat faces, a lit edge under each seam).
+//    Where the torso turns away the vertical seams (abs columns, side seams) would crowd into a ladder: shirtSeams() (JS)
+//    measures their spacing on screen per frame and side (low-passed, with a hysteresis), and a seam that comes within ~4 px of
+//    its neighbour is not drawn at all (the panels merge). It is decided for the whole seam, never per pixel, so a column always
+//    runs from the pec line to the belt or is gone, and a turned chest keeps the zip, the pec line and the abs rows only.
+//    At sprite size the faces are flat black: a 1 px lit stroke beside the zip, the collar and the pec line (+ one abs row from
+//    ~80 px) and a small lit clump on each pec, never darker than coatD, so the shadow side keeps them too (nothing blinks in
+//    the walk).
+//  - belt (the texture's band, 1.02 - 1.09 m): a near-black strap with a lit top edge; the sheet's plate buckle in the band's
+//    lower part, clear of the waist crease that folds over the band's top in the walk: a solid metal plate with a dark outline,
+//    its top row lightest, its upper half lit, one darker groove row across the middle (from ~150 px); every buckle size and tone
+//    fixed in bind metres and output pixels, never taken from the per-triangle Jacobian or the light band (the crease's squashed
+//    triangles changed them frame to frame; a frame buckle's opening read as a letter at these sizes). The strap's end out of
+//    the buckle (a plain layer, only its lower edge shaded); two trouser-cloth loops each side (the outer one, like the seams,
+//    per frame and side).
+// Seam distances are measured in screen pixels through the inverse of the bind -> screen Jacobian, so lines stay 1 px wide and gaps
+// stay open where the surface is foreshortened. shirtBelt() runs with the class refinements (re-classes the belt parts, cleans the
+// coat specks out of the shirt), shirtBeltTone() on the final light band; the two share the globals below.
+float gSB = 0.0;               // part: 0 none, 1 shirt, 2 belt strap (+ its end), 3 metal (buckle, zip pull), 4 belt loop
+vec4 gSBe = vec4(9.0);         // nearest seam / part edge: x distance (px); y kind: 0 bevel only, 1 dark line, 2 dark line whose lit
+                               // stroke stays at sprite size, 3 the pec line (2 + the shadow under it); z face modelling (ramp steps;
+                               // metal, on 1.5: 2 / 1.5 / -0.5 / 0.5 the buckle's top row / upper half / groove / lower half,
+                               // 2 the zip pull);
+                               // w 1: the seam lies above the fragment
+vec3 gSBo = vec3(0.0);         // view-space direction from the fragment toward that seam (in the surface)
+mat2 gSBj = mat2(1.0);         // bind (x, y) metres -> screen px
+float gSBx = 1.0;              // x mirror of the seam coordinates (the shirt's seams are laid out on |x|)
+// the straight vertical seams (SB_LINES, also probed by shirtSeams()): the abs column and the oblique side seam
+const vec2 SB_COL = vec2(${SB_LINES.col}), SB_SIDE = vec2(${SB_LINES.side});
+float sbPecY(float ax){ return 1.266 + ax * (0.25 + 2.5 * ax); }   // pec line: low at the sternum, curving up to the armpit
+// top end of a straight seam where it meets the pec line: 2.5 x^2 + (0.25 - 1/b) x + 0.174 + a/b = 0, the root nearest x = a
+vec2 sbPecEnd(vec2 ab){
+  float B = 0.25 - 1.0 / ab.y, C = 0.174 + ab.x / ab.y, x = (-B - sign(ab.y) * sqrt(B * B - 10.0 * C)) / 5.0;
+  return vec2(x, 1.092 + (x - ab.x) / ab.y);
+}
+// nearest seam so far: e.x distance (px), e.y kind, e.zw unit direction from the fragment toward the seam (bind x, y)
+void sbSeg(inout vec4 e, vec2 p, vec2 a, vec2 b, float w){
+  vec2 ab = b - a, d = a + ab * clamp(dot(p - a, ab) / dot(ab, ab), 0.0, 1.0) - p; d.x *= gSBx; float l = length(gSBj * d);
+  if (l < e.x) e = vec4(l, w, d / max(length(d), 1e-6));
+}
+// seam along the curve y = f (slope df at the fragment's x): the vertical offset taken along the curve's normal
+void sbCurve(inout vec4 e, vec2 p, float f, float df, float w){
+  vec2 d = vec2(-df * gSBx, 1.0) * (f - p.y) / (1.0 + df * df); float l = length(gSBj * d);
+  if (l < e.x) e = vec4(l, w, d / max(length(d), 1e-6));
+}
+// the rim of a box (centre c, half size h) seen from inside, as a seam half a pixel in from its edge: a 1 px outline ring
+void sbBox(inout vec4 e, vec2 p, vec2 c, vec2 h, float w){
+  vec2 q = (h - abs(p - c)) * vec2(length(gSBj[0]), length(gSBj[1])), s = sign(p - c);   // px to the x / y edges
+  float l = min(q.x, q.y); vec2 dr = q.x < q.y ? vec2(s.x, 0.0) : vec2(0.0, s.y);
+  if (l < 0.5) dr = -dr;   // on the ring's outer half the seam centre lies inward
+  l = abs(l - 0.5); if (l < e.x) e = vec4(l, w, dr);
+}
+void shirtBelt(inout float cls, inout float off, inout float dw){
+  // screen derivatives of the view and bind positions (taken before any branch)
+  vec3 q0 = dFdx(vV), q1 = dFdy(vV); vec2 s0 = dFdx(vP.xy), s1 = dFdy(vP.xy);
+  gSB = 0.0; gSBx = 1.0;
+  if (!gl_FrontFacing || vP.z < 0.0 || vP.y < 1.006 || vP.y > 1.53) return;
+  bool fabric = cls == ${CLS.coat}.0 || cls == ${CLS.shirt}.0 || cls == ${CLS.trou}.0;
+  if (!fabric) return;
+  // bind -> screen Jacobian (its inverse measures every distance in px), the view-space tangents along bind +x / +y
+  float det = s0.x * s1.y - s0.y * s1.x; det = (det < 0.0 ? -1.0 : 1.0) * max(abs(det), 1e-12);
+  vec3 tx = (q0 * s1.y - q1 * s0.y) / det, ty = (q1 * s0.x - q0 * s1.x) / det;
+  gSBj = mat2(s1.y, -s0.y, -s1.x, s0.x) / det;
+  vec2 pxm = 1.0 / max(vec2(length(gSBj[0]), length(gSBj[1])), vec2(1.0));   // metres per px along bind x / y
+  float x = vP.x, y = vP.y, ax = abs(x), sx = x < 0.0 ? -1.0 : 1.0;
+  vec3 vs = sx < 0.0 ? uSBv[0] : uSBv[1];   // this side, this frame (shirtSeams): abs column, side seam, outer belt loop drawn
+  // size switches on the output pixel size uPxM (metres per px; the character is ~1.95 m tall: 0.0065 = 300 px, 0.0105 = 185 px,
+  // 0.0115 = 170 px, 0.013 = 150 px, 0.0175 = 111 px, 0.025 = 78 px)
+  bool fine = uPxM < 0.013;          // part outlines (buckle, loops), the buckle's groove, the zip pull
+  float dome = uPxM < 0.0115 ? 1.0 : 0.0;   // modelled panel faces, the darker side panels
+  float lw = fine ? 1.0 : 0.0, face = 0.0;
+  vec4 e = vec4(1e3, 0.0, 0.0, 0.0);
+  // belt band (front opening; the coat's front edges cover its ends)
+  if (y < 1.102 && ax < 0.168){
+    // buckle (centre (0, 1.05), half size bh: 1.028 - 1.072 m, |x| < 3.2 cm, the coarse triangles there that keep flat in the
+    // walk; at sprite size at least ~2.6 px across, a block that reads), measured in output px from uPxM (x a little wider, so
+    // its outline stays a whole pixel at a 3/4 turn)
+    vec2 bpx = uPxM * vec2(1.3, 1.0), bh = max(vec2(0.032, 0.022), 1.3 * vec2(uPxM)), bp = vec2(x, y - 1.05);   // bpx: bind metres per px
+    vec2 bo = (abs(bp) - bh) / bpx;                                                      // px outside the buckle (x / y)
+    // loops: two each side, at least a pixel wide; the outer one only while it stays ~4 px clear of the inner one (per side and
+    // frame, shirtSeams)
+    float lx = ax < 0.1365 ? 0.115 : 0.158, lh = max(0.0105, 0.5 * pxm.x);
+    bool loop = abs(ax - lx) < lh && abs(y - 1.056) < 0.046 && (lx < 0.12 || vs.z > 0.5);
+    // the strap's end out of the buckle: a layer on the strap from the buckle's outline to a rounded end
+    bool tip = x > bh.x && x < 0.082 && abs(bp.y) < 0.019 && length(vec2(max(x - 0.063, 0.0), bp.y)) < 0.019;
+    if (max(bo.x, bo.y) < 0.0){
+      gSB = 3.0; cls = ${CLS.metal}.0; off = uOff + 0.5;
+      gSBj = mat2(1.0 / bpx.x, 0.0, 0.0, 1.0 / bpx.y);   // the plate's rim in the same fixed px
+      sbBox(e, bp, vec2(0.0), bh, 0.0);
+      // its shading laid out in bind space only (no light-facing rim test: the walk's sheared triangles flipped which rim pixels
+      // caught the light): the top row lightest, the lit upper half, the 1 px groove, the plain lower half
+      face = bp.y > bh.y - bpx.y ? 2.0 : (bp.y > 0.5 * bpx.y ? 1.5 : (fine && bp.y > -0.5 * bpx.y ? -0.5 : 0.5));
+    } else if (loop){
+      gSB = 4.0; cls = ${CLS.trou}.0; off = uOff + 0.5;
+      sbBox(e, vec2(x, y), vec2(sx * lx, 1.056), vec2(lh, 0.046), lw);
+    } else if (y > 1.02 && y < 1.092){
+      gSB = 2.0; cls = ${CLS.shirt}.0; off = uOff - 0.5;                  // a dark band (HD: one step up, shirtBeltTone)
+      if (fine && max(bo.x, bo.y) < 1.0) e = vec4(0.0, 1.0, 0.0, 0.0);    // a dark 1 px outline round the buckle
+      else if (tip){
+        // no outline and no lit edge (a second outlined box beside the buckle read as another buckle): only the shaded lower edge
+        gSBj = mat2(1.0 / bpx.x, 0.0, 0.0, 1.0 / bpx.y);
+        sbBox(e, vec2(x, y), vec2(0.5 * (bh.x + 0.082), 1.05), vec2(0.5 * (0.082 - bh.x), 0.019), 0.0); face = -1.0;
+      }
+      else sbBox(e, vec2(x, y), vec2(0.0, 1.056), vec2(1.0, 0.036), 1.0);  // top / bottom edge of the strap
+    }
+  }
+  // shirt: well inside the opening (2.7 cm in from the coat's front edges, which widen toward the belt) the coat specks become shirt
+  // too; the margin keeps clear of the painted opening's edge, where the coat draws its own lapel edge
+  float xo = 0.095 + 0.06 * smoothstep(1.32, 1.1, y) - 0.027;
+  if (gSB < 0.5 && y > 1.092 && (cls == ${CLS.shirt}.0 || (cls == ${CLS.coat}.0 && ax < xo && y < 1.45))){
+    gSB = 1.0; cls = ${CLS.shirt}.0; off = uOff; dw = 1.0; gSBx = sx;
+    vec2 p = vec2(ax, y);
+    float yP = sbPecY(ax), yC = 1.462 + ax * (0.03 + 0.6 * ax);                     // pec line, collar seam
+    float xc = SB_COL.x + SB_COL.y * (y - 1.092), xs = SB_SIDE.x + SB_SIDE.y * (y - 1.092);   // abs column, side seam
+    float vis = vs.x, visS = vs.y;   // drawn this frame (whole seams, never part way)
+    // abs rows: two (three rows of blocks) from ~110 px - at HD the top one a wedge under the pec V, at ~128 px (the sheet's own
+    // density) three even rows of 3-4 px - one from ~80 px, none below
+    float r1 = uPxM < 0.011 ? 1.232 : (uPxM < 0.0175 ? 1.214 : (uPxM < 0.025 ? 1.19 : 0.0)), r2 = uPxM < 0.011 ? 1.163 : (uPxM < 0.0175 ? 1.153 : 0.0);
+    sbSeg(e, p, vec2(0.0, 1.092), vec2(0.0, 1.53), 2.0);                      // centre zip
+    sbCurve(e, p, yC, 0.03 + 1.2 * ax, 2.0);                                   // collar band
+    sbCurve(e, p, yP, 0.25 + 5.0 * ax, 3.0);                                   // pec line
+    sbSeg(e, p, vec2(0.0, 1.092), vec2(0.2, 1.092), 0.0);                      // hem on the belt (the strap draws the line)
+    if (r1 > 0.0) sbSeg(e, p, vec2(0.0, r1), vec2(SB_COL.x + SB_COL.y * (r1 - 1.092), r1), 2.0);
+    if (r2 > 0.0) sbSeg(e, p, vec2(0.0, r2), vec2(SB_COL.x + SB_COL.y * (r2 - 1.092), r2), 1.0);
+    if (vis > 0.5) sbSeg(e, p, vec2(SB_COL.x, 1.092), sbPecEnd(SB_COL), 1.0);     // abs column, up to the pec line
+    // oblique side seam toward the ribs: a bevel only (its lit edge), no dark line - the six-pack keeps the only grid of lines
+    // (with it, zip + columns + side seams + rows made a window-pane lattice on a turned torso)
+    if (visS > 0.5) sbSeg(e, p, vec2(SB_SIDE.x, 1.092), sbPecEnd(SB_SIDE), 0.0);
+    // face modelling: the panel under the fragment as a low dome, uv = (across: -1 inner .. 1 outer, up: -1 .. 1)
+    vec2 uv; float lift = 0.0;
+    if (y > yC) uv = vec2(0.0, (y - yC) / 0.0175 - 1.0);                                          // collar band
+    else if (y > yP){ uv = vec2(ax / 0.065 - 1.0, (y - yP) / (1.37 - yP) * 2.0 - 1.0); lift = 0.5; }   // pec plate (its part under the sternum strap)
+    else if (ax < xc){                                                                            // abs block
+      float yt = yP, yb = 1.092;
+      if (r1 > 0.0){ if (y > r1) yb = r1; else yt = r1; }
+      if (r2 > 0.0 && y < r1){ if (y > r2) yb = r2; else yt = r2; }
+      uv = vec2(vis * (ax / xc * 2.0 - 1.0), (y - yb) / (yt - yb) * 2.0 - 1.0);
+    }
+    else if (ax < xs || visS < 0.5) uv = vec2(visS * ((ax - xc) / (xs - xc) * 2.0 - 1.0), (y - 1.092) / (yP - 1.092) * 2.0 - 1.0);   // side panel
+    else uv = vec2(min((ax - xs) / 0.0125 - 1.0, 1.0), (y - 1.092) / (yP - 1.092) * 2.0 - 1.0);                          // rib panel
+    uv = clamp(uv, -1.0, 1.0);
+    float s = dot(tx * (uv.x * abs(uv.x) * sx) + ty * (uv.y * abs(uv.y)), uL), st = s > 0.45 ? 1.0 : (s > 0.22 ? 0.5 : (s < -0.3 ? -0.5 : 0.0));
+    // the domes from ~170 px; smaller, only the pec plates' lit clump stays (a step up: a small lighter patch on each pec)
+    face = lift + (dome > 0.5 ? st : (lift > 0.0 && st > 0.75 ? 1.0 : 0.0));
+    // the side panels (the obliques) half a step below the abs (HD; one flat tone, the earlier rib knit made a lattice with the
+    // abs grid), only while the column between them is drawn (no tone step without its seam)
+    if (y < yP && ax > xc) face -= 0.5 * dome * vis;
+    if (fine && ax < max(0.004, 0.6 * pxm.x) && y > 1.426 && y < 1.458){                         // zip pull under the collar (HD): metal
+      gSB = 3.0; cls = ${CLS.metal}.0; off = uOff + 0.5; gSBx = 1.0; face = 2.0;
+      e = vec4(1e3, 0.0, 0.0, 0.0); sbBox(e, vec2(x, y), vec2(0.0, 1.442), vec2(max(0.004, 0.6 * pxm.x), 0.016), 0.0);
+    }
+  }
+  if (gSB < 0.5) return;
+  // a seam exactly between two pixel centres (the zip in the front view) goes to one side, not to both or to neither
+  gSBe = vec4(e.x - 0.02 * (e.z + 0.5 * e.w), e.y, face, e.w > 0.5 ? 1.0 : 0.0);
+  vec3 o = tx * e.z + ty * e.w; float ol = length(o);
+  gSBo = ol > 1e-9 ? o / ol : vec3(0.0);
+}
+// tone of the shirt / belt parts on top of the light band: dark seam lines, modelled panel faces, lit strokes, the buckle's metal
+float shirtBeltTone(float t){
+  if (gSB < 0.5) return t;
+  float k = gSBe.x, q = dot(gSBo, uL);    // px to the seam; q > 0: the seam lies toward the light (this side of it catches the light)
+  // the seam's own pixel and the one pixel beside it on the light's side (a bevel-only edge: its outermost pixel)
+  bool line = gSBe.y > 0.5 && k < 0.5, lit = q > 0.15 && (gSBe.y > 0.5 ? k >= 0.5 && k < 1.5 : k < 1.0);
+  if (gHd < 0.5){
+    // sprite size: flat black faces; the 1 px lit stroke beside the kept seams and the pec plates' lit clump, never darker than
+    // coatD (so the shadow side keeps them); the buckle a metal block, its top row the light metal, the rest mid
+    if (gSB < 1.5){ if ((lit && gSBe.y > 1.5) || gSBe.z > 1.25) t = max(t + 1.0, 2.0); }
+    else if (gSB > 2.5 && gSB < 3.5) t = 1.5 + 1.5 * gSBe.z;
+    else if (lit && gSBe.z > -0.5) t += 1.0;      // belt: the strap's lit top edge, the loops' lit side
+  } else if (gSB < 1.5){
+    // HD vest: the faces modelled (the HD ramp keeps its black for the lines and the shadows: the faces sit on its index 2); a lit
+    // edge where the dome adds nothing (mid sizes, merged panels); a 2 px shadow under the pec plates (1 px at mid sizes)
+    t += gSBe.z + (lit && gSBe.z < 0.25 ? 0.5 : 0.0);
+    if (gSBe.y > 2.5 && gSBe.w > 0.5 && k < (uPxM < 0.011 ? 3.0 : 2.0)) t = min(t, 1.0);
+  }
+  else if (gSB > 2.5 && gSB < 3.5){
+    // metal (buckle plate, zip pull): its own fixed tones (shirtBelt) on any side - the light band of the crumpled triangles
+    // under it (rim, cavity, folds) only made stray light / dark pixels flicker on it in the walk
+    t = 1.5 + gSBe.z;
+  } else {
+    if (gSB > 1.5 && gSB < 2.5) t = max(t + 1.0, 1.0);                                            // the sheet's dark grey strap
+    t += lit && gSBe.z > -0.5 ? 1.0 : (q < -0.15 && k < 1.0 ? -0.5 : 0.0);                        // belt parts: lit / shaded edges
+  }
+  if (line) t = min(t, 0.0);              // the seam itself: a dark 1 px line
+  return clamp(t, 0.0, 4.0);
+}
 void main(){
   vec3 n = normalize(vN), nS = normalize(vNs); if (!gl_FrontFacing){ n = -n; nS = -nS; }
+  vec3 dPx = dFdx(vP), dPy = dFdy(vP);   // screen derivatives of the bind position, here in uniform control flow (trousers' stroke widths)
   vec3 alb = uUseMap > 0.5 ? texture2D(map, vUv).rgb : uColor;
   float d = dot(n, uL);
   float k;
@@ -272,7 +747,7 @@ void main(){
   else if (uBands > 0.5) k = d > uB.x ? uLv.x : (d > uB.y ? uLv.y : (d > uB.z ? uLv.z : uLv.w));
   else k = mix(uLv.w, uLv.x, clamp(d * 0.5 + 0.5, 0.0, 1.0));
   if (uPalOn > 0.5 && (uUseMat > 0.5 || uCls > -0.5)){
-    float cls = uCls, g = 0.5, off = uOff, dw = 1.0, eyeT = -1.0;
+    float cls = uCls, g = 0.5, off = uOff, dw = 1.0, eyeT = -1.0, rustF = 0.0;
     if (uUseMat > 0.5){
       vec4 m = texture2D(uMat, vUv);                   // r: class/16, g: smoothed value offset within the class, b: smoothed value
       cls = floor(m.r * 16.0 + 0.5); g = m.g;
@@ -282,6 +757,9 @@ void main(){
       if (cls == ${CLS.coat}.0 && torso && m.b < uShirtV) cls = ${CLS.shirt}.0;
       bool headR = vP.y > 1.5 && abs(vP.x) < 0.17, armR = abs(vP.x) > 0.5;
       if ((cls == ${CLS.orange}.0 || cls == ${CLS.eye}.0) && headR) cls = ${CLS.skin}.0;   // warm glow around the eyes: skin (the eye mask below draws the eyes)
+      // the scan's red flecks on the pauldron lip: rust (the box also takes in the collar side of that shoulder - no red texels there
+      // in this texture, but a retextured scan could put some)
+      if (cls == ${CLS.eye}.0 && vP.x > 0.1 && vP.x < 0.42 && vP.y > 1.4 && !headR){ cls = ${CLS.orange}.0; rustF = 1.0; }
       // warm / navy texels outside their body parts (sleeve patch, stray brush strokes) fall back to cloth
       if (cls == ${CLS.skin}.0 && !(headR || armR)) cls = ${CLS.coat}.0;
       if (cls == ${CLS.orange}.0 && !(vP.x > 0.1 && vP.y > 1.3)) cls = ${CLS.coat}.0;
@@ -297,16 +775,13 @@ void main(){
       if (vP.y < 0.2){ cls = ${CLS.boot}.0; off = uOff + uBootOff; dw = 0.0; }   // boots: one clean navy-black material
       // trousers: cloth texels on the inner layer around the leg axes (the coat is the outer shell, open at the front, with a back vent)
       if (cls == ${CLS.coat}.0 && vP.y < (vP.z < -0.03 ? 0.8 : 0.99) && (legD(vP) < 0.133 || (abs(vP.x) < 0.11 && vP.z > -0.05))) cls = ${CLS.trou}.0;
-      // knee pads: front of each knee (the texture paints them as dark camo)
-      vec2 kq = vec2(abs(vP.x) - 0.175, vP.y - 0.49) / vec2(0.07, 0.065);
-      kq *= kq; if ((cls == ${CLS.coat}.0 || cls == ${CLS.trou}.0) && dot(kq, kq) < 1.0 && vP.z > 0.06){ cls = ${CLS.pad}.0; off = uOff;
-        if (dot(kq, kq) > 1.0 - 0.5 * clamp((0.016 - uPxM) / 0.008, 0.0, 1.0)) off -= 1.5; }   // HD: dark pad rim, reads as a strapped plate
       // eyes: a dark bar across the sockets with a red pupil in each (at least one output pixel wide)
       vec2 eq = vec2(abs(vP.x) - 0.042, vP.y - 1.684) / vec2(max(0.03, 1.1 * uPxM), max(0.0085, 0.55 * uPxM));
       if (vP.z > 0.08 && headR && dot(eq, eq) < 1.0){
         vec2 pq = vec2(abs(vP.x) - 0.04, vP.y - 1.684) / vec2(max(0.008, 0.5 * uPxM), max(0.0055, 0.38 * uPxM));
         cls = ${CLS.eye}.0; eyeT = dot(pq, pq) < 1.0 ? 3.0 : 0.6;
       }
+      shirtBelt(cls, off, dw);                         // shirt panels, belt parts (re-classed)
       if (uDbg > 0.5){ vec3 dc[11]; dc[10]=vec3(.6,.6,.2); dc[0]=vec3(.3,.3,.25); dc[1]=vec3(0.); dc[2]=vec3(1.,.7,.5); dc[3]=vec3(.8); dc[4]=vec3(.1,.1,.6);
         dc[5]=vec3(0.,.8,.8); dc[6]=vec3(1.,.5,0.); dc[7]=vec3(1.,0.,0.); dc[8]=vec3(.8,0.,.8); dc[9]=vec3(.5,.9,.5);
         vec3 o = dc[0]; for (int j=0;j<11;j++) if (float(j)==cls) o = dc[j]; if (dw < 0.5) o = vec3(.5,.5,.35); if (uDbg > 1.5){ vec4 mr = texture2D(mrMap, vUv); o = vec3(mr.b * 2.0, 1.0 - mr.g, 0.2) * (uDbg > 2.5 ? 0.0 : 1.0) + (uDbg > 2.5 ? vec3(0.5 + vCav * 0.5, 0.5) : vec3(0.0)); } gl_FragColor = vec4(o,1.0); return; }
@@ -337,6 +812,9 @@ void main(){
       float dO = dot(nd, normalize(uL * 0.5 + vec3(0.0, 1.0, 0.0)));
       t = dO > uBO.x ? 3.0 : (dO > uBO.y ? 2.0 : (dO > uBO.z ? 1.0 : 0.0));
     }
+    // knee guards: painted steel plates take half the light band's contrast, so the frame / boss value step (the material offsets) carries
+    // the plate from every side, like the sprites' one-step pad (sprite size; HD sets a fixed tone per part, see below)
+    if (cls == ${CLS.pad}.0) t = 1.0 + 0.5 * t;
     if (uBands < 0.5) t = clamp((d - uB.z) / (uB.x - uB.z) + 1.0, 0.0, 3.0);
     t += (g - 0.5) * 4.0 * uDetail * cd.x * dw * (1.0 - 0.8 * hd) + cd.y + off;   // painted dirt: half strength or less at HD (no camo mottle)
     if (cls == ${CLS.skin}.0) t -= 0.35 * hd;   // HD faces / arms: room for the brow, nose and cheek shadow planes
@@ -368,39 +846,79 @@ void main(){
       }
       else if (tc < 1.2 && gl_FrontFacing && cls != ${CLS.orange}.0 && dot(nd, uFill) > 0.75) t += 0.5 * hd * uCav.y;
     }
+    if (cls == ${CLS.trou}.0 && gl_FrontFacing) t = trouDetail(vP, dPx, dPy, hd, tc0, t, cls);   // camo, folds, seams, cargo pocket (may hand an ink pixel the coat's class)
     // coat lining (the inside of the shell, back faces): its own dark tone, never the unlit black
     if (!gl_FrontFacing && cloth) t = clamp(t - 1.0, 0.5, 1.0);
     t = clamp(t, 0.0, 3.0);
-    if (nn.y > 0.35 && abs(nn.z) < uRim && t > 1.5) t += 1.0;
+    if (nn.y > 0.35 && abs(nn.z) < uRim && t > 1.5) t += cls == ${CLS.pad}.0 ? 0.5 : 1.0;   // (the knee plates' top edges: half, at their halved contrast)
     if (cls == ${CLS.orange}.0 && abs(nn.z) < 0.2 * clamp((0.02 - uPxM) / 0.01, 0.0, 1.0)) t = min(t, 1.0);   // dark armour rim (HD only)
     if (eyeT >= 0.0) t = eyeT;
+    t = shirtBeltTone(t);                            // shirt seams / modelled panels, belt parts
     // weapons at HD: bevelled box edges (one step lighter on lit faces, one darker on shadowed ones) so the parts read as machined metal
     if (cls == ${CLS.metal}.0 && uUseMat < 0.5 && uPxM < 0.014){
       vec2 ew = max(fwidth(vUv), vec2(1e-5)), ed = min(vUv, 1.0 - vUv) / ew;
       if (min(ed.x, ed.y) < 1.0 + 0.004 / uPxM) t += d > 0.2 ? 1.0 : -1.0;
+    }
+    // knee guards: the material's part (uPart: 1 frame, 2 boss, 3 rivet, 4 lame, 5 buckle, 6 strap, 7 hinge disc) and the place on it
+    // (vUv.x: 0 at the middle of the face .. 1 at its edge, 1 - 1.5 across the bevel, 1.5 - 2 down the wall; vUv.y: -1 at its bottom .. 1
+    // at its top). Sprite size: the frame never climbs to the boss's coatL when lit (it stays the sprites' coatM pad round a light top
+    // face), and the boss's tone takes the upper part of the frame's face too (a little more at 64 px), so the light face stays 3 x 3 px
+    // at 96 px and 2 x 2 at 64 like the sprites' pad (the boss itself is sized for HD).
+    // HD: a fixed tone per part - the light only picks out the bevels (lit one step up, shadowed half a step down) - so from any side and
+    // in any light the guard reads as the canonical sheet's dark frame (a step below the trousers) round the lighter raised boss, never
+    // as one pale lump. Worn paint: bare-steel chips in short runs on the top bevel, a small rust spot or two on the bottom edge
+    float rust = 0.0;
+    if (uPart > 0.5){
+      bool face = vUv.x < 1.0, frame = uPart < 1.5 || (uPart > 3.5 && uPart < 4.5) || uPart > 6.5;
+      float sk = clamp((uPxM - 0.02) / 0.01, 0.0, 1.0);   // 0 at 96 px .. 1 at 64 px
+      if (uPart < 1.5 && hd < 0.5 && vUv.x < 0.8 + 0.05 * sk && vUv.y > -0.25 - 0.1 * sk){ t += 1.5; frame = false; }
+      if (frame || uPart > 4.5) t = min(t, 2.0);
+      if (hd > 0.5){
+        // the facet's light: bevels and walls facing up into the light are lit, those turned away from it shadowed
+        float pb = dot(nd, uL), bev = nd.y > 0.3 && pb > 0.5 ? 1.0 : (pb < 0.15 ? -0.5 : 0.0);
+        if (frame) t = face ? 1.0 : 1.0 + bev;                         // frame, lame, hinge: #1e1d18, lit top bevel #34322a
+        else if (uPart < 2.5)                                           // boss: khaki face, its lit top bevel the light khaki glint,
+          t = face ? (pb < 0.1 ? 2.5 : 3.0) : (bev > 0.5 ? 4.0 : (vUv.x > 1.5 ? 2.0 : 3.0 + bev));   // its walls a step down (raised)
+        else if (uPart < 3.5) t = face ? (pb > 0.3 ? 3.5 : 2.5) : (bev > 0.5 ? 2.5 : (bev < 0.0 ? 0.0 : 1.0));   // rivet: lit dome, dark below
+        else if (uPart < 5.5) t = face ? 1.5 : 1.5 + bev;              // buckle: dark steel, a lit top edge
+        else t = 0.5 + 0.5 * step(0.6, pb);                             // strap: near-black webbing
+        if (uPart < 1.5 && vUv.x > 1.0 && vUv.x < 1.5 && vUv.y > 0.5 && vnoiseK(vP * 35.0) > 0.66) t = 3.0;   // chipped top bevel
+        float rn = vnoiseK(vP * 40.0 + 7.3);
+        if (uPart < 1.5 && vUv.x < 1.5 && vUv.y < -0.62) rust = step(0.74, rn) + step(0.8, rn);
+      }
     }
     if (hd > 0.5 && uBands > 0.5) t = cls == ${CLS.orange}.0 ? floor(t + 0.5) : floor(t * 2.0 + 0.5) * 0.5;   // HD: half steps between the ramp tones (posterised, not smooth)
     vec3 rc = ramp(cls, t);
     if (uBands < 0.5 || (hd > 0.5 && fract(t) > 0.01)){ float t0 = floor(t); rc = mix(ramp(cls, t0), ramp(cls, t0 + 1.0), t - t0); }   // smooth light / HD half steps
     bool tint = cls != ${CLS.skin}.0 && cls != ${CLS.eye}.0 && cls != ${CLS.orange}.0 && cls != ${CLS.hair}.0 && cls != ${CLS.beard}.0 && cls != ${CLS.pad}.0;
     rc = finish(rc, t, nn, hd, tint);
-    // specular glints (HD): glossy orange pauldron, boots and gloves, metal fittings
+    if (rust > 0.5) rc = rust > 1.5 ? uPal[${PAL_LIST.indexOf(PAL.rust)}] : uPal[${PAL_LIST.indexOf(PAL.skinS)}];   // rust spot: a dark red-brown rim round a rust core
+    // weathered pauldron: rust patches and streaks, grime and paint chips replace the paint in the same light band
+    // (rust keeps one flat tone over the lit and the mid band, so a patch reads as one shape across the terminator)
+    if (cls == ${CLS.orange}.0 && uUseMat > 0.5){
+      vec2 w = rustF > 0.5 ? vec2(1.0, 0.0) : wearOf(vP, gl_FrontFacing ? vNb : -vNb, hd, t, vRim);
+      if (w.x > 0.5) rc = wearRamp(w.x, (w.x < 1.5 && t > 1.5 ? 3.0 : (w.x > 2.5 ? min(t, 3.0) : t)) + w.y);
+      else if (w.y > 0.5 && t > 1.5) rc = ramp(cls, t + 1.0);   // paint one step up: the worn edge, the lit lower lip of a chip
+    }
+    // specular glints (HD): boots and gloves, metal fittings (the pauldron's paint is matt)
     if (hd > 0.0 && eyeT < 0.0){
       float sp = dot(nd, normalize(uL + vec3(0.0, 0.0, 1.0)));
       float mt = uUseMR > 0.5 ? texture2D(mrMap, vUv).b : 0.0;
-      if (cls == ${CLS.orange}.0 && sp > 1.0 - 0.03 * uSpec) rc = mix(rc, uWarm, hd);
-      else if (cls == ${CLS.boot}.0 && sp > 1.0 - 0.025 * uSpec) rc = mix(rc, ramp(cls, 4.0) + 0.05, hd);   // small leather glint
-      else if (mt > 0.3 && sp > 1.0 - 0.1 * uSpec && cls != ${CLS.orange}.0 && cls != ${CLS.skin}.0) rc = mix(rc, uPal[${PAL_LIST.indexOf(PAL.hairL)}], hd);
+      if (cls == ${CLS.boot}.0 && sp > 1.0 - 0.025 * uSpec) rc = mix(rc, ramp(cls, 4.0) + 0.05, hd);   // small leather glint
+      else if (mt > 0.3 && sp > 1.0 - 0.1 * uSpec && cls != ${CLS.orange}.0 && cls != ${CLS.skin}.0 && gSB < 0.5) rc = mix(rc, uPal[${PAL_LIST.indexOf(PAL.hairL)}], hd);   // not on the shirt / belt parts (buckle: own tones)
     }
     // back-light weight for the post pass (alpha 1 = none): per material, only where the smoothed normal turns away from the key
-    // light (screen right / up-right) and toward the silhouette; the post pass draws it only on the outer silhouette pixels
+    // light (screen right / up-right) and toward the silhouette; the post pass draws it only on the outer silhouette pixels.
+    // Armour plates (the knee guards' cap, boss and rivets; their buckle and hinge disc in HD) write it below 0.475 instead (0.45 =
+    // none): the post pass outlines them (see there)
     float rw = 0.0;
     if (hd > 0.0 && eyeT < 0.0){
       float cw = 0.0; for (int j = 0; j < ${NCLS}; j++){ if (float(j) == cls) cw = uRimW[j]; }
       vec3 nr = normalize(n + nS); float sl = length(nr.xy), aw = sl > 1e-3 ? dot(nr.xy / sl, vec2(0.86, 0.5)) : 0.0;
       rw = cw * hd * smoothstep(0.0, 0.45, aw) * smoothstep(0.1, 0.35, sl);
     }
-    gl_FragColor = vec4(rc, 1.0 - 0.5 * rw);
+    bool plate = (uPart > 0.5 && uPart < 3.5) || ((uPart > 4.5 && uPart < 5.5 || uPart > 6.5) && hd > 0.5);
+    gl_FragColor = vec4(rc, plate ? 0.45 - 0.4 * rw : 1.0 - 0.5 * rw);
     return;
   }
   float l = dot(alb, vec3(0.299, 0.587, 0.114));
@@ -418,10 +936,11 @@ function charMat(opts){
     uniforms:{ map:{value:opts.map||null}, uUseMap:{value:opts.map?1:0}, uMat:{value:opts.mat||null}, uUseMat:{value:opts.mat?1:0},
       uColor:{value:new T.Color(opts.color||'#343027')}, uFlat:{value:opts.flat?1:0}, uCls:{value: opts.cls===undefined ? -1 : opts.cls}, uOff:{value:opts.off||0},
       uL:LIGHT, uBands:SH.uBands, uPalOn:SH.uPalOn, uB:SH.uB, uLv:SH.uLv, uSat:SH.uSat, uGain:SH.uGain, uDetail:SH.uDetail, uRim:SH.uRim, uShirtV:SH.uShirtV, uGreyOff:SH.uGreyOff, uEyeBar:SH.uEyeBar, uBO:SH.uBO, uBootOff:SH.uBootOff, uDbg:SH.uDbg,
-      uPal:SH.uPal, uRamp:SH.uRamp, uRampH:SH.uRampH, uRimW:SH.uRimW, uCD:SH.uCD, uNS:SH.uNS, uPxM:SH.uPxM, uHair:SH.uHair, uN:{value: opts.full ? NP : N_CHAR},
+      uPal:SH.uPal, uRamp:SH.uRamp, uRampH:SH.uRampH, uRimW:SH.uRimW, uCD:SH.uCD, uNS:SH.uNS, uPxM:SH.uPxM, uHair:SH.uHair, uN:{value: opts.full ? N_SNAP : N_CHAR}, uWear:SH.uWear,
       nMap:{value:opts.nmap||null}, uUseN:{value:opts.nmap?1:0}, mrMap:{value:opts.mr||null}, uUseMR:{value:opts.mr?1:0},
       uNrm:opts.nscale ? {value:opts.nscale} : SH.uNrm, uNrmK:SH.uNrmK, uNrmB:SH.uNrmB, uNK:SH.uNK, uHue:SH.uHue, uRimK:SH.uRimK, uCav:SH.uCav, uSpec:SH.uSpec,
-      uRimC:SH.uRimC, uCool:SH.uCool, uWarm:SH.uWarm, uFill:SH.uFill },
+      uSBv:SH.uSBv,
+      uRimC:SH.uRimC, uCool:SH.uCool, uWarm:SH.uWarm, uFill:SH.uFill, uPart:{value:opts.part||0} },
     vertexShader:CHAR_VS, fragmentShader:CHAR_FS, side: opts.double ? T.DoubleSide : T.FrontSide, defines: opts.smooth ? {SMOOTHN:1} : {}, extensions:{derivatives:true}
   });
   m.skinning = !!opts.skinning;
@@ -435,6 +954,7 @@ function addSmoothNormals(geo, iters){
   const key = new Map(), weld = new Int32Array(n); let u = 0;
   for (let i = 0; i < n; i++){ const k = Math.round(P.getX(i)*2e4)+','+Math.round(P.getY(i)*2e4)+','+Math.round(P.getZ(i)*2e4);
     let w = key.get(k); if (w === undefined){ w = u++; key.set(k, w); } weld[i] = w; }
+  geo.userData.weld = { weld, u };   // reused by addPlateRim
   let A = new Float32Array(u*3);
   for (let i = 0; i < n; i++){ const w = weld[i]*3; A[w] += Nn.getX(i); A[w+1] += Nn.getY(i); A[w+2] += Nn.getZ(i); }
   const deg = new Int32Array(u+1), E = [];
@@ -470,6 +990,38 @@ function addSmoothNormals(geo, iters){
   geo.setAttribute('sNormal', new T.BufferAttribute(out, 3));
   return true;
 }
+// Pauldron outline distance (weathering: rust eats in from the plate's edges, paint chips off along them). The plate's vertices
+// (class map at the vertex uv, with the same position rules as CHAR_FS) get the shortest distance over the surface to the first
+// vertex off the plate (Dijkstra over the position-welded mesh of addSmoothNormals, so the plate's many UV seams are not edges),
+// in metres, -> 'aRim' (0 off the plate). Measured on the bind pose, so like vP it does not move with the animation.
+function addPlateRim(geo, mat){
+  const P = geo.attributes.position, n = P.count, rim = new Float32Array(n);
+  geo.setAttribute('aRim', new T.BufferAttribute(rim, 1));
+  const UV = geo.attributes.uv, idx = geo.index ? geo.index.array : null;
+  if (!mat || !UV || !idx || !geo.userData.weld) return;
+  const D = mat.image.data, W = mat.image.width, H = mat.image.height, fr = v => v - Math.floor(v);
+  const onPlate = i => {
+    const x = P.getX(i), y = P.getY(i);
+    if (x <= 0.1 || y <= 1.3 || (y > 1.5 && x < 0.17)) return false;   // off the left shoulder, or the head (warm glow around the eyes)
+    const c = Math.round(D[4*(Math.floor(fr(UV.getY(i))*H)*W + Math.floor(fr(UV.getX(i))*W))] / 255 * 16);
+    return c === CLS.orange || (c === CLS.eye && x < 0.42 && y > 1.4);
+  };
+  const { weld, u } = geo.userData.weld, Pw = new Float32Array(u*3), pl = new Uint8Array(u);
+  for (let i = 0; i < n; i++){ const w = weld[i]; Pw[3*w] = P.getX(i); Pw[3*w+1] = P.getY(i); Pw[3*w+2] = P.getZ(i); if (onPlate(i)) pl[w] = 1; }
+  const nb = new Map(), link = (a, b) => { let l = nb.get(a); if (!l) nb.set(a, l = []); l.push(b); };   // edges touching the plate
+  for (let f = 0; f < idx.length; f += 3) for (let e = 0; e < 3; e++){ const a = weld[idx[f+e]], b = weld[idx[f+(e+1)%3]];
+    if (a !== b && (pl[a] || pl[b])){ link(a, b); link(b, a); } }
+  // sources: the off-plate vertices next to the plate (distance 0); a few hundred plate vertices, so a plain O(n^2) Dijkstra will do
+  const dist = new Float32Array(u).fill(1e9), done = new Uint8Array(u), open = [];
+  for (const w of nb.keys()) if (!pl[w]){ dist[w] = 0; open.push(w); }
+  const len = (a, b) => Math.hypot(Pw[3*a]-Pw[3*b], Pw[3*a+1]-Pw[3*b+1], Pw[3*a+2]-Pw[3*b+2]);
+  while (open.length){
+    let bi = 0; for (let k = 1; k < open.length; k++) if (dist[open[k]] < dist[open[bi]]) bi = k;
+    const a = open[bi]; open[bi] = open[open.length-1]; open.pop(); if (done[a]) continue; done[a] = 1;
+    for (const b of nb.get(a)) if (pl[b] && !done[b]){ const d = dist[a] + len(a, b); if (d < dist[b]){ if (dist[b] > 1e8) open.push(b); dist[b] = d; } }
+  }
+  for (let i = 0; i < n; i++){ const w = weld[i]; rim[i] = pl[w] && dist[w] < 1e8 ? dist[w] : 0; }
+}
 // Classify the colour texture into material classes once (r = class/16, g = smoothed value offset within the class, b = smoothed value).
 function buildMatTex(tex){
   const img = tex.image, w = img.width, h = img.height;
@@ -488,7 +1040,7 @@ function buildMatTex(tex){
     else if ((hue < 45 || hue > 345) && s > 0.58 && mx > 0.42) c = CLS.orange;
     else if ((hue < 45 || hue > 340) && s > 0.16 && mx > 0.3) c = CLS.skin;
     else if (hue > 195 && hue < 270 && s > 0.2 && mx < 0.35) c = CLS.boot;
-    else if (s < 0.16 && v > 0.36) c = CLS.pad;          // light neutral grey: hair, pads, light straps (refined in the shader)
+    else if (s < 0.16 && v > 0.36) c = CLS.pad;          // light neutral grey: hair, light straps (sorted into hair / cloth in the shader)
     cls[i] = c;
   }
   // per-class box blur of the value (radius R) so the camo / brush noise becomes broad planes
@@ -580,7 +1132,8 @@ const post = new T.ShaderMaterial({
     // right-hand neighbours (within the outline width) are background or clearly farther - catches a crisp cool line
     // The character shader writes a per-material back-light weight into alpha (1 = none): hair, leather and metal catch it strongly,
     // cloth weakly, boots not at all, and only where the surface turns away from the key light. Strong rims get 2 px, weak ones 1.
-    float rw = (1.0 - texture2D(tC, vUv).a) * 2.0 * uRimK;
+    float a0 = texture2D(tC, vUv).a; bool plate = a0 < 0.475;
+    float rw = (plate ? (0.45 - a0) / 0.4 : (1.0 - a0) * 2.0) * uRimK;
     if (uDesp < 0.5 && rw > 0.05){
       float hit = 0.0;
       for (int i = 1; i <= 5; i++){
@@ -595,7 +1148,19 @@ const post = new T.ShaderMaterial({
         col = mix(col, rc, clamp(rw * hit, 0.0, 1.0));
       }
     }
-    if (uOutline > 0.5 && (nearIn || dl < dc-uInner || dr < dc-uInner || du < dc-uInner || dd < dc-uInner)) col = vec3(0.0);
+    // armour plates (the knee guards: alpha < 0.475) stand only 2-3 cm proud of the trousers, too little for the depth test at sprite
+    // size: the pixels round a plate that sits in front of them take the black outline at every size, like the sprites' outlined pads
+    bool plateN = false;
+    if (uOutline > 0.5 && !plate){
+      for (int i = 1; i <= 4; i++){
+        if (float(i) > uOW + 0.5) break;
+        for (int k = 0; k < 4; k++){
+          vec2 o = (k == 0 ? vec2(1.0, 0.0) : (k == 1 ? vec2(-1.0, 0.0) : (k == 2 ? vec2(0.0, 1.0) : vec2(0.0, -1.0)))) * float(i);
+          if (texture2D(tC, vUv + o*px).a < 0.475 && D(o) < dc) plateN = true;
+        }
+      }
+    }
+    if (uOutline > 0.5 && (plateN || nearIn || dl < dc-uInner || dr < dc-uInner || du < dc-uInner || dd < dc-uInner)) col = vec3(0.0);
     gl_FragColor = vec4(col,1.0);
   }`,
   depthTest:false, depthWrite:false
@@ -605,7 +1170,10 @@ const postCam = new T.Camera();
 
 const SIDE_YAW = 0.9;
 const S = { anim:'idle', weapon:'none', pxChar:64, yaw:SIDE_YAW, spin:false, outline:true,
-  t:0, walk:0, run:0, aim:0, tp:0, shotT:9, dragging:false };
+  t:0, walk:0, run:0, aim:0, tp:0, shotT:9, dragging:false,
+  // platformer clips: clip start (S.t), layer weight, current / cross-fade-from pose and switch time, the sprite view the climb faces
+  // into (the exporter sets it with the camera yaw), the jump arc the coat feels (vertical speed / acceleration, flutter, its period)
+  t0:0, air:0, airPose:null, airFrom:null, airSw:0, view:SIDE_YAW, airV:0, airA:0, airF:0, airP:1 };
 let W=160, H=120, scale=1;
 const CHAR_H = 1.95;
 function resize(){
@@ -769,6 +1337,144 @@ const STANCE = {
 // head direction per pose: [yaw (+ = to the character's left), pitch (+ = up)]
 const LOOK = { relaxed:[0,0.07], idle:[0.05,-0.05], rifle:[0.2,-0.04], pistol:[-1.35,0.2] };
 const _v=new T.Vector3(), _v2=new T.Vector3(), _qy=new T.Quaternion(), _qp=new T.Quaternion();
+
+// ---------- Platformer clips: jump_up, jump_apex, fall, land, climb (unarmed) ----------
+// Laid over the rest pose like the standing layer, in body space (+X forward, +Y up, +Z the character's right, origin on the ground
+// under the hips; 'yaw' turns the whole body about the hips, the climb faces into the screen). Fields: p pelvis offset from the bind
+// (m), pp pelvis pitch / ln spine lean (+ = forward), rl spine roll; fR / fL ankle targets (the bind ankles sit at y 0.155, the hips at
+// 0.957 - leg 0.81), kR / kL knee poles, tR / tL foot pitch (+ = toes down), oR / oL toe-out; hR / hL wrist targets from the shoulder
+// joint (arm reach 0.49; habs: from the origin instead - hands on ladder rungs), eR / eL elbow poles, sR / sL clavicle shrug, g finger
+// curl, wR / wL grip (0..1: the hand pitched over a rung into the ladder and closed to a fist); hands 1 = the clip needs both hands
+// (the climb: a weapon is hidden while it plays, its arms take the clip's pose); hd head [yaw, pitch]; vy / ay the vertical speed /
+// acceleration of the jump arc the clip stands for (the hero stays in place: the coat feels them, coatStep), fl coat flutter (the air
+// under a falling coat).
+// Keyed clips: the keys are the sprite frames at the clip's fps (the viewer eases between them); fn clips: a function of the cycle phase.
+const POSE0 = { p:[0,0,0], pp:0, ln:0, rl:0, fR:[0,0.155,0.15], fL:[0,0.155,-0.15], kR:[1,0,0.12], kL:[1,0,-0.12], tR:0, tL:0, oR:-0.22, oL:0.22,
+  hR:[0.05,-0.48,0.07], hL:[0.05,-0.48,-0.07], eR:[-1,0,0.35], eL:[-1,0,-0.35], habs:0, sR:0, sL:0, g:0.5, wR:0, wL:0, hd:[0,0.07], yaw:0, vy:0, ay:0, fl:0, hands:0 };
+const pose = o => Object.assign({}, POSE0, o);
+const smooth01 = x => { x = Math.min(1, Math.max(0, x)); return x*x*(3-2*x); };
+function lerpPose(a, b, k){
+  const o = {};
+  for (const n in POSE0){ const x = a[n], y = b[n]; o[n] = Array.isArray(x) ? x.map((v, i) => v + (y[i] - v)*k) : x + (y - x)*k; }
+  return o;
+}
+// fall: legs reaching down for the ground (near one forward), arms thrown out wide for balance (in the screen plane, so they read in
+// the 3/4 view), a small flail; the head looks down. The coat billows up in the air under it (vy) and flutters (fl).
+function fallPose(ph){
+  const a = Math.sin(2*Math.PI*ph), b = Math.sin(2*Math.PI*ph + 2.1);
+  return pose({ p:[0,0.05,0], pp:-0.06, ln:-0.03, rl:0.03*a,
+    fR:[0.14 + 0.03*a, 0.28 + 0.06*a, 0.17], fL:[-0.1 - 0.03*a, 0.28 - 0.06*a, -0.17], kR:[1,-0.2,0.3], kL:[1,0.1,-0.3], tR:0.3, tL:0.5,
+    hR:[-0.04 + 0.04*b, 0.08 + 0.12*b, 0.41], hL:[0.08 - 0.04*b, 0.12 - 0.12*b, -0.4], eR:[-0.5,-1,0.2], eL:[-0.3,-1,-0.2], sR:0.1, sL:0.1, g:0.3,
+    hd:[0,-0.32], vy:-7, ay:0, fl:1 });
+}
+// climb: a ladder in the screen plane, the hero facing it from behind, turned a little to his right (turn: enough for the near
+// pauldron to show, little enough that both hands grip either side of the head - at a 3/4 turn the far hand hides behind it).
+// Diagonal pairs move together (right hand + left foot, then left hand + right foot): a limb grips its rung for 'grip' of the cycle
+// and slides down as the body climbs past it (s per grip: the climb speed, CLIPS.climb.rise), then lets go and reaches for the next
+// one (out from the ladder on the way, the hand opening). Hands on the rungs (pitched over them into the ladder: a fist from behind),
+// feet on the rungs below, knees lifting high; the hips sway toward the leg that pushes. The turn would draw the hands (forward, on
+// the ladder) off to one side of the head (above the hips): each part sits sideways by its depth toward the ladder x tan(turn) - the
+// hands (hx), the feet (fx), the body (by the head's: head) - so the head, the gripping hands' midpoint (the ladder's centre line)
+// and the feet all project onto the anchor's column (screen x = x sin(turn) + z cos(turn)); flipped for the other facing, the hands
+// stay on the same ladder. hand: [lowest grip height, half the grip width]; the grips stay above the shoulders (lower, the near hand
+// hides behind the pauldron); pitch: how far up the gripping hand's fingers point (over the rung).
+const CLIMB = { lad:0.3, grip:0.6, s:0.36, hand:[1.55, 0.31], foot:[0.2, 0.14], turn:0.3, pitch:0.35, head:0.07 };
+function climbPose(ph){
+  const C = CLIMB, lim = u => { u = ((u % 1) + 1) % 1; if (u < C.grip) return [1 - u/C.grip, 0];
+    const r = (u - C.grip)/(1 - C.grip); return [smooth01(r), Math.sin(Math.PI*r)]; };
+  const [yR, oR] = lim(ph), [yL, oL] = lim(ph + 0.5), [yfL, ofL] = lim(ph), [yfR, ofR] = lim(ph + 0.5);
+  const sw = Math.sin(2*Math.PI*(ph + 0.15)), tn = Math.tan(C.turn), hx = C.lad - 0.1, fx = C.lad - 0.14;
+  const zc = -hx*tn, zf = -fx*tn, zb = -C.head*tn;
+  return pose({ yaw: S.view + Math.PI/2 - C.turn, p:[0.02, 0.02, zb + 0.035*sw], pp:0.05, ln:0.06, rl:-0.04*sw,
+    fR:[fx - 0.1*ofR, C.foot[0] + C.s*yfR, zf + C.foot[1]], fL:[fx - 0.1*ofL, C.foot[0] + C.s*yfL, zf - C.foot[1]],
+    kR:[1,0.3,0.45], kL:[1,0.3,-0.45], tR:-0.1 + 0.3*ofR, tL:-0.1 + 0.3*ofL, oR:-0.1, oL:0.1,
+    habs:1, hR:[hx - 0.12*oR, C.hand[0] + C.s*yR, zc + C.hand[1]], hL:[hx - 0.12*oL, C.hand[0] + C.s*yL, zc - C.hand[1]],
+    eR:[-0.3,-1,1], eL:[-0.3,-1,-1], sR:0.3*yR, sL:0.3*yL, g:0.45, wR:1 - oR, wL:1 - oL, hd:[0, 0.25], hands:1 });
+}
+// (The sprite camera sees the hero 3/4 from the front: +X is mostly toward the viewer, +Z (his right) toward screen left. Limbs that
+// must read in the silhouette go out sideways and up / down rather than straight forward.)
+const CLIPS = {
+  // take-off (legs straight, up on the balls of the feet - the pointed toes end on the ground row; the far arm swings up toward the
+  // jump, the near one back) -> the near knee drives up, the far leg trails, the arms at full stretch -> both knees tucking, the arms
+  // opening out for the apex
+  jump_up: { fps:12, loop:false, hold:0.5, keys:[
+    pose({ p:[-0.01,0.095,0], pp:0.03, ln:0.06, fR:[-0.04,0.23,0.13], fL:[-0.08,0.26,-0.13], kR:[1,0,0.1], kL:[1,0,-0.1], tR:0.75, tL:0.7,
+      hR:[-0.2,-0.28,0.2], hL:[0.2,0.2,-0.14], eR:[-0.2,-1,0.6], eL:[-0.4,-1,-0.6], sR:0.0, sL:0.14, g:0.85, hd:[0,0.18], vy:2.5, ay:28 }),
+    pose({ p:[0,0.05,0], pp:0.02, ln:0.04, fR:[0.17,0.52,0.12], fL:[-0.14,0.2,-0.13], kR:[1,0.5,0.1], kL:[1,-0.3,-0.1], tR:0.4, tL:0.75,
+      hR:[-0.22,-0.2,0.24], hL:[0.18,0.27,-0.16], eR:[-0.2,-1,0.6], eL:[-0.4,-1,-0.6], sL:0.2, g:0.85, hd:[0,0.14], vy:5.2, ay:-9.8 }),
+    pose({ p:[0,0.06,0], pp:0.06, ln:0.08, fR:[0.13,0.5,0.14], fL:[0.0,0.4,-0.14], kR:[1,0.5,0.15], kL:[1,0.4,-0.12], tR:0.4, tL:0.5,
+      hR:[-0.14,-0.06,0.38], hL:[0.18,0.17,-0.32], eR:[-0.5,-1,0.3], eL:[-0.4,-1,-0.4], sR:0.04, sL:0.12, g:0.75, hd:[0,0.06], vy:4.2, ay:-9.8 })]},
+  // top of the arc: knees tucked up, arms spread for balance (near one out behind, far one out ahead), the coat weightless round the
+  // legs -> tipping over into the fall (vy already the fall's: the exporter gives the coat the arc's time to start lifting)
+  jump_apex: { fps:8, loop:false, hold:0.6, keys:[
+    pose({ p:[0,0.07,0], pp:0.1, ln:0.14, fR:[0.08,0.54,0.15], fL:[0.0,0.49,-0.15], kR:[1,0.6,0.15], kL:[1,0.6,-0.15], tR:0.35, tL:0.4,
+      hR:[-0.06,0.0,0.42], hL:[0.14,0.06,-0.4], eR:[-0.6,-1,0.2], eL:[-0.3,-1,-0.2], sR:0.08, sL:0.08, g:0.5, hd:[0,-0.08], vy:0.3, ay:-9.8 }),
+    pose({ p:[0,0.07,0], pp:0.06, ln:0.1, fR:[0.1,0.42,0.16], fL:[-0.06,0.38,-0.16], kR:[1,0.4,0.2], kL:[1,0.4,-0.2], tR:0.35, tL:0.45,
+      hR:[-0.05,0.05,0.42], hL:[0.12,0.1,-0.41], eR:[-0.6,-1,0.2], eL:[-0.3,-1,-0.2], sR:0.1, sL:0.1, g:0.4, hd:[0,-0.18], vy:-3.5, ay:-9.8 })]},
+  fall: { fps:10, loop:true, n:3, fn:fallPose },
+  // impact (knees give, hips drop and pitch forward, arms forward for balance) -> deepest -> rising out of the crouch
+  land: { fps:12, loop:false, hold:0.6, keys:[
+    pose({ p:[-0.03,-0.27,0], pp:0.22, ln:0.32, fR:[0.07,0.155,0.17], fL:[-0.07,0.155,-0.17], kR:[1,0,0.32], kL:[1,0,-0.32], oR:-0.3, oL:0.3,
+      hR:[0.24,-0.3,0.18], hL:[0.26,-0.32,-0.16], eR:[-1,-0.3,0.6], eL:[-1,-0.3,-0.6], g:0.7, hd:[0,-0.05], vy:0, ay:30 }),
+    pose({ p:[-0.04,-0.33,0], pp:0.28, ln:0.38, fR:[0.07,0.155,0.17], fL:[-0.07,0.155,-0.17], kR:[1,0,0.35], kL:[1,0,-0.35], oR:-0.3, oL:0.3,
+      hR:[0.2,-0.4,0.16], hL:[0.22,-0.4,-0.14], eR:[-1,-0.3,0.6], eL:[-1,-0.3,-0.6], g:0.7, hd:[0,-0.02], vy:0, ay:10 }),
+    pose({ p:[-0.02,-0.13,0], pp:0.12, ln:0.14, fR:[0.05,0.155,0.16], fL:[-0.05,0.155,-0.16], kR:[1,0,0.25], kL:[1,0,-0.25], oR:-0.26, oL:0.26,
+      hR:[0.12,-0.46,0.1], hL:[0.12,-0.46,-0.1], eR:[-1,-0.1,0.4], eL:[-1,-0.1,-0.4], g:0.6, hd:[0,0.04], vy:0, ay:0 })]},
+  // rise: how far the body climbs per cycle (m) - a gripping hand slides down by C.s in grip of the cycle; the game moves the sprite up
+  // at rise / dur m/s so the gripping hands stay planted on their rungs
+  climb: { fps:8, loop:true, n:8, fn:climbPose, rise:CLIMB.s / CLIMB.grip }
+};
+for (const k in CLIPS){ const C = CLIPS[k]; if (C.keys) C.n = C.keys.length; C.dur = C.n / C.fps; }
+// the clip's pose at clip time tau. Keyed clips play once and hold their last key; the viewer replays them (hold, ease back to the first
+// key, play again) so the button keeps showing the motion - the sprite frames (tau = i / fps) are the keys themselves.
+function clipPose(C, tau){
+  if (C.fn) return C.fn(((tau / C.dur) % 1 + 1) % 1);
+  const K = C.keys.length, span = (K - 1) / C.fps, back = 0.3, L = span + C.hold + back, u = tau % L;
+  if (u >= span + C.hold) return lerpPose(C.keys[K-1], C.keys[0], smooth01((u - span - C.hold) / back));
+  const c = Math.min(K - 1, u * C.fps), i = Math.floor(c);
+  return i >= K - 1 ? C.keys[K-1] : lerpPose(C.keys[i], C.keys[i+1], smooth01(c - i));
+}
+// pose the body (pelvis, spine, legs, feet) with weight w; the arms are posed after the head (airArms)
+function airBody(P, w){
+  const qY = new T.Quaternion().setFromAxisAngle(UP, P.yaw*w), bv = v => new T.Vector3(v[0], v[1], v[2]).applyQuaternion(qY);
+  const lat = RIGHT.clone().applyQuaternion(qY), fwd = FWD.clone().applyQuaternion(qY);
+  const pw = B.pelvis.getWorldPosition(_v); pw.lerp(BIND.pelvis.wp.clone().add(bv(P.p)), w);
+  B.pelvis.parent.worldToLocal(pw); B.pelvis.position.copy(pw);
+  rotBoneWorld(B.pelvis, UP, P.yaw*w);
+  rotBoneWorld(B.pelvis, lat, -P.pp*w);
+  for (const n of ['spine_01','spine_02','spine_03']){ rotBoneWorld(B[n], lat, -P.ln*w/3); rotBoneWorld(B[n], fwd, P.rl*w/3); }
+  for (const s of ['r','l']){
+    const R = s==='r';
+    legIK(s, bv(R ? P.fR : P.fL), bv(R ? P.kR : P.kL), w, 0.995);
+    // feet: pitched (toes down in the air, flat on the ground), toes turned out a little, with the body's yaw
+    _qy.setFromAxisAngle(UP, P.yaw*w + (R ? P.oR : P.oL)); _qp.setFromAxisAngle(RIGHT, -(R ? P.tR : P.tL));
+    setBoneWorldQ(B['foot_'+s], _qy.clone().multiply(_qp).multiply(BIND['foot_'+s].w), w);
+  }
+}
+function airArms(P, w, wy = w){   // wy: the body yaw's weight (airBody's), when the arms blend in with a different weight
+  const qY = new T.Quaternion().setFromAxisAngle(UP, P.yaw*wy), bv = v => new T.Vector3(v[0], v[1], v[2]).applyQuaternion(qY);
+  const fwd = FWD.clone().applyQuaternion(qY);
+  for (const s of ['r','l']){
+    const R = s==='r';
+    // shrug: the clavicle lifts the shoulder for a hand reaching high
+    rotBoneWorld(B['clavicle_'+s], fwd, (R ? -P.sR : P.sL)*w);
+    B['upperarm_'+s].updateWorldMatrix(true,false);
+    const base = P.habs ? new T.Vector3() : B['upperarm_'+s].getWorldPosition(new T.Vector3());
+    armIK(s, base.add(bv(R ? P.hR : P.hL)), bv(R ? P.eR : P.eL), w);
+    const ha = B['hand_'+s], gk = R ? P.wR : P.wL;
+    // grip: the hand pitches over the rung (fingers into the ladder and a little up; the rig has one finger chain, so straight
+    // fingers would read as a raised, waving hand) and closes
+    if (gk*w > 0.001){
+      const fi = B['middle_01_'+s]; ha.updateWorldMatrix(true,false);
+      const cur = fi.getWorldPosition(new T.Vector3()).sub(ha.getWorldPosition(new T.Vector3())).normalize();
+      pointBone(ha, fi, cur.lerp(fwd.clone().addScaledVector(UP, CLIMB.pitch), gk*w));
+    }
+    ha.getWorldQuaternion(_q2).multiply(BIND['hand_'+s].w.clone().invert());
+    const ax = new T.Vector3(R ? 1 : -1, 0, 0).applyQuaternion(_q2).normalize();
+    for (const n of ['middle_01_','middle_02_','middle_03_']) rotBoneWorld(B[n+s], ax, (P.g + (1 - P.g)*gk)*w);
+  }
+}
+
 function update(dt){
   if (!model) return;
   S.t += dt; const t = S.t;
@@ -776,6 +1482,18 @@ function update(dt){
   const want = { walk: S.anim==='walk'?1:0, run: S.anim==='run'?1:0, aim:(armed && (S.anim==='aim'||S.anim==='fire'))?1:0, tp:S.anim==='tpose'?1:0 };
   const k8 = 1-Math.exp(-dt*8), k12 = 1-Math.exp(-dt*12);
   S.walk=lerp(S.walk,want.walk,k8); S.run=lerp(S.run,want.run,k8); S.aim=lerp(S.aim,want.aim,k12); S.tp=lerp(S.tp,want.tp,k12);
+  // platformer clip: its pose (cross-faded from the previous clip's for 0.1 s) and the layer weight
+  const clip = CLIPS[S.anim];
+  S.air = lerp(S.air, clip ? 1 : 0, k12);
+  if (clip){
+    if (S.t < S.t0) S.t0 = 0;                     // the clock was reset (S.t = 0 by a tool): the clip starts with it
+    let P = clipPose(clip, S.t - S.t0);
+    if (S.airFrom){ const f = S.t < S.airSw ? 1 : (S.t - S.airSw) / 0.1; if (f >= 1) S.airFrom = null; else P = lerpPose(S.airFrom, P, smooth01(f)); }
+    S.airPose = P; S.airP = clip.dur;
+  }
+  const air = S.airPose ? S.air*(1-S.tp) : 0, AP = S.airPose;
+  // the jump arc the clip stands for, as the coat feels it (0 for the other anims)
+  S.airV = AP ? AP.vy*air : 0; S.airA = AP ? AP.ay*air : 0; S.airF = AP ? AP.fl*air : 0;
   const move = Math.min(1, S.walk+S.run);
   const pistol = S.weapon==='pistol';
 
@@ -796,7 +1514,7 @@ function update(dt){
   }
 
   // 2) standing pose (idle/aim): pelvis down + turned toward the camera side, legs by IK onto planted feet
-  const stand = (1-move)*(1-S.tp);
+  const stand = (1-move)*(1-S.tp)*(1-air);
   const sA = armed ? STANCE.idle : STANCE.relaxed, sB = pistol ? STANCE.pistol : STANCE.aim, ka = S.aim;
   const st = k => lerp(sA[k], sB[k], ka);
   if (stand > 0.001){
@@ -831,22 +1549,28 @@ function update(dt){
     for (const n of ['spine_01','spine_02','spine_03']){ rotBoneWorld(B[n], UP, tw/3); rotBoneWorld(B[n], RIGHT, -ln/3); rotBoneWorld(B[n], FWD, st('roll')*stand/3); }
     rotBoneWorld(B.spine_02, RIGHT, breath*stand);
   }
+  // 2b) platformer clips: pelvis, spine, legs (arms below, after the head)
+  if (air > 0.001) airBody(AP, air);
   // 3) T-pose: nothing more (rest pose)
 
   // head: look where the weapon points (level for the rifle, 3/4 toward the raised pistol)
   {
     const l0 = armed ? LOOK.idle : LOOK.relaxed;
     const lk = S.aim>0.001 ? (pistol ? LOOK.pistol : LOOK.rifle) : l0;
-    const ly = lerp(l0[0], lk[0], S.aim), lp = lerp(l0[1], lk[1], S.aim);
+    let ly = lerp(l0[0], lk[0], S.aim), lp = lerp(l0[1], lk[1], S.aim);
+    // platformer clips: their own look, turned with the body (the climb faces the ladder)
+    let by = 0;
+    if (air > 0.001){ ly = lerp(ly, AP.hd[0], air); lp = lerp(lp, AP.hd[1], air); by = AP.yaw*air; }
     _qy.setFromAxisAngle(UP, ly); _qp.setFromAxisAngle(RIGHT, lp); _qy.multiply(_qp);
-    const hw = (1-S.tp)*(1-move*0.6);
-    setBoneWorldQ(B.neck_01, _q.copy(_qy).slerp(new T.Quaternion(), 0.4).multiply(BIND.neck_01.w), hw);
-    setBoneWorldQ(B.head, _qy.clone().multiply(BIND.head.w), hw);
+    const hw = (1-S.tp)*(1-move*0.6), qb = new T.Quaternion().setFromAxisAngle(UP, by);
+    setBoneWorldQ(B.neck_01, qb.clone().multiply(_q.copy(_qy).slerp(new T.Quaternion(), 0.4)).multiply(BIND.neck_01.w), hw);
+    setBoneWorldQ(B.head, qb.multiply(_qy).multiply(BIND.head.w), hw);
   }
 
+  const sling = AP ? AP.hands*air : 0;   // a clip that needs both hands: the weapon is slung, its arms follow the clip
   if (armed){
     // 4) weapon + arm IK (not in the T-pose)
-    for (const k in weapons) weapons[k].visible = (k===S.weapon) && S.tp<0.5;
+    for (const k in weapons) weapons[k].visible = (k===S.weapon) && S.tp<0.5 && sling<0.5;
     const g = weapons[S.weapon], u = g.userData;
     B.spine_03.updateWorldMatrix(true,false);
     const chestW = B.spine_03.getWorldPosition(new T.Vector3());
@@ -869,7 +1593,7 @@ function update(dt){
     if (flash.parent!==g) g.add(flash);
     flash.position.copy(u.muzzle); flash.visible = S.shotT < 0.05; flash.rotation.x = S.t*7.3;
     g.updateMatrixWorld(true);
-    const armW = 1 - S.tp;
+    const armW = (1 - S.tp)*(1 - sling);
     // two-handed: the far shoulder comes forward so the support hand reaches the handguard
     if (!u.freeHand){ rotBoneWorld(B.clavicle_l, UP, -lerp(0.32,0.5,S.aim)*armW); rotBoneWorld(B.clavicle_r, UP, 0.3*S.aim*armW); }
     const toW = v => hero.localToWorld(v.clone()).sub(hero.getWorldPosition(new T.Vector3()));
@@ -903,12 +1627,13 @@ function update(dt){
     const wr = u.wrap || [0.45, 0.3, -0.2];
     wrap('r', wr[0], wr[1], wr[2], armW);
     if (!u.freeHand) wrap('l', -0.1, 0.0, 0.8, armW); else wrap('l', 0, 0, 0, armW, 0.55);   // free hand: half-curled, not a splayed mannequin hand
+    if (sling > 0.001) airArms(AP, sling, air);
   } else {
   // 4b) unarmed: arms hang relaxed at the sides when standing; walk/run keep the clip's arm swing
     for (const k in weapons) weapons[k].visible = false;
     flash.visible = false; S.shotT = 9;
     {
-      const hang = (1-move)*(1-S.tp);
+      const hang = (1-move)*(1-S.tp)*(1-air);
       const toW = v => hero.localToWorld(v.clone()).sub(hero.getWorldPosition(new T.Vector3()));
       for (const side of ['r','l']){
         const sg = side==='r' ? 1 : -1;
@@ -925,13 +1650,80 @@ function update(dt){
         }
       }
     }
+    if (air > 0.001) airArms(AP, air);
   }
   // the coat collides with every arm; only a free arm (no weapon in that hand) is pushed back out of it
-  COAT.free.r = !armed; COAT.free.l = !armed || !!weapons[S.weapon].userData.freeHand;
+  COAT.free.r = !armed || sling > 0.5; COAT.free.l = !armed || sling > 0.5 || !!weapons[S.weapon].userData.freeHand;
   coatStep(dt);
   // camera orbit
   if (S.spin && !S.dragging) S.yaw += dt*0.6;
   cam.position.set(Math.sin(S.yaw)*6, S.cy, Math.cos(S.yaw)*6); cam.lookAt(0,S.cy,0);
+  shirtSeams(dt);   // the shirt's vertical seams / outer belt loops drawn this frame (needs the final pose and camera)
+}
+
+// ---------- Shirt: which vertical seams are drawn this frame ----------
+// The shirt's abs columns and oblique side seams (and the outer belt loops) crowd together on screen where the torso turns away from
+// the camera; there they are left out (the panels merge) rather than drawn as a ladder of lines. The decision is made here, once
+// per frame and side for the whole shirt, never per pixel (a per-pixel test, on the per-triangle Jacobian, cut a column off part
+// way down a block and moved the cut from frame to frame): probe points on the chest (zip, abs column and side seam at three
+// heights, on the SB_LINES that CHAR_FS draws) and on the belt (inner / outer loop) are skinned and projected; a seam
+// is drawn while its narrowest spacing to the neighbour inward stays above ~4 px (3 px of panel between the lines). The spacing is
+// low-passed over ~0.5 s and switched with a hysteresis (out below 3.5 px, back above 5), so the walk's / run's sway (which
+// swings it by several px on a turned torso) and breathing do not make a seam blink; a real turn or aim takes it out / back after
+// a moment.
+// Result: SH.uSBv[side] = (abs column, side seam, outer loop), side 0 = -x, 1 = +x.
+const SBS = { probes:null, on:[[], []], g:[[], []] };
+const _sbM = new T.Matrix4(), _sbW = new T.Matrix4(), _sbP = new T.Vector3(), _sbT = new T.Vector3(), _sbR = new T.Vector3(), _sbU = new T.Vector3();
+function shirtSeams(dt){
+  if (SBS.probes === false) return;   // a body without the chest vertices: every seam stays drawn
+  if (!SBS.probes){
+    let sm = null; model.traverse(o => { if (o.isSkinnedMesh && !sm) sm = o; });
+    const g = sm.geometry, P = g.attributes.position, SI = g.attributes.skinIndex, SW = g.attributes.skinWeight, bones = sm.skeleton.bones;
+    // front-surface candidates on the body's own skin (no coat-panel or arm weights; the rig's thigh weights reach the chest)
+    const cand = [];
+    for (let i = 0; i < P.count; i++){
+      const x = P.getX(i), y = P.getY(i), z = P.getZ(i); if (z < 0 || Math.abs(x) > 0.2 || y < 1.0 || y > 1.35) continue;
+      const ids = [SI.getX(i), SI.getY(i), SI.getZ(i), SI.getW(i)], ws = [SW.getX(i), SW.getY(i), SW.getZ(i), SW.getW(i)];
+      if (ids.every((j, k) => ws[k] === 0 || !/^coat_|arm_|hand_/.test(bones[j].name))) cand.push([i, x, y, z]);
+    }
+    if (!cand.length){ SBS.probes = false; return; }
+    // the body vertex at bind (x, y): the outermost (largest z) within 1.5 cm, else the nearest
+    const pick = (x, y) => { let best = null, bz = -1, bd = 1e9, near = null;
+      for (const c of cand){ const d = (c[1] - x) ** 2 + (c[2] - y) ** 2; if (d < bd){ bd = d; near = c; } if (d < 0.015 ** 2 && c[3] > bz){ bz = c[3]; best = c; } }
+      const i = (best || near)[0], p = new T.Vector3().fromBufferAttribute(P, i).applyMatrix4(sm.bindMatrix);
+      return { p, b:[SI.getX(i), SI.getY(i), SI.getZ(i), SI.getW(i)], w:[SW.getX(i), SW.getY(i), SW.getZ(i), SW.getW(i)] }; };
+    const line = (ab, y) => ab[0] + ab[1] * (y - 1.092);
+    const rows = [1.12, 1.2, 1.28].map(y => ({ zip:pick(0, y), s:[-1, 1].map(sg => ({ col:pick(sg * line(SB_LINES.col, y), y), side:pick(sg * line(SB_LINES.side, y), y) })) }));
+    const loops = [-1, 1].map(sg => ({ inner:pick(sg * 0.115, 1.056), outer:pick(sg * 0.158, 1.056) }));
+    const all = [...rows.flatMap(r => [r.zip, ...r.s.flatMap(q => [q.col, q.side])]), ...loops.flatMap(l => [l.inner, l.outer])];
+    SBS.probes = { sm, rows, loops, all, bones:[...new Set(all.flatMap(q => q.b.filter((j, k) => q.w[k] > 0)))] };
+  }
+  const { sm, rows, loops, all, bones } = SBS.probes, bs = sm.skeleton.bones, inv = sm.skeleton.boneInverses;
+  for (const j of bones) bs[j].updateWorldMatrix(true, false);
+  sm.updateWorldMatrix(true, false); cam.updateMatrixWorld();
+  const toW = sm.bindMode === 'attached' ? null : _sbW.multiplyMatrices(sm.matrixWorld, sm.bindMatrixInverse);
+  const ce = cam.matrixWorld.elements; _sbR.set(ce[0], ce[1], ce[2]); _sbU.set(ce[4], ce[5], ce[6]);
+  // each probe's screen position (metres): skinned like the vertex shader does, projected on the camera's right / up axes
+  for (const q of all){
+    _sbP.set(0, 0, 0);
+    for (let k = 0; k < 4; k++) if (q.w[k] > 0){ _sbM.multiplyMatrices(bs[q.b[k]].matrixWorld, inv[q.b[k]]); _sbP.addScaledVector(_sbT.copy(q.p).applyMatrix4(_sbM), q.w[k]); }
+    if (toW) _sbP.applyMatrix4(toW);
+    q.sx = _sbP.dot(_sbR); q.sy = _sbP.dot(_sbU);
+  }
+  // spacings low-passed in metres across the screen (a zoom applies at once), compared in output px
+  const gap = (a, b) => Math.hypot(a.sx - b.sx, a.sy - b.sy), ks = dt > 0.2 ? 1 : 1 - Math.exp(-Math.max(0, dt) / 0.5);
+  for (let s = 0; s < 2; s++){
+    const on = SBS.on[s], g = SBS.g[s];
+    // spacing to the neighbour inward, the narrowest of the three heights: zip -> column, column -> side seam (drawn only with the
+    // column: smaller, the vest keeps just the zip, the pec line and the rows), inner -> outer loop
+    const d = [Math.min(...rows.map(r => gap(r.zip, r.s[s].col))), Math.min(...rows.map(r => gap(r.s[s].col, r.s[s].side))),
+               gap(loops[s].inner, loops[s].outer)];
+    for (let k = 0; k < 3; k++){
+      g[k] = g[k] === undefined ? d[k] : g[k] + (d[k] - g[k]) * ks; const px = g[k] * S.ppu;
+      on[k] = on[k] === undefined ? px > 4.25 : (on[k] ? px > 3.5 : px > 5);
+    }
+    SH.uSBv.value[s].set(on[0] ? 1 : 0, on[0] && on[1] ? 1 : 0, on[2] ? 1 : 0);
+  }
 }
 
 function render(clear){
@@ -957,7 +1749,20 @@ function loop(now){
 // ---------- UI ----------
 function press(container, attr, val){ container.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed', String(b.dataset[attr]===String(val)))); }
 const animsEl=document.getElementById('anims'), weapEl=document.getElementById('weapons'), resEl=document.getElementById('res');
-function setAnim(a){ S.anim=a; press(animsEl,'anim',a); }
+// cut: switch at once - every layer weight snapped to the new anim (no ease-in / out), a platformer clip from its first key with no
+// cross-fade from the previous clip (the sprite exporter's hard switch; the coat still carries its motion over)
+function setAnim(a, cut){
+  if (CLIPS[a] && a !== S.anim){
+    // between two platformer clips the pose cross-fades from where it is; from the other anims the layer weight eases in
+    S.airFrom = (!cut && CLIPS[S.anim] && S.airPose) ? Object.assign({}, S.airPose) : null; S.airSw = S.t;
+  }
+  if (a !== S.anim || cut) S.t0 = S.t;
+  if (cut){
+    S.walk = a==='walk' ? 1 : 0; S.run = a==='run' ? 1 : 0; S.tp = a==='tpose' ? 1 : 0; S.air = CLIPS[a] ? 1 : 0; S.airFrom = null;
+    S.aim = (S.weapon!=='none' && (a==='aim' || a==='fire')) ? 1 : 0;
+  }
+  S.anim=a; press(animsEl,'anim',a);
+}
 function setWeapon(w){
   S.weapon=w; press(weapEl,'weapon',w);
   const unarmed = w==='none';
@@ -974,7 +1779,7 @@ document.getElementById('toon').addEventListener('change',e=>SH.uBands.value=e.t
 document.getElementById('palon').addEventListener('change',e=>SH.uPalOn.value=e.target.checked?1:0);
 window.addEventListener('keydown',e=>{
   if (e.target.tagName==='INPUT') return;
-  const m={ '1':'idle','2':'walk','3':'aim','4':'fire','5':'tpose','6':'run' }[e.key]; if (m) setAnim(m);
+  const m={ '1':'idle','2':'walk','3':'aim','4':'fire','5':'tpose','6':'run','7':'jump_up','8':'jump_apex','9':'fall','0':'land','w':'climb','W':'climb' }[e.key]; if (m) setAnim(m);
   if (e.key==='q'||e.key==='Q') setWeapon({none:'rifle', rifle:'pistol', pistol:'none'}[S.weapon]);
 });
 let dragX=0;
@@ -987,9 +1792,10 @@ resize();
 setWeapon(S.weapon);   // sync the aim/fire buttons with the default (unarmed)
 requestAnimationFrame(loop);
 
-// ---------- Gear: backpack (sheet C back view, owner's sprites) + shoulder straps ----------
+// ---------- Gear: backpack (sheet C back view, owner's sprites) + shoulder straps + knee guards ----------
 // Built in character space at the rest pose (+X forward, +Y up, +Z = character's right). The pack is rigid and re-parented
-// to spine_03, so it follows the torso through every pose, the walk / run clips and the IK; the straps are skinned to the body.
+// to spine_03, so it follows the torso through every pose, the walk / run clips and the IK; the straps are skinned to the body,
+// the knee guards ride rigidly on the calves.
 const GEAR = {
   body:  charMat({color:'#38361b', full:true}),     // olive canvas: oliveL lit / oliveM mid / oliveD shade (one step above the coat)
   flap:  charMat({color:'#4a4720', full:true}),     // lid, pockets: oliveL on the lit and mid faces
@@ -1026,16 +1832,20 @@ function gearStrap(parent, mat, pts, w, t, wDir=new T.Vector3(0,0,1)){
   }
 }
 // merge a group of rest-pose character-space meshes into one SkinnedMesh on the body's skeleton:
-// weights from the nearest body vertices (rest pose), positions moved back to the bind pose by the inverse skin matrix
+// weights from the nearest body vertices (rest pose), positions moved back to the bind pose by the inverse skin matrix;
+// a child mesh with userData.bone rides rigidly on that one bone instead (no nearest-vertex weights at all); opt.uv keeps the parts' uv;
+// opt.only (a set of body vertex indices) limits the nearest vertices to those, e.g. the trousers right under a strap (not the coat)
 function skinToBody(group, mat, name, opt={}){
   let sm = null; model.traverse(o=>{ if (o.isSkinnedMesh && !sm) sm = o; });
   hero.updateMatrixWorld(true); sm.skeleton.update();
   const toLocal = new T.Matrix4().copy(sm.matrixWorld).invert().multiply(hero.matrixWorld);
-  const P=[], N=[], I=[], R=[], v=new T.Vector3(), n=new T.Vector3();
+  const P=[], N=[], I=[], R=[], RB=[], UV=[], v=new T.Vector3(), n=new T.Vector3();
   group.children.forEach(m=>{
     m.updateMatrix(); const M = new T.Matrix4().multiplyMatrices(toLocal, m.matrix), NM = new T.Matrix3().getNormalMatrix(M);
     const g = m.geometry, gp = g.attributes.position, gn = g.attributes.normal, base = P.length/3;
-    for (let i=0;i<gp.count;i++){ v.fromBufferAttribute(gp,i).applyMatrix4(M); n.fromBufferAttribute(gn,i).applyMatrix3(NM).normalize(); P.push(v.x,v.y,v.z); N.push(n.x,n.y,n.z); }
+    const gu = g.attributes.uv;
+    for (let i=0;i<gp.count;i++){ v.fromBufferAttribute(gp,i).applyMatrix4(M); n.fromBufferAttribute(gn,i).applyMatrix3(NM).normalize(); P.push(v.x,v.y,v.z); N.push(n.x,n.y,n.z); RB.push(m.userData.bone || null);
+      UV.push(gu ? gu.getX(i) : 0, gu ? gu.getY(i) : 0); }
     const ix = g.index.array; for (let i=0;i<ix.length;i++) I.push(ix[i]+base);
     if (opt.rigid) for (let i=0;i<gp.count;i++){ v.fromBufferAttribute(gp,i).applyMatrix4(m.matrix); R.push(v.x,v.y,v.z); }
   });
@@ -1045,22 +1855,26 @@ function skinToBody(group, mat, name, opt={}){
   for (let i=0;i<bp.count;i++){
     let top=0, tw=-1; for (let k=0;k<4;k++){ const w=[bw.getX(i),bw.getY(i),bw.getZ(i),bw.getW(i)][k]; if (w>tw){ tw=w; top=k; } }
     const bn = bones[[bi.getX(i),bi.getY(i),bi.getZ(i),bi.getW(i)][top]]; if (bn && skip.test(bn.name)) continue;
+    if (opt.only && !opt.only.has(i)) continue;
     v.fromBufferAttribute(bp,i); sm.boneTransform(i,v); cand.push(i, v.x, v.y, v.z);
   }
   const boneM = bones.map((b,j)=>new T.Matrix4().multiplyMatrices(sm.bindMatrixInverse, new T.Matrix4().multiplyMatrices(b.matrixWorld, sm.skeleton.boneInverses[j])).multiply(sm.bindMatrix));
   const SI=[], SW=[], K=opt.K||4, nV=P.length/3, Sk=new T.Matrix4(), sg=opt.sigma||0, noW=opt.noWeight||null;   // sigma: gaussian falloff (smooth weight field), noWeight: bones never used
   for (let a=0;a<nV;a++){
     const x=P[3*a], y=P[3*a+1], z=P[3*a+2], best=[];
-    for (let c=0;c<cand.length;c+=4){
+    if (!RB[a]) for (let c=0;c<cand.length;c+=4){
       const d=(cand[c+1]-x)**2+(cand[c+2]-y)**2+(cand[c+3]-z)**2;
       if (best.length<K || d<best[K-1][0]){ best.push([d,cand[c]]); best.sort((p,q)=>p[0]-q[0]); if (best.length>K) best.pop(); }
     }
     const acc = new Map();
     for (const [d,i] of best){ const f = sg ? Math.exp(-d/(sg*sg)) + 1e-6 : 1/(Math.sqrt(d)+1e-4); const ids=[bi.getX(i),bi.getY(i),bi.getZ(i),bi.getW(i)], ws=[bw.getX(i),bw.getY(i),bw.getZ(i),bw.getW(i)];
       for (let k=0;k<4;k++) if (ws[k]>0 && !(noW && noW.test(bones[ids[k]].name))) acc.set(ids[k], (acc.get(ids[k])||0)+ws[k]*f); }
+    if (RB[a]) acc.set(bones.indexOf(RB[a]), 1);
     if (!acc.size) acc.set(bones.indexOf(B.spine_03), 1);
     // optional rigid share (0..1, from the rest-pose character-space position) on one bone, e.g. the pack's spine_03
-    if (opt.rigid){ const r = opt.rigid(R[3*a],R[3*a+1],R[3*a+2]); if (r>0){ const tot=[...acc.values()].reduce((s,w)=>s+w,0), j=bones.indexOf(opt.rigidBone);
+    // (opt.rigidBone: the bone, or a function of the same position that picks it, e.g. the nearer calf)
+    if (opt.rigid && !RB[a]){ const r = opt.rigid(R[3*a],R[3*a+1],R[3*a+2]); if (r>0){ const tot=[...acc.values()].reduce((s,w)=>s+w,0),
+      j=bones.indexOf(typeof opt.rigidBone === 'function' ? opt.rigidBone(R[3*a],R[3*a+1],R[3*a+2]) : opt.rigidBone);
       for (const k of acc.keys()) acc.set(k, acc.get(k)*(1-r)); acc.set(j, (acc.get(j)||0)+tot*r); } }
     const top = [...acc.entries()].sort((p,q)=>q[1]-p[1]).slice(0,4); const sum = top.reduce((s,e)=>s+e[1],0);
     while (top.length<4) top.push([0,0]);
@@ -1074,6 +1888,7 @@ function skinToBody(group, mat, name, opt={}){
   const geo = new T.BufferGeometry();
   geo.setAttribute('position', new T.Float32BufferAttribute(P,3)); geo.setAttribute('normal', new T.Float32BufferAttribute(N,3));
   geo.setAttribute('skinIndex', new T.Uint16BufferAttribute(SI,4)); geo.setAttribute('skinWeight', new T.Float32BufferAttribute(SW,4)); geo.setIndex(I);
+  if (opt.uv) geo.setAttribute('uv', new T.Float32BufferAttribute(UV,2));
   const skm = new T.SkinnedMesh(geo, mat); skm.name = name; skm.frustumCulled = false;
   skm.position.copy(sm.position); skm.quaternion.copy(sm.quaternion); skm.scale.copy(sm.scale); sm.parent.add(skm);
   skm.bind(sm.skeleton, sm.bindMatrix);
@@ -1083,7 +1898,9 @@ function skinToBody(group, mat, name, opt={}){
 // corners, sternum strap with a buckle, ladder locks with dangling tails. Swept ribbons (each face its own normal, lighter stitched
 // edges) laid on the rest-pose body surface, then skinned to the torso only (no arm / leg / head weights, so arm swing, T-pose and
 // aim poses never drag them) and blended rigidly onto spine_03 where they run into the pack.
-function bodyCloud(skip){
+// bodyCloud: the rest-pose body (character space) of the vertices whose dominant bone does not match 'skip', between heights y0 and
+// y1 (the torso by default): points + normals, and their triangles as a mesh for ray casts
+function bodyCloud(skip, y0=1.0, y1=1.7){
   let sm = null; model.traverse(o=>{ if (o.isSkinnedMesh && !sm) sm = o; });
   hero.updateMatrixWorld(true); sm.skeleton.update();
   const toChar = new T.Matrix4().copy(hero.matrixWorld).invert().multiply(sm.matrixWorld), NM = new T.Matrix3().getNormalMatrix(toChar);
@@ -1093,10 +1910,10 @@ function bodyCloud(skip){
     let top=0, tw=-1; for (let k=0;k<4;k++){ const w=[bw.getX(i),bw.getY(i),bw.getZ(i),bw.getW(i)][k]; if (w>tw){ tw=w; top=k; } }
     v.fromBufferAttribute(bp,i); sm.boneTransform(i,v); v.applyMatrix4(toChar); all[3*i]=v.x; all[3*i+1]=v.y; all[3*i+2]=v.z;
     const b = bones[[bi.getX(i),bi.getY(i),bi.getZ(i),bi.getW(i)][top]]; if (b && skip.test(b.name)) continue;
-    if (v.y < 1.0 || v.y > 1.7) continue;
+    if (v.y < y0 || v.y > y1) continue;
     keep[i] = 1; n.fromBufferAttribute(bn,i).applyMatrix3(NM).normalize(); P.push(v.x,v.y,v.z); N.push(n.x,n.y,n.z);
   }
-  // triangle surface of the kept torso (the scan's triangles are large: vertices alone miss the coat between them)
+  // triangle surface of the kept part (the scan's triangles are large: vertices alone miss the coat between them)
   const ix = sm.geometry.index.array, tri = [];
   for (let f=0;f<ix.length;f+=3) if (keep[ix[f]] && keep[ix[f+1]] && keep[ix[f+2]]) tri.push(ix[f],ix[f+1],ix[f+2]);
   const g = new T.BufferGeometry(); g.setAttribute('position', new T.BufferAttribute(all,3)); g.setIndex(tri);
@@ -1212,6 +2029,142 @@ function buildStraps(){
     rigid:(x,y,z)=>Math.min(1, Math.max(0, (-0.07 - x)/0.06)) };
   skinToBody(straps, GEAR.strapS, 'shoulderStraps', opt); skinToBody(edges, GEAR.edgeS, 'strapEdges', opt); skinToBody(metal, GEAR.metalS, 'strapLocks', opt);
 }
+// ---- knee guards: power-armour knee plates in the canonical sheet's look (a dark steel frame round a smaller, raised, lighter square
+// boss, black outline; the sprites' 3x4 px olive-grey plate with a light top face). Per leg: a thick bevelled knee cap (rounded square,
+// 11 x 12 cm, 2 cm proud) with the boss (about half its width, in its upper half, 1 cm higher again) and two rivets in the frame below
+// the boss, a hinge knuckle (a bolted disc) against the cap's outer side near the joint's axis, an articulated lame on the top of the
+// shin under the cap's lower edge, and a webbing strap round the back of the calf (its ends under the lame) with a buckle on the outer
+// side. Built in the rest pose in a frame on the calf's axis (O = the knee joint,
+// U up along the bone, F forward, L = U x F across): every part is a slab in (x = arc across, y = along the bone, z = out) bent round
+// that axis, so it sits on the round of the knee. The trousers under a part are found by rays out from the bone axis (the first surface
+// out is the trousers, never the coat); the part is lifted until its face stands 'proud' of the highest fold under it, and its back
+// reaches below the lowest, so its walls rise straight out of the cloth (no gap, nothing pokes through). The plates ride rigidly on the
+// calf (skinToBody, userData.bone): no plate bends or stretches when the knee bends, the cap swings down with the shin off the front of
+// the thigh like a strapped-on knee guard. The strap is cloth: rigid only where its ends go under the lame, round the back it takes the
+// weights of the trousers right under it (they carry up to a third of the thigh's weight there and pull in with it in the run's deep
+// knee bend - a strap rigid on the calf floated clear of them). (No lame on the thigh: in the stride the cap swings up to 10 cm away
+// from it, and it read as a loose plate floating on the thigh.)
+// Each material names its part for the shader (part: 1 frame, 2 boss, 3 rivet, 4 lame, 5 buckle, 6 strap, 7 hinge disc): HD tones per
+// part, and the post pass's black outline round the cap, boss and rivets at every size (round the buckle and the hinge disc in HD; the
+// lame is not outlined itself, so the outline round the cap's lower edge draws the dark seam between them)
+const KNEE = {
+  plate:  charMat({cls:CLS.pad, off:0, skinning:true, part:1}),      // the cap's frame: dark steel
+  boss:   charMat({cls:CLS.pad, off:1.5, skinning:true, part:2}),    // the raised square: one and a half steps lighter (khaki, light top face)
+  rivet:  charMat({cls:CLS.pad, off:0, skinning:true, part:3}),      // rivets, the hinge's bolt: a lit dome, dark below (HD)
+  lame:   charMat({cls:CLS.pad, off:-0.5, skinning:true, part:4}),   // the shin lame: the frame's steel, half a step darker at sprite size
+  buckle: charMat({cls:CLS.pad, off:0, skinning:true, part:5}),      // the strap's buckle: dark steel
+  strap:  charMat({cls:CLS.pad, off:-1, skinning:true, part:6}),     // webbing: near-black olive
+  hinge:  charMat({cls:CLS.pad, off:0, skinning:true, part:7})       // the side hinge's disc: the frame's dark steel, outlined in HD
+};
+// rounded rectangle (half sizes a, b, corner radius r), counter-clockwise from the middle of the right side; the same number of points
+// for any size (nS points per side pair, nC per corner), so rings of different sizes match up point for point
+function rrect(a, b, r, nS, nC){
+  const pts = [], arc = (cx, cy, a0) => { for (let i = 0; i < nC; i++){ const t = a0 + i/nC*Math.PI/2; pts.push([cx + r*Math.cos(t), cy + r*Math.sin(t)]); } };
+  const side = (x0, y0, x1, y1, n) => { for (let i = 0; i < n; i++) pts.push([x0 + (x1-x0)*i/n, y0 + (y1-y0)*i/n]); };
+  const ia = a - r, ib = b - r;
+  side(a, 0, a, ib, nS[0]); arc(ia, ib, 0);
+  side(ia, b, -ia, b, nS[1]*2); arc(-ia, ib, Math.PI/2);
+  side(-a, ib, -a, -ib, nS[0]*2); arc(-ia, -ib, Math.PI);
+  side(-ia, -b, ia, -b, nS[1]*2); arc(ia, -ib, Math.PI*1.5);
+  side(a, -ib, a, 0, nS[0]);
+  return pts;
+}
+// bevelled slab on a knee frame: footprint w x h (corner radius rcn) centred at arc cx / height cy, from z0 (back) to z1 (face) out of the
+// bent surface M (radius M.R from the bone axis at the part's centre line, falling back by M.dome(y) above / below it). The face (rings
+// down to the centre, so it follows the bend), the 45-degree bevel, the wall and the back each get their own vertices: crisp edges, each
+// its own light band
+function kneeSlab(group, fr, M, cx, cy, w, h, z0, z1, bev, rcn){
+  const a = w/2, b = h/2, nS = [Math.max(1, Math.ceil(b/0.012)), Math.max(1, Math.ceil(a/0.012))], nC = 3;
+  const outl = rrect(a, b, rcn, nS, nC), inl = rrect(a - bev, b - bev, Math.max(0.0008, rcn - bev), nS, nC), n = outl.length;
+  // uv (for the shader's tones and worn paint): x = 0 at the middle of the face .. 1 at its edge, 1 - 1.5 across the bevel, 1.5 - 2 down
+  // the wall (2 on the back); y = height on the part (-1 .. 1)
+  const pos = [], uv = [], idx = [];
+  const put = (x, y, z, e) => { const p = fr.dir((cx + x)/M.R).multiplyScalar(M.R + z - M.dome(cy + y)).add(fr.O).addScaledVector(fr.U, cy + y);
+    pos.push(p.x, p.y, p.z); uv.push(e, y/b); return pos.length/3 - 1; };
+  const ring = (pts, k, z, e) => pts.map(([x, y]) => put(x*k, y*k, z, e));
+  const band = (A, Bq) => { for (let i = 0; i < n; i++){ const j = (i+1) % n; idx.push(A[i], Bq[i], Bq[j], A[i], Bq[j], A[j]); } };
+  const c = put(0, 0, z1, 0), F = [0.25, 0.5, 0.75, 1].map(k => ring(inl, k, z1, k));
+  for (let i = 0; i < n; i++) idx.push(c, F[0][i], F[0][(i+1) % n]);
+  for (let k = 0; k < 3; k++) band(F[k], F[k+1]);
+  band(ring(inl, 1, z1, 1), ring(outl, 1, z1 - bev, 1.5));
+  band(ring(outl, 1, z1 - bev, 1.5), ring(outl, 1, z0, 2));
+  const Bk = ring(outl, 1, z0, 2), cb = put(0, 0, z0, 2);
+  for (let i = 0; i < n; i++) idx.push(cb, Bk[(i+1) % n], Bk[i]);
+  const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new T.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx); g.computeVertexNormals();
+  const m = new T.Mesh(g, KNEE.plate); m.userData.bone = fr.bone; m.frustumCulled = false; group.add(m); return m;
+}
+function buildKneeGuards(){
+  const C = bodyCloud(/^(?!thigh|calf)/, 0.25, 0.85);      // the legs (thigh / calf vertices) in the rest pose
+  const rc = new T.Raycaster(), cs = nm => hero.worldToLocal(B[nm].getWorldPosition(new T.Vector3()));
+  const plates = new T.Group(), bosses = new T.Group(), rivets = new T.Group(), lames = new T.Group(), hinges = new T.Group(), straps = new T.Group(), buckles = new T.Group();
+  const under = new Set(), legs = [];                 // the trouser vertices under the straps; per leg: knee, frame axes, calf bone, strap ends
+  // a knee frame on a bone axis; cast(phi, y): the ray out from the axis to the trousers, rad(phi, y): its length (0 = no hit)
+  const frame = (O, U, bone) => {
+    const F = new T.Vector3(1, 0, 0).addScaledVector(U, -U.x).normalize(), L = new T.Vector3().crossVectors(U, F);
+    const dir = phi => F.clone().multiplyScalar(Math.cos(phi)).addScaledVector(L, Math.sin(phi));
+    const cast = (phi, y) => { rc.set(O.clone().addScaledVector(U, y), dir(phi)); rc.far = 0.3; return rc.intersectObject(C.mesh, false)[0]; };
+    const rad = (phi, y) => { const hit = cast(phi, y); return hit ? hit.distance : 0; };
+    return { O, U, F, L, dir, cast, rad, bone };
+  };
+  // fit a part's bent surface round the axis at angle a (0 = front): the face 'proud' above the highest fold under the footprint (7 x 7
+  // rays), the back 'sink' below the lowest; the face curves back (radius Rv) above and below its apex (cy + apex). (The part's arc
+  // position on it is then a * M.R.)
+  const fit = (fr, a, cy, w, h, Rv, proud, sink, apex=0) => {
+    const M = { R: (fr.rad(a, cy) || 0.1) + proud, dome: y => (y - cy - apex)*(y - cy - apex)/(2*Rv) };
+    let lo = 0;
+    for (let it = 0; it < 2; it++){
+      const rs = [];
+      for (let i = -3; i <= 3; i++) for (let j = -3; j <= 3; j++){
+        const x = i/3*w/2*0.95, y = cy + j/3*h/2*0.95, r = fr.rad(a + x/M.R, y); if (r) rs.push([r, M.dome(y)]); }
+      M.R = Math.max(...rs.map(([r, d]) => r + d)) + proud;
+      lo = Math.max(...rs.map(([r, d]) => M.R - d - r));
+    }
+    M.z0 = -(lo + sink); return M;
+  };
+  for (const s of ['l','r']){
+    const knee = cs('calf_'+s), calf = frame(knee, knee.clone().sub(cs('foot_'+s)).normalize(), B['calf_'+s]);
+    const out = s === 'r' ? -1 : 1;                   // the outer side of the leg in local x (+x = the character's left)
+    // knee cap: 11 x 12 cm (near square), centre 5 cm below the joint (over the knee's bulge), 2 cm proud of the highest fold; the face is
+    // flat near the top and curves back toward the shin below
+    const CW = 0.11, CH = 0.12, CY = -0.05, cap = fit(calf, 0, CY, CW, CH, 0.25, 0.02, 0.012, 0.03);
+    kneeSlab(plates, calf, cap, 0, CY, CW, CH, cap.z0, 0, 0.007, 0.022);
+    // raised square boss, 4.8 x 4.2 cm (about half the cap's width as seen from the front) in its upper half - at 300 px 3 px of frame
+    // above and beside it, 7 below - 1 cm proud of the cap; two rivets (1.8 cm domed heads: 2 x 2 px at 300 px) in the frame below it
+    kneeSlab(bosses, calf, cap, 0, CY + 0.018, 0.048, 0.042, -0.004, 0.01, 0.0035, 0.006);
+    for (const x of [-0.03, 0.03]) kneeSlab(rivets, calf, cap, x, CY - 0.036, 0.018, 0.018, -0.002, 0.006, 0.0035, 0.009);
+    // articulated lame on the top of the shin, its upper edge tucked under the cap's bottom
+    const SY = -0.125, SH = 0.045, SW = 0.085, ls = fit(calf, 0, SY, SW, SH, 0.6, 0.01, 0.01);
+    kneeSlab(lames, calf, ls, 0, SY, SW, SH, ls.z0, 0, 0.004, 0.012);
+    // hinge knuckle against the cap's outer side wall, near the joint's axis (it barely moves as the knee bends): a 2.8 cm disc with a
+    // bolt in its middle
+    const HA = out*(CW/2/cap.R + 0.17), HY = -0.012, hm = fit(calf, HA, HY, 0.028, 0.028, 1, 0.01, 0.008);
+    kneeSlab(hinges, calf, hm, HA*hm.R, HY, 0.028, 0.028, hm.z0, 0, 0.004, 0.014);
+    kneeSlab(rivets, calf, hm, HA*hm.R, HY, 0.012, 0.012, -0.002, 0.005, 0.003, 0.006);
+    // strap round the back of the calf at the lame's height (webbing on the trousers, its ends under the lame's side walls), a buckle on
+    // the outer side; the trouser vertices under it (the hit triangles') give it its weights
+    const ST = 0.005, SWb = 0.025, a0 = (SW/2 - 0.014)/ls.R, pts = [], rs = [];
+    for (let k = 0; k <= 20; k++){
+      const phi = a0 + (2*Math.PI - 2*a0)*k/20; rs.push([phi, calf.rad(phi, SY) || 0.08]);
+      for (const dy of [-SWb/2, 0, SWb/2]){ const hit = calf.cast(phi, SY + dy); if (hit) [hit.face.a, hit.face.b, hit.face.c].forEach(i => under.add(i)); }
+    }
+    rs.forEach(([phi, r], k) => { const rr = (r + rs[Math.max(0, k-1)][1] + rs[Math.min(rs.length-1, k+1)][1])/3;
+      pts.push(calf.dir(phi).multiplyScalar(Math.max(r, rr) + ST/2 - 0.001).add(calf.O).addScaledVector(calf.U, SY).toArray()); });
+    gearStrap(straps, KNEE.strap, pts, SWb, ST, calf.U);
+    const bk = calf.rad(out*Math.PI/2, SY) + ST, bm = { R: bk, dome: () => 0 };
+    kneeSlab(buckles, calf, bm, out*Math.PI/2*bk, SY, 0.02, 0.03, -0.002, 0.004, 0.0015, 0.004).userData.bone = null;
+    legs.push({ O: knee, F: calf.F, L: calf.L, bone: calf.bone, a0 });
+  }
+  skinToBody(plates, KNEE.plate, 'kneeCaps', {uv:true}); skinToBody(bosses, KNEE.boss, 'kneeBosses', {uv:true});
+  skinToBody(rivets, KNEE.rivet, 'kneeRivets', {uv:true}); skinToBody(lames, KNEE.lame, 'kneeLames', {uv:true});
+  skinToBody(hinges, KNEE.hinge, 'kneeHinges', {uv:true});
+  // strap, buckle: the trousers' weights, blended to rigid on the calf toward the ends under the lame (fully from 0.5 rad round the back)
+  const leg = (x, y, z) => { const p = new T.Vector3(x, y, z); return legs[p.distanceToSquared(legs[0].O) < p.distanceToSquared(legs[1].O) ? 0 : 1]; };
+  const sOpt = { only: under, uv: true, rigidBone: (x, y, z) => leg(x, y, z).bone, rigid: (x, y, z) => {
+    const g = leg(x, y, z), p = new T.Vector3(x, y, z).sub(g.O), phi = Math.abs(Math.atan2(p.dot(g.L), p.dot(g.F)));
+    return Math.min(1, Math.max(0, 1 - (phi - g.a0)/0.5)); } };
+  skinToBody(straps, KNEE.strap, 'kneeStraps', sOpt); skinToBody(buckles, KNEE.buckle, 'kneeBuckles', sOpt);
+}
 function buildGear(){
   const pack = new T.Group(); pack.name = 'backpack';
   // main body (sheet C back view): ~3/4 of the back's width, top on the shoulder line so the high collar shows above it,
@@ -1255,6 +2208,7 @@ function buildGear(){
     m.geometry.computeVertexNormals();
   });
   buildStraps();
+  buildKneeGuards();
   // re-parent to spine_03 keeping the bind-pose placement
   const bone = B.spine_03; hero.updateMatrixWorld(true); bone.updateWorldMatrix(true,false);
   const M = new T.Matrix4().copy(bone.matrixWorld).invert().multiply(hero.matrixWorld);
@@ -1265,7 +2219,7 @@ function buildGear(){
 
 // ---------- Coat skirt: its own bones + secondary motion ----------
 // The scan skins the whole skirt 100% to the thigh / calf bones, so it moved like the trousers and split into two tubes in the walk.
-// At load the outer shell below the belt (bind-pose distance from the leg bones; the trousers, knee pads and the front opening stay
+// At load the outer shell below the belt (bind-pose distance from the leg bones; the trousers and the front opening stay
 // on the legs) is taken off the legs: near the belt it rides on the pelvis, below it on 8 panel chains hung around the hips
 // (front edge / side / rear side / back, left and right, 3 bones each, children of the pelvis). The back vent's two lips go to their
 // own side, so the vent opens when a leg swings back.
@@ -1288,12 +2242,17 @@ const COAT = { chains:[], init:false,
   flareArmed:[0.06, 0.03, 0.0, 0.0], tailArmed:[0.0, 0.04, 0.16, 0.24],
   back:[0.55, 0.72, 0.85], fwd:[0.55, 0.75, 0.9], outMax:0.75, inMax:0.1, bend:0.4, nbr:0.3, radK:[0.4, 0.8, 1.0, 1.0], open:[0.0, 0.1, 9, 9], push:[1.0, 1.0, 0.6, 0.45],
   wind:0.04, speed:[1.4, 4.0], speedK:0.5, carry:0.15,
+  // vertical air flow (platformer clips): flare out of a fall (rad at full speed, saturating over v m/s), press-in while rising, per
+  // segment / per panel (front edge .. back) weights; flutter of a falling coat (rad/s^2 at the hem, at the clip's own period so the
+  // fall loop repeats, plus its 2nd harmonic)
+  air:{ up:0.95, down:0.1, v:3.5, k:[0.4, 0.85, 1.15], az:[0.7, 1.0, 1.0, 0.9], flut:70, lift:0.4 },
   // arms: margin around the hand / cuff sample vertices, how deep inside still counts as a contact (the coat's step / the exact test
   // on the mesh), how far above the hem's root the (rigid) belt still blocks, how far (rad) a hand may turn a panel aside and how fast
   // that eases in / out, friction rate of a sweeping hand, cap on the angular speed it hands on, how much of last frame's turn-out an
   // arm starts from
   arm:{ r:0.01, deep:0.16, near:0.05, top:0.09, give:0.15, ease:10, fric:14, wMax:6, keep:0.97 },
-  free:{ l:true, r:true } };
+  free:{ l:true, r:true },
+  aa:0 };   // the platformer clip's jump acceleration as the coat feels it (smoothed like the hips', coatStep)
 function buildCoat(){
   let sm = null; model.traverse(o=>{ if (o.isSkinnedMesh && !sm) sm = o; });
   if (!sm) return;
@@ -1466,7 +2425,8 @@ function buildCoat(){
       else if (bone === lo){ const q2 = sm.boneTransform(i, new T.Vector3()).applyMatrix4(sm.matrixWorld); fore.push([i, q2, pv.subVectors(q2, loW).dot(axW)/L2]); }
     }
     const cuff = fore.filter(f => f[2] > 0.75);
-    COAT.armPts[s] = spread(hand, extremes(hand), 72).concat(spread(cuff, extremes(cuff), 30)); COAT.armSkin[s] = skinSet(COAT.armPts[s]);
+    // (100 over the glove: at 72 a knuckle of the run's far hand slipped between two samples into the skirt, ~1.5 cm, for a frame)
+    COAT.armPts[s] = spread(hand, extremes(hand), 100).concat(spread(cuff, extremes(cuff), 30)); COAT.armSkin[s] = skinSet(COAT.armPts[s]);
     COAT.armSkinC[s] = skinSet([...new Set(extremes(hand, dirs6).concat(extremes(cuff, dirs6)))]);
     const ds = fore.filter(f => f[2] > 0.3 && f[2] < 0.9).map(([, q2, t]) => q2.distanceTo(loW.clone().addScaledVector(axW, t))).sort((a, b) => a - b);
     COAT.arm.rFore[s] = ds.length ? ds[Math.floor(ds.length*0.8)] : 0.04;
@@ -1653,6 +2613,10 @@ function coatStep(dt){
     COAT.pa.lerp(a, 1 - Math.exp(-dt*25)); COAT.pv.copy(v); COAT.pp.copy(pw);
   }
   const accY = toY(COAT.pa.clone()).multiplyScalar(live);
+  // the jump arc a platformer clip stands for (the hero stays in place): its vertical acceleration adds to the hips' (smoothed the same
+  // way), so the coat weighs more on take-off and landing and floats in free flight
+  COAT.aa += (S.airA - COAT.aa) * (dt > 0.2 ? 1 : 1 - Math.exp(-dt*25));
+  accY.y += COAT.aa * live;
   // the clips run in place: the travel speed they stand for still starts / stops the coat (it lags when setting off, swings on when stopping)
   const spd = S.walk*COAT.speed[0] + S.run*COAT.speed[1];
   if (COAT.spd !== undefined && dt > 1e-5 && dt <= 0.2) accY.x += Math.max(-12, Math.min(12, (spd - COAT.spd)/dt)) * COAT.speedK * live;
@@ -1663,6 +2627,11 @@ function coatStep(dt){
     const a = Math.asin(Math.max(-1, Math.min(1, d.x))), b = Math.atan2(-d.z, -d.y); thA[s] = [a - COAT.th0[s][0], b - COAT.th0[s][1]]; }
   const fm = Math.max(0, 1 - (1-COAT.followMove[0])*S.walk - (1-COAT.followMove[1])*S.run) * live;
   const dragBase = (S.walk*COAT.drag[0] + S.run*COAT.drag[1]) * live;
+  // vertical air flow of the jump arc: falling, the air under the skirt lifts every panel out from the hips (the hem most: a bell);
+  // rising, it presses them in along the legs (as far as the inward limit lets them)
+  const vf = S.airV * live, AIR = COAT.air;
+  const flare = vf < 0 ? AIR.up * (1 - Math.exp(vf / AIR.v)) : -AIR.down * (1 - Math.exp(-vf / AIR.v));
+  const lift = AIR.lift * Math.max(0, flare) / AIR.up;   // a billowing coat may swing further out than the walk / run limits allow
   // targets per chain / segment
   const tgt = COAT.chains.map(ch => {
     const i = ch.i, fl = COAT.follow[i]*fm, ta = [], tb = [];
@@ -1673,6 +2642,7 @@ function coatStep(dt){
       const arm = armed ? stand : 0;
       b += ch.so * COAT.flareArmed[i] * arm * (0.6 + 0.4*k);
       a -= COAT.tailArmed[i] * arm * (0.7 + 0.3*k);
+      if (flare){ const fk = flare * AIR.k[k] * AIR.az[i]; a += ch.rd.x * fk; b -= ch.rd.z * fk; }
       ta.push(a); tb.push(b);
     }
     return [ta, tb];
@@ -1725,6 +2695,9 @@ function coatStep(dt){
         const ph = c*1.7 + k*0.6, kk = (k+1)/3;
         const wnd = COAT.wind * live * kk * 30 * (0.6*Math.sin(tt*1.3 + ph) + 0.4*Math.sin(tt*2.9 + 2*ph));
         fa -= wnd; fb += 0.6*wnd*ch.so;
+        // flutter of a falling coat: out / in about the hips, a ripple running round the skirt
+        if (S.airF > 0.001){ const w2 = 2*Math.PI/S.airP, fq = COAT.air.flut * S.airF * live * kk * (0.75*Math.sin(w2*tt + c*1.3 + k*0.8) + 0.25*Math.sin(2*w2*tt + c*2.1));
+          fa += ch.rd.x * fq; fb -= ch.rd.z * fq; }
         ch.va[k] = (ch.va[k] + fa*h)*dmp; ch.vb[k] = (ch.vb[k] + fb*h)*dmp;
         ch.a[k] += ch.va[k]*h; ch.b[k] += ch.vb[k]*h;
         pa = ea; pb = eb;
@@ -1732,12 +2705,12 @@ function coatStep(dt){
     });
     // 2) limits: swing caps (the tail never goes horizontal), outward / inward, bend between segments
     COAT.chains.forEach(ch => { for (let k = 0; k < 3; k++){
-      const lo = -COAT.back[k], hi = COAT.fwd[k];
+      const lo = -COAT.back[k] - lift, hi = COAT.fwd[k] + lift;
       if (ch.a[k] < lo){ ch.a[k] = lo; if (ch.va[k] < 0) ch.va[k] *= -0.1; }
       if (ch.a[k] > hi){ ch.a[k] = hi; if (ch.va[k] > 0) ch.va[k] *= -0.1; }
       let o = (ch.b[k] - ch.b0[k]) * ch.so;
       if (o < -COAT.inMax){ ch.b[k] = ch.b0[k] - COAT.inMax*ch.so; if (ch.vb[k]*ch.so < 0) ch.vb[k] = 0; }
-      else if (o > COAT.outMax){ ch.b[k] = ch.b0[k] + COAT.outMax*ch.so; if (ch.vb[k]*ch.so > 0) ch.vb[k] = 0; }
+      else if (o > COAT.outMax + lift){ ch.b[k] = ch.b0[k] + (COAT.outMax + lift)*ch.so; if (ch.vb[k]*ch.so > 0) ch.vb[k] = 0; }
       if (k > 0){
         const da = (ch.a[k]-ch.a0[k]) - (ch.a[k-1]-ch.a0[k-1]), db = (ch.b[k]-ch.b0[k]) - (ch.b[k-1]-ch.b0[k-1]);
         if (Math.abs(da) > COAT.bend) ch.a[k] -= da - Math.sign(da)*COAT.bend;
@@ -1787,7 +2760,7 @@ function coatStep(dt){
           ch.a[k] += da*w; ch.b[k] += db*w;
           if (ch.va[k]*da < 0) ch.va[k] *= 0.3; if (ch.vb[k]*db < 0) ch.vb[k] *= 0.3;
         }
-        for (let k = 0; k < 3; k++){ ch.a[k] = Math.max(-COAT.back[k], Math.min(COAT.fwd[k], ch.a[k])); p[k+1].copy(p[k]).addScaledVector(coatDir(ch.a[k], ch.b[k], dv), ch.len[k]); }
+        for (let k = 0; k < 3; k++){ ch.a[k] = Math.max(-COAT.back[k] - lift, Math.min(COAT.fwd[k] + lift, ch.a[k])); p[k+1].copy(p[k]).addScaledVector(coatDir(ch.a[k], ch.b[k], dv), ch.len[k]); }
       }
     });
   }
@@ -1904,7 +2877,8 @@ loadModel(gltf => {
   });
   model.updateMatrixWorld(true);
   model.traverse(o => { if (o.isSkinnedMesh) slimBody(o); });
-  for (const n in B) BIND[n] = { p:B[n].position.clone(), q:B[n].quaternion.clone(), w:B[n].getWorldQuaternion(new T.Quaternion()) };
+  model.traverse(o => { if (o.geometry && o.geometry.attributes.sNormal) addPlateRim(o.geometry, o.material.uniforms.uMat.value); });   // on the slimmed bind pose
+  for (const n in B) BIND[n] = { p:B[n].position.clone(), q:B[n].quaternion.clone(), w:B[n].getWorldQuaternion(new T.Quaternion()), wp:B[n].getWorldPosition(new T.Vector3()) };
   const wp = n => B[n].getWorldPosition(new T.Vector3());
   for (const s of ['l','r']){ LEN['up_'+s] = wp('upperarm_'+s).distanceTo(wp('lowerarm_'+s)); LEN['lo_'+s] = wp('lowerarm_'+s).distanceTo(wp('hand_'+s));
     LEN['th_'+s] = wp('thigh_'+s).distanceTo(wp('calf_'+s)); LEN['ca_'+s] = wp('calf_'+s).distanceTo(wp('foot_'+s)); }
@@ -1913,7 +2887,7 @@ loadModel(gltf => {
   buildGear();
   buildCoat();
   updateHud();
-  window.HERO = { T, hero, model, B, S, SH, LIGHT, PAL, RAMP, CLS, post, weapons, flash, update, render, setAnim, setWeapon, setSize,
+  window.HERO = { T, hero, model, B, S, SH, LIGHT, PAL, RAMP, CLS, post, weapons, flash, update, render, setAnim, setWeapon, setSize, CLIPS,
     frame(w,h,px){ S.pxChar=px; setSize(w,h,1); } };
   window.HERO_READY = true;
 }, err => { hud.textContent = 'Nie udało się wczytać modelu: ' + (err && err.message || err); });
