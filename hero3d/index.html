@@ -28,6 +28,7 @@ h1 span{color:var(--accent)}
 .row{display:flex;flex-wrap:wrap;gap:6px}
 button{font-family:var(--f-display);font-size:12px;background:var(--panel);color:var(--fg);border:1px solid var(--line);padding:8px 10px;cursor:pointer;letter-spacing:.04em}
 button:hover{border-color:var(--muted)}
+button:disabled{opacity:.35;cursor:not-allowed}
 button[aria-pressed="true"]{background:var(--accent);color:#120d06;border-color:var(--accent)}
 button:focus-visible,input:focus-visible{outline:2px solid var(--accent-2);outline-offset:2px}
 kbd{font-family:var(--f-display);font-size:10px;color:var(--muted);margin-left:4px}
@@ -62,7 +63,8 @@ kbd{font-family:var(--f-display);font-size:10px;color:var(--muted);margin-left:4
     <div class="group">
       <div class="label">Broń <kbd>Q</kbd></div>
       <div class="row" id="weapons">
-        <button id="w-rifle" data-weapon="rifle" aria-pressed="true">Karabin</button>
+        <button id="w-none" data-weapon="none" aria-pressed="true">Brak</button>
+        <button id="w-rifle" data-weapon="rifle" aria-pressed="false">Karabin</button>
         <button id="w-pistol" data-weapon="pistol" aria-pressed="false">Pistolet</button>
       </div>
     </div>
@@ -446,7 +448,7 @@ const postScene = new T.Scene(); postScene.add(new T.Mesh(new T.PlaneGeometry(2,
 const postCam = new T.Camera();
 
 const SIDE_YAW = 0.9;
-const S = { anim:'idle', weapon:'rifle', pxChar:64, yaw:SIDE_YAW, spin:false, outline:true,
+const S = { anim:'idle', weapon:'none', pxChar:64, yaw:SIDE_YAW, spin:false, outline:true,
   t:0, walk:0, run:0, aim:0, tp:0, shotT:9, dragging:false };
 let W=160, H=120, scale=1;
 const CHAR_H = 1.95;
@@ -612,7 +614,8 @@ const _v=new T.Vector3(), _v2=new T.Vector3(), _qy=new T.Quaternion(), _qp=new T
 function update(dt){
   if (!model) return;
   S.t += dt; const t = S.t;
-  const want = { walk: S.anim==='walk'?1:0, run: S.anim==='run'?1:0, aim:(S.anim==='aim'||S.anim==='fire')?1:0, tp:S.anim==='tpose'?1:0 };
+  const armed = S.weapon !== 'none';
+  const want = { walk: S.anim==='walk'?1:0, run: S.anim==='run'?1:0, aim:(armed && (S.anim==='aim'||S.anim==='fire'))?1:0, tp:S.anim==='tpose'?1:0 };
   const k8 = 1-Math.exp(-dt*8), k12 = 1-Math.exp(-dt*12);
   S.walk=lerp(S.walk,want.walk,k8); S.run=lerp(S.run,want.run,k8); S.aim=lerp(S.aim,want.aim,k12); S.tp=lerp(S.tp,want.tp,k12);
   const move = Math.min(1, S.walk+S.run);
@@ -670,64 +673,88 @@ function update(dt){
     setBoneWorldQ(B.head, _qy.clone().multiply(BIND.head.w), hw);
   }
 
-  // 4) weapon + arm IK (not in the T-pose)
-  for (const k in weapons) weapons[k].visible = (k===S.weapon) && S.tp<0.5;
-  const g = weapons[S.weapon], u = g.userData;
-  B.spine_03.updateWorldMatrix(true,false);
-  const chestW = B.spine_03.getWorldPosition(new T.Vector3());
-  const chest = hero.worldToLocal(chestW.clone());
-  const pose = { pos:new T.Vector3().lerpVectors(u.low.pos,u.aim.pos,S.aim), rot:lerp(u.low.rot,u.aim.rot,S.aim), yaw:lerp(u.low.yaw,u.aim.yaw,S.aim) };
-  g.position.copy(chest).add(pose.pos); g.rotation.set(0,pose.yaw,pose.rot);
-  if (u.aim.reach && S.aim > 0.001){
-    // arm-extended aim: the wrist goes out along 'reach' from the shoulder, the gun is hung off the wrist
-    B.upperarm_r.updateWorldMatrix(true,false);
-    const wt = hero.worldToLocal(B.upperarm_r.getWorldPosition(new T.Vector3())).addScaledVector(u.aim.reach.clone().normalize(), (LEN.up_r+LEN.lo_r)*u.aim.ext);
-    g.updateMatrix(); const gp = wt.sub(u.wrist.clone().applyQuaternion(g.quaternion));
-    g.position.lerpVectors(new T.Vector3().copy(chest).add(u.low.pos), gp, S.aim);
-  }
-  g.position.y += Math.abs(Math.sin(t*Math.PI*2*1.0))*0.02*move;
-  // firing on a fixed clock so exported frames are deterministic
-  if (S.anim==='fire' && S.aim>0.9) S.shotT = (t % u.rate); else S.shotT = 9;
-  const rec = Math.exp(-S.shotT*22);
-  g.rotation.z += 0.12*rec*(pistol?1.7:1); g.updateMatrix(); g.translateX(-u.kick*rec);
-  if (S.shotT<9){ rotBoneWorld(B.spine_03, RIGHT, 0.05*rec); if (pistol) rotBoneWorld(B.clavicle_r, FWD, -0.06*rec); }
-  if (flash.parent!==g) g.add(flash);
-  flash.position.copy(u.muzzle); flash.visible = S.shotT < 0.05; flash.rotation.x = S.t*7.3;
-  g.updateMatrixWorld(true);
-  const armW = 1 - S.tp;
-  // two-handed: the far shoulder comes forward so the support hand reaches the handguard
-  if (!u.freeHand){ rotBoneWorld(B.clavicle_l, UP, -lerp(0.32,0.5,S.aim)*armW); rotBoneWorld(B.clavicle_r, UP, 0.3*S.aim*armW); }
-  const toW = v => hero.localToWorld(v.clone()).sub(hero.getWorldPosition(new T.Vector3()));
-  const poleR = new T.Vector3().lerpVectors(u.low.poleR, u.aim.poleR, S.aim);
-  armIK('r', g.localToWorld(u.wrist.clone()), toW(poleR), armW);
-  if (u.freeHand){
-    // free (far) arm hangs a little out from the coat so the glove reads
-    B.upperarm_l.updateWorldMatrix(true,false);
-    const suppW = B.upperarm_l.getWorldPosition(new T.Vector3()).add(new T.Vector3(lerp(0.12,0.1,S.aim),-0.4,lerp(-0.02,-0.12,S.aim)));
-    armIK('l', suppW, toW(new T.Vector3(-1,0.1,-0.3)), armW);
+  if (armed){
+    // 4) weapon + arm IK (not in the T-pose)
+    for (const k in weapons) weapons[k].visible = (k===S.weapon) && S.tp<0.5;
+    const g = weapons[S.weapon], u = g.userData;
+    B.spine_03.updateWorldMatrix(true,false);
+    const chestW = B.spine_03.getWorldPosition(new T.Vector3());
+    const chest = hero.worldToLocal(chestW.clone());
+    const pose = { pos:new T.Vector3().lerpVectors(u.low.pos,u.aim.pos,S.aim), rot:lerp(u.low.rot,u.aim.rot,S.aim), yaw:lerp(u.low.yaw,u.aim.yaw,S.aim) };
+    g.position.copy(chest).add(pose.pos); g.rotation.set(0,pose.yaw,pose.rot);
+    if (u.aim.reach && S.aim > 0.001){
+      // arm-extended aim: the wrist goes out along 'reach' from the shoulder, the gun is hung off the wrist
+      B.upperarm_r.updateWorldMatrix(true,false);
+      const wt = hero.worldToLocal(B.upperarm_r.getWorldPosition(new T.Vector3())).addScaledVector(u.aim.reach.clone().normalize(), (LEN.up_r+LEN.lo_r)*u.aim.ext);
+      g.updateMatrix(); const gp = wt.sub(u.wrist.clone().applyQuaternion(g.quaternion));
+      g.position.lerpVectors(new T.Vector3().copy(chest).add(u.low.pos), gp, S.aim);
+    }
+    g.position.y += Math.abs(Math.sin(t*Math.PI*2*1.0))*0.02*move;
+    // firing on a fixed clock so exported frames are deterministic
+    if (S.anim==='fire' && S.aim>0.9) S.shotT = (t % u.rate); else S.shotT = 9;
+    const rec = Math.exp(-S.shotT*22);
+    g.rotation.z += 0.12*rec*(pistol?1.7:1); g.updateMatrix(); g.translateX(-u.kick*rec);
+    if (S.shotT<9){ rotBoneWorld(B.spine_03, RIGHT, 0.05*rec); if (pistol) rotBoneWorld(B.clavicle_r, FWD, -0.06*rec); }
+    if (flash.parent!==g) g.add(flash);
+    flash.position.copy(u.muzzle); flash.visible = S.shotT < 0.05; flash.rotation.x = S.t*7.3;
+    g.updateMatrixWorld(true);
+    const armW = 1 - S.tp;
+    // two-handed: the far shoulder comes forward so the support hand reaches the handguard
+    if (!u.freeHand){ rotBoneWorld(B.clavicle_l, UP, -lerp(0.32,0.5,S.aim)*armW); rotBoneWorld(B.clavicle_r, UP, 0.3*S.aim*armW); }
+    const toW = v => hero.localToWorld(v.clone()).sub(hero.getWorldPosition(new T.Vector3()));
+    const poleR = new T.Vector3().lerpVectors(u.low.poleR, u.aim.poleR, S.aim);
+    armIK('r', g.localToWorld(u.wrist.clone()), toW(poleR), armW);
+    if (u.freeHand){
+      // free (far) arm hangs a little out from the coat so the glove reads
+      B.upperarm_l.updateWorldMatrix(true,false);
+      const suppW = B.upperarm_l.getWorldPosition(new T.Vector3()).add(new T.Vector3(lerp(0.12,0.1,S.aim),-0.4,lerp(-0.02,-0.12,S.aim)));
+      armIK('l', suppW, toW(new T.Vector3(-1,0.1,-0.3)), armW);
+    } else {
+      const poleL = new T.Vector3().lerpVectors(u.low.poleL, u.aim.poleL, S.aim);
+      const sw = u.suppWrist.clone(); sw.x += lerp(u.low.supp||0, u.aim.supp||0, S.aim);
+      armIK('l', g.localToWorld(sw), toW(poleL), armW);
+    }
+    // hands wrap the weapon: bend the wrist so the fingers run down the grip / under the handguard instead of sticking out
+    const gDown = new T.Vector3(0,-1,0).applyQuaternion(g.quaternion), gFwd = new T.Vector3(1,0,0).applyQuaternion(g.quaternion);
+    const gLat = new T.Vector3(0,0,1).applyQuaternion(g.quaternion);
+    const wrap = (side, kd, kf, kl, w, curl=1.0) => {
+      if (w <= 0.001) return;
+      const lo = B['lowerarm_'+side], ha = B['hand_'+side], fi = B['middle_01_'+side];
+      const fa = ha.getWorldPosition(new T.Vector3()).sub(lo.getWorldPosition(new T.Vector3())).normalize();
+      const cur = fi.getWorldPosition(new T.Vector3()).sub(ha.getWorldPosition(new T.Vector3())).normalize();
+      const d = fa.clone().multiplyScalar(0.5).addScaledVector(gDown, kd).addScaledVector(gFwd, kf).addScaledVector(gLat, kl).normalize();
+      if (kd || kf || kl) pointBone(ha, fi, cur.lerp(d, w));
+      // curl the finger chain toward the palm (palms face down in the bind T-pose)
+      ha.getWorldQuaternion(_q2).multiply(BIND['hand_'+side].w.clone().invert());
+      const ax = new T.Vector3(side==='r' ? 1 : -1, 0, 0).applyQuaternion(_q2).normalize();
+      for (const n of ['middle_01_','middle_02_','middle_03_']) rotBoneWorld(B[n+side], ax, curl*w);
+    };
+    const wr = u.wrap || [0.45, 0.3, -0.2];
+    wrap('r', wr[0], wr[1], wr[2], armW);
+    if (!u.freeHand) wrap('l', -0.1, 0.0, 0.8, armW); else wrap('l', 0, 0, 0, armW, 0.55);   // free hand: half-curled, not a splayed mannequin hand
   } else {
-    const poleL = new T.Vector3().lerpVectors(u.low.poleL, u.aim.poleL, S.aim);
-    const sw = u.suppWrist.clone(); sw.x += lerp(u.low.supp||0, u.aim.supp||0, S.aim);
-    armIK('l', g.localToWorld(sw), toW(poleL), armW);
+  // 4b) unarmed: arms hang relaxed at the sides when standing; walk/run keep the clip's arm swing
+    for (const k in weapons) weapons[k].visible = false;
+    flash.visible = false; S.shotT = 9;
+    {
+      const hang = (1-move)*(1-S.tp);
+      const toW = v => hero.localToWorld(v.clone()).sub(hero.getWorldPosition(new T.Vector3()));
+      for (const side of ['r','l']){
+        const sg = side==='r' ? 1 : -1;
+        B['upperarm_'+side].updateWorldMatrix(true,false);
+        const sh = hero.worldToLocal(B['upperarm_'+side].getWorldPosition(new T.Vector3()));
+        const tgt = hero.localToWorld(sh.add(new T.Vector3(0.05 + 0.01*Math.sin(S.t*2.1), -0.56, sg*0.07)));
+        armIK(side, tgt, toW(new T.Vector3(-1, 0, sg*0.35)), hang);
+        // hands half-closed, not a splayed mannequin hand
+        if (hang > 0.001){
+          const ha = B['hand_'+side];
+          ha.getWorldQuaternion(_q2).multiply(BIND['hand_'+side].w.clone().invert());
+          const ax = new T.Vector3(side==='r' ? 1 : -1, 0, 0).applyQuaternion(_q2).normalize();
+          for (const n of ['middle_01_','middle_02_','middle_03_']) rotBoneWorld(B[n+side], ax, 0.5*hang);
+        }
+      }
+    }
   }
-  // hands wrap the weapon: bend the wrist so the fingers run down the grip / under the handguard instead of sticking out
-  const gDown = new T.Vector3(0,-1,0).applyQuaternion(g.quaternion), gFwd = new T.Vector3(1,0,0).applyQuaternion(g.quaternion);
-  const gLat = new T.Vector3(0,0,1).applyQuaternion(g.quaternion);
-  const wrap = (side, kd, kf, kl, w, curl=1.0) => {
-    if (w <= 0.001) return;
-    const lo = B['lowerarm_'+side], ha = B['hand_'+side], fi = B['middle_01_'+side];
-    const fa = ha.getWorldPosition(new T.Vector3()).sub(lo.getWorldPosition(new T.Vector3())).normalize();
-    const cur = fi.getWorldPosition(new T.Vector3()).sub(ha.getWorldPosition(new T.Vector3())).normalize();
-    const d = fa.clone().multiplyScalar(0.5).addScaledVector(gDown, kd).addScaledVector(gFwd, kf).addScaledVector(gLat, kl).normalize();
-    if (kd || kf || kl) pointBone(ha, fi, cur.lerp(d, w));
-    // curl the finger chain toward the palm (palms face down in the bind T-pose)
-    ha.getWorldQuaternion(_q2).multiply(BIND['hand_'+side].w.clone().invert());
-    const ax = new T.Vector3(side==='r' ? 1 : -1, 0, 0).applyQuaternion(_q2).normalize();
-    for (const n of ['middle_01_','middle_02_','middle_03_']) rotBoneWorld(B[n+side], ax, curl*w);
-  };
-  const wr = u.wrap || [0.45, 0.3, -0.2];
-  wrap('r', wr[0], wr[1], wr[2], armW);
-  if (!u.freeHand) wrap('l', -0.1, 0.0, 0.8, armW); else wrap('l', 0, 0, 0, armW, 0.55);   // free hand: half-curled, not a splayed mannequin hand
   // camera orbit
   if (S.spin && !S.dragging) S.yaw += dt*0.6;
   cam.position.set(Math.sin(S.yaw)*6, S.cy, Math.cos(S.yaw)*6); cam.lookAt(0,S.cy,0);
@@ -757,7 +784,12 @@ function loop(now){
 function press(container, attr, val){ container.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed', String(b.dataset[attr]===String(val)))); }
 const animsEl=document.getElementById('anims'), weapEl=document.getElementById('weapons'), resEl=document.getElementById('res');
 function setAnim(a){ S.anim=a; press(animsEl,'anim',a); }
-function setWeapon(w){ S.weapon=w; press(weapEl,'weapon',w); }
+function setWeapon(w){
+  S.weapon=w; press(weapEl,'weapon',w);
+  const unarmed = w==='none';
+  for (const id of ['a-aim','a-fire']){ const el=document.getElementById(id); if (el) el.disabled = unarmed; }
+  if (unarmed && (S.anim==='aim' || S.anim==='fire')) setAnim('idle');
+}
 animsEl.addEventListener('click',e=>{ const b=e.target.closest('button'); if(b) setAnim(b.dataset.anim); });
 weapEl.addEventListener('click',e=>{ const b=e.target.closest('button'); if(b) setWeapon(b.dataset.weapon); });
 resEl.addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; S.pxChar=+b.dataset.px; press(resEl,'px',S.pxChar); resize(); });
@@ -769,7 +801,7 @@ document.getElementById('palon').addEventListener('change',e=>SH.uPalOn.value=e.
 window.addEventListener('keydown',e=>{
   if (e.target.tagName==='INPUT') return;
   const m={ '1':'idle','2':'walk','3':'aim','4':'fire','5':'tpose','6':'run' }[e.key]; if (m) setAnim(m);
-  if (e.key==='q'||e.key==='Q') setWeapon(S.weapon==='rifle'?'pistol':'rifle');
+  if (e.key==='q'||e.key==='Q') setWeapon({none:'rifle', rifle:'pistol', pistol:'none'}[S.weapon]);
 });
 let dragX=0;
 stage.addEventListener('pointerdown',e=>{ S.dragging=true; dragX=e.clientX; stage.setPointerCapture(e.pointerId); });
@@ -778,6 +810,7 @@ stage.addEventListener('pointerup',()=>{ S.dragging=false; });
 stage.addEventListener('pointercancel',()=>{ S.dragging=false; });
 new ResizeObserver(resize).observe(stage);
 resize();
+setWeapon(S.weapon);   // sync the aim/fire buttons with the default (unarmed)
 requestAnimationFrame(loop);
 
 // ---------- Gear: backpack (sheet C back view, owner's sprites) + shoulder straps ----------
