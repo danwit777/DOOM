@@ -173,6 +173,7 @@ const SH = {
   uSat:{value:1.0}, uGain:{value:1.0}, uDetail:{value:0.6}, uRim:{value:0.55}, uShirtV:{value:0.07}, uGreyOff:{value:0.2}, uEyeBar:{value:1.3}, uBO:{value:new T.Vector3(0.75, 0.4, -0.2)}, uBootOff:{value:-0.2}, uDbg:{value:0},
   uPxM:{value:0.03},                                    // metres per output pixel (eye pupils stay at least one pixel)
   uSBv:{value:[new T.Vector3(1,1,1), new T.Vector3(1,1,1)]},   // shirt / belt seams drawn this frame, per side (shirtSeams)
+  uCF:{value:Array.from({length:10}, ()=>new T.Vector4(0,0,0,0))},   // coat: the skirt folds' room in view this frame, per side (coatFolds)
   uHair:{value:new T.Vector3(0.4, 4.0, 2.5)},           // hair strands: texture luminance pivot, gain for hair, gain for beard
   uPal:{value:PAL_LIST.map(h=>new T.Color(h))},
   uRamp:{value:[].concat(...RAMP.map(r=>r.map(k=>new T.Color(PAL[k]))))},
@@ -227,6 +228,7 @@ uniform vec3 uPal[${NP}]; uniform float uN; uniform vec3 uRamp[${NCLS*5}]; unifo
 uniform sampler2D nMap; uniform float uUseN; uniform sampler2D mrMap; uniform float uUseMR; uniform vec2 uNrm; uniform float uNrmK; uniform float uNrmB; uniform float uNK[${NCLS}];
 uniform float uHue; uniform float uRimK; uniform vec2 uCav; uniform float uSpec; uniform vec3 uRimC; uniform vec3 uCool; uniform vec3 uWarm; uniform vec3 uFill; uniform float uPart;
 uniform vec3 uSBv[2];   // shirt / belt, per side (-x, +x), this frame: abs column, side seam, outer belt loop drawn (shirtSeams)
+uniform vec4 uCF[10];   // coat, per side (-x, +x), this frame, at four heights (coatFolds): the sprite flap fold's chart angle, its clearance, the HD flap / side / back folds' clearance (px)
 uniform vec3 uWear[${WEAR.length*5}];
 varying vec2 vUv; varying vec3 vN; varying vec3 vP; varying vec3 vNs; varying vec3 vV; varying vec2 vCav; varying vec3 vNb; varying float vRim;
 // tangent-free normal mapping (screen-space derivatives of view position and uv)
@@ -357,6 +359,355 @@ vec3 wearRamp(float w, float i){
   for (int j = 0; j < ${WEAR.length*5}; j++){ if (j == k) c = uWear[j]; }
   return c;
 }
+// ---------- Coat (CLS.coat, and its shell that main() classes as trousers): hand-pixelled cloth on the long coat ----------
+// Everything is laid out on the bind pose (vP), so it rides the skinned body and the simulated skirt panels (their vertices keep their
+// bind position) and never swims. Much of each front flap is the coat's shell that main()'s leg rule classes as trousers (coatShell:
+// where the coat hugs the outer side of the hip and the thigh, or stands just off the leg by the front edges); the trousers leave it
+// alone and the coat draws its cloth on it, in the trousers' ramp. Two stylings, switched where the trousers and the shirt switch
+// theirs (hd 0.75, ~122 px):
+//  - sprite size (64 / 96 px): a few deliberate 1 px strokes inside the panels, like the owner's sprites, each one whole palette step
+//    from the tone the ramp would pick (so it keeps one tone along its length whatever the dirt left under it):
+//      * a long fold down the middle of each front flap's face as the view sees it this frame, and one down the side and the back
+//        panel (from ~80 px, the 96 px sprite, the side's too): a dark crease with a lit lip on the key light's side, or where the
+//        fold has under ~2.25 px of its face either side (and below ~56 px) one pixel - the crease on the lit plane, a light line on
+//        the shadow one; on the shell's shadow plane the crease takes the coat's black (the trousers' two darkest tones are one
+//        colour). On a flap's inner face - the far flap of a 3/4 view seen through the opening, in the coat's shade - the same fold
+//        as a light ridge alone (on the black a crease would not show);
+//      * a fold down the middle of each chest panel, from below the shoulder to the belt (one pixel at 64 px);
+//      * at 96 px a light ridge down the upper sleeve with a dark pixel on its underside, on whichever side of the arm faces the
+//        view - the hanging arm's side, the raised or aiming arm's front.
+//    A stroke goes only where it stays clear of its face's ends, so it never doubles an outline or hugs a class edge as rim light.
+//    For the skirt that is measured on the posed cloth once per frame (coatFolds: the simulated panels bend between their chains and
+//    the leg, so a flap swung back by the leg shows only a narrow strip of its face up to a sharp fold-over that the smoothed normals
+//    do not see): where the front flap's face runs and how much of it stays clear of each fold - a fold is drawn only with CF_MIN
+//    of its face left clear on both sides. The chest fold goes while the chest panel spans ~5 px, the inner face's while it spans
+//    ~8 px (its front edge is then the outline); every stroke only where the cloth faces the view (smoothed normal within ~55
+//    degrees of it, ~35 for the sleeve ridge, ~40 for the inner face) and hangs rather than lies level (flying out in the run, folded
+//    over in a stride), a fold only while it runs within ~35 degrees of upright on screen (~60 on the inner face, which swings out
+//    from the leg); the skirt folds fade in ~2 px below the waist and stop ~3 px above the hem. No drag folds, seams, lapel, cuff or
+//    hem lines: at this size they only compress into blobs or sit on an edge (the side panel under the near arm, in the main 3/4
+//    view, is hidden by the arm or seen edge-on). Where a stroke goes and how wide it is come from the bind pose, the measured faces
+//    and the smoothed normals - the bind -> screen mapping is rebuilt from the smoothed normal (the body upright in the view, the
+//    cloth unstretched) - never from the screen derivatives: those are constant per triangle, the scan's triangles are only a pixel
+//    or two across at this size and tilt with its sculpted wrinkles, so the derivatives jump from pixel to pixel and frame to frame,
+//    and strokes picked or sized by them shimmer while the cloth moves.
+//  - HD (~122 px up; screen derivatives, exact there): long folds down every panel from the waist to the hem, fanning out with the
+//    skirt's flare - one dominant fold per panel (a crease, a lit lip widening toward the hem and a broad half-step valley on its
+//    shadow side: front flap, side, back) and a lighter soft one between them (a half-step crease and a narrow valley), on the flaps'
+//    inner faces too (not the front flap's where it would run along the front edge of a flap swung open, nor any fold where the panel
+//    turns away to the silhouette, nor a dominant fold within ~3 px of the end of its face: coatFolds); the vent with both lips lit and
+//    the centre-back seam above it; from ~156 px (below, they pack into a pinstripe or a web of short lines; the 128 px tier keeps
+//    a soft fold only ~4 px clear of the dominant ones) side seams from the armpits to the pocket flaps hung from them and a
+//    diagonal drag fold under each arm; the sleeves' shoulder seam, ridges, elbow fold and rolled cuff; the lapels' light edge with
+//    a stitch line and the roll line beside it; and a fine posterised weave over all the cloth (a little sparser on the lit planes) -
+//    short dashes along the cloth's run, each half a step off the tone that would show (darker on the top tone, lighter on the
+//    black), so every dash reads on the lit planes as on the shadow ones (from ~150 px: below, the cells would be single pixels).
+// The coat's layout on the bind pose (measured on the scan; re-fit here after a mesh change). Skirt folds sit at fixed angles round the
+// skirt's section squeezed back to round (tf, see coatDetail): each front flap's front edge, where the trousers show, runs at tf ~1.05 -
+// 1.1 from the hip to the hem; the dominant folds down the middle of the front flap, the side and the back panel; soft ones between
+// (HD); at sprite size the front flap's fold runs down the middle of its face as measured (coatFolds), and on the inner face a little
+// further in than HD's: mid-way across what a 3/4 view sees of it (its edge turned in a tight roll, out to where the leg hides it)
+const float COAT_EDGE = 1.07;                 // a front flap's front edge (tf) ...
+const float COAT_SIDE = 1.5;                  // ... and how far round the hip a 3/4 view sees its inner face (tf)
+const vec3 COAT_FOLD = vec3(1.2, 1.9, 2.5);   // dominant folds (tf): front flap, side, back panel
+// sprite size: the clearance a skirt fold keeps (coatFolds: chessboard px from it to the last pixel of its face, which the outline or
+// an edge's line follows beside it) - at least one clear pixel of the face between the fold and that line, a quarter to spare
+const float CF_MIN = 1.25;
+const vec2 COAT_SOFT = vec2(1.47, 2.2);       // soft folds (tf, HD): front flap, back panel
+const float COAT_FOLD_IN = 1.42;              // sprite size: the front flap's fold on its inner face (tf)
+const float COAT_WAIST = 0.98;                // the skirt's folds run from the waist (bind y) ...
+const float COAT_HEM = 0.37;                  // ... to the hem
+// the coat's shell where main()'s leg rule classes it as trousers (th: angle round the leg axis from the front, + toward the outer side,
+// coatLegTh; ld: legD) - shared with trouDetail(), which leaves these pixels to the coat
+bool coatShell(vec3 p, float th, float ld){ return (th > 0.7 && (p.y > 0.8 || (ld > 0.1 && p.y > 0.42))) || (ld > 0.112 && th > -0.3); }
+float coatLegTh(vec3 p){   // the trousers' leg chart angle (hip - knee - ankle axis, as legD)
+  vec3 q = vec3(abs(p.x), p.y, p.z);
+  vec2 a = q.y > 0.578 ? mix(vec2(0.174, 0.011), vec2(0.125, 0.006), clamp((q.y - 0.578) / 0.379, 0.0, 1.0))
+                       : mix(vec2(0.21, -0.01), vec2(0.174, 0.011), clamp((q.y - 0.155) / 0.423, 0.0, 1.0));
+  return atan(q.x - a.x, q.z - a.y);
+}
+// a field with bind gradient G changes by coatG(G, jx, jy) per output px to the right / up (jx, jy: bind metres -> px at this fragment)
+vec2 coatG(vec3 G, vec3 jx, vec3 jy){ return vec2(dot(G, jx), dot(G, jy)); }
+// half a pixel of a field with screen gradient g: at sprite size (sp 1) the change over a step in x plus one in y, so a slanted line is a
+// 4-connected staircase (the post pass's clean-up, on up to 96 px, eats a pixel with no 4-neighbour of its own colour); HD along the
+// line's major axis (the thinnest staircase)
+float coatH(vec2 g, float sp){ return 0.5 * max(sp > 0.5 ? abs(g.x) + abs(g.y) : max(abs(g.x), abs(g.y)), 1e-7); }
+float coatSide(vec2 g){ return dot(g, uL.xy) > 0.0 ? 1.0 : -1.0; }   // +1: the field grows toward the key light (screen upper left)
+// a fold along the zero line of d (screen gradient g): -1 on the crease; +1 on its lit lip, the pixel beside it toward the light (HD:
+// +0.5 on to wl further); HD: -0.5 on the shadowed flank on the other side, ws wide (the valley); 0 elsewhere
+float coatFold(float d, vec2 g, float wl, float ws, float sp){
+  float h = coatH(g, sp), e = d * coatSide(g);
+  if (abs(e) < h) return -1.0;
+  if (e > 0.0) return e < 3.0 * h ? 1.0 : (e < h + wl ? 0.5 : 0.0);
+  return -e < h + ws ? -0.5 : 0.0;
+}
+// a band on the d > 0 side of the line d = 0 (a cuff's roll): +1 over its first n px (at least wl wide), then -1 on one px under it
+float coatBand(float d, vec2 g, float n, float wl, float sp){
+  float h = coatH(g, sp), w = max(2.0 * n * h, wl);
+  return d < 0.0 ? 0.0 : (d < w ? 1.0 : (d < w + 2.0 * h ? -1.0 : 0.0));
+}
+// a light ridge along d: +1 on the line and wl further toward the light, -1 on the pixel beside it on the shadow side
+float coatRidge(float d, vec2 g, float wl, float sp){
+  float h = coatH(g, sp), e = d * coatSide(g);
+  return e > -h && e < h + wl ? 1.0 : (e <= -h && e > -3.0 * h ? -1.0 : 0.0);
+}
+// keeps the nearer of the skirt fold found so far (x: chart angle off it, y: its index, z: its weight, 1 dominant / 0.5 soft) and the
+// fold k at chart angle a0, jittered a little per side sx (the two sides are not mirror images)
+vec3 coatNear(vec3 b, float tf, float a0, float k, float w, float sx){
+  float d = tf - a0 - 0.08 * (fract(k * 0.618 + sx * 0.37) - 0.5);
+  return abs(d) < abs(b.x) ? vec3(d, k, w) : b;
+}
+// what the view sees of the skirt this frame on side sx (coatFolds, measured on the posed cloth): row k of uCF - 0 the chart angle of
+// the sprite's front flap fold (the middle of its face on screen), 1 that fold's clearance, 2 / 3 / 4 the clearance of the front flap,
+// side and back panel folds at COAT_FOLD (chessboard px to the nearer end of the face each runs down) - at the heights 0.9, 0.75,
+// 0.6, 0.45
+vec4 coatCF(float sx, float k){
+  if (sx < 0.0) return k < 0.5 ? uCF[0] : (k < 1.5 ? uCF[1] : (k < 2.5 ? uCF[2] : (k < 3.5 ? uCF[3] : uCF[4])));
+  return k < 0.5 ? uCF[5] : (k < 1.5 ? uCF[6] : (k < 2.5 ? uCF[7] : (k < 3.5 ? uCF[8] : uCF[9])));
+}
+// such a row at bind height y (linear between the heights, held beyond them): (value, its d / d y)
+vec2 coatCFy(vec4 v, float y){
+  float u = clamp((0.9 - y) / 0.15, 0.0, 2.999), i = floor(u), f = u - i;
+  vec2 a = i < 0.5 ? v.xy : (i < 1.5 ? v.yz : v.zw);
+  return vec2(mix(a.x, a.y, f), (a.x - a.y) / 0.15 * step(y, 0.9) * step(0.45, y));
+}
+// p: bind position, nb: its bind normal, ns: the smoothed view-space normal, px / py: screen derivatives of p (from main, uniform control
+// flow); shell: the pixel is the coat's shell (classed as trousers); returns the new tone t; cls: the shell's sprite-size crease pixels
+// on its shadow plane take the coat's class (its black)
+float coatDetail(vec3 p, vec3 nb, vec3 ns, vec3 px, vec3 py, float hd, float tc0, float t, bool shell, inout float cls){
+  if (shell && (p.y > 0.99 || p.y < 0.42)) return t;   // (the shell by the hem, below the knee guards' footprint: left plain)
+  float ax = abs(p.x), sx = p.x < 0.0 ? -1.0 : 1.0;
+  float sp = step(hd, 0.75), L2 = step(uPxM, 0.024);   // sprite styling below ~122 px; L2: the 96 px sprite (from ~80 px)
+  float L3 = step(uPxM, 0.0125);                       // the full HD set (from ~156 px: seams, drag folds, pockets, soft folds)
+  vec3 jx = px, jy = py;
+  if (sp > 0.5){
+    // bind -> screen from the smoothed normals: the bind tangents round the body (Tb, level) and up the surface (Bb) map onto the
+    // view's T = (n.z, 0, -n.x) / k and B = n x T, whose screen parts form M = [T.xy B.xy]; a gradient (along Tb, Bb) maps through
+    // M^-T, then to px (n: the view normal held off grazing - the strokes stop well before it). Both frames are built on their own
+    // normal, so the inner face of a flap (the bind normal pointing in) maps as well as the outer one
+    vec3 n = vec3(ns.xy, max(ns.z, 0.2)); n = normalize(n);
+    vec3 Tb = cross(vec3(0.0, 1.0, 0.0), nb); Tb /= max(length(Tb), 1e-3); vec3 Bb = cross(nb, Tb);
+    float k = max(length(n.xz), 0.2);
+    jx = uPxM * (k / n.z) * Tb; jy = uPxM * (n.x * n.y / (k * n.z) * Tb + Bb / k);
+  }
+  // sprite strokes only on cloth that faces the view (the smoothed normal within ~55 degrees of it: a few px in from where the panel
+  // turns to the silhouette, and off panels turned edge-on) and hangs rather than lies level (a panel flying out in the run, folded
+  // over in a stride)
+  float on = sp > 0.5 ? step(0.58, ns.z) * step(abs(ns.y), 0.7) : 1.0;
+  float steep = 0.7;                       // sprite folds within ~35 degrees of upright on screen
+  float cr = 0.0, lp = 0.0, fl = 0.0, f;   // strongest crease (-1 / -0.5), lip (+1 / +0.5), flank (-0.5)
+  vec2 gw = vec2(0.0); vec3 G;             // the weave's chart (cells: across, along the cloth's run), its across gradient
+  float inside = 0.0;                      // 1: the cloth's inner side faces the view (body / skirt: the bind normal points in)
+  float lone = 0.0;                        // 1: on a sprite stroke that stands alone on its panel (it keeps its light in the shadow)
+  if (ax > 0.245 && p.y > 1.28){
+    // ---- sleeve. The bind pose is a T-pose: u = distance out along the arm, ph = angle round it (0 top, +pi/2 front), rr its radius
+    float u = ax, a = p.z + 0.01, b = p.y - 1.425, ph = atan(a, b), rr = sqrt(a * a + b * b);
+    vec3 gU = vec3(sx, 0.0, 0.0), gPh = vec3(0.0, -a, b) / max(rr * rr, 1e-5);
+    gw = vec2(ph * 0.06, u); G = gPh * 0.06;
+    if (sp > 0.5){
+      // sprite size (96 px; at 64 the sleeve is ~4 px across, any line on it sits on its outline): a light ridge down the upper
+      // sleeve (shoulder seam to above the elbow), 1 px with a dark pixel beside it - three lengthwise ridges round the arm (front-top,
+      // back, under the front), each drawn only where the sleeve faces the view (smoothed normal within ~35 degrees of it: the hanging
+      // arm's side, the raised or extended arm's front), so one shows at a time, in the middle of the sleeve's visible face, never at
+      // its outline or by the pack and the harness ring. Width across the arm in px from the arc and the normal's turn from the view
+      // (the arm turns any way, so the body's frame does not hold here); the dark pixel on the ridge's underside (away from the top
+      // of the arm, ph 0), fixed on the bind like everything else at this size
+      float r0 = 1.0 - 0.8 * (u - 0.36), r1 = -1.3 + 0.8 * (u - 0.36), r2 = 2.6 - 0.8 * (u - 0.36);
+      float d0 = ph - r0, d1 = ph - r1, d2 = ph - r2;
+      float dr = abs(d0) < abs(d1) ? (abs(d0) < abs(d2) ? d0 : d2) : (abs(d1) < abs(d2) ? d1 : d2);
+      float rs = abs(d0) < abs(d1) ? (abs(d0) < abs(d2) ? r0 : r2) : (abs(d1) < abs(d2) ? r1 : r2);   // that ridge's place
+      float e = dr * rr * ns.z / uPxM;   // ~px across the ridge
+      if (L2 > 0.5 && ns.z > 0.8 && u > 0.285 && u < 0.44 && abs(ns.y) < 0.9){
+        float es = e * sign(rs);   // + toward the arm's underside
+        if (abs(e) < 0.6) lp = 1.0;
+        else if (es > 0.6 && es < 1.6) cr = -1.0;
+      }
+    } else {
+      // the rolled cuff above the elbow, right round the sleeve: its two turns, each a lit band (1.4 / 1.2 cm) over the dark line of
+      // its underside; above it the fold round the elbow on the outer and front half of the arm (the side the 3/4 view sees)
+      f = coatBand(u - 0.404 - 0.004 * sin(ph * 2.0 + 1.0), coatG(gU - 0.008 * cos(ph * 2.0 + 1.0) * gPh, jx, jy), 1.0, 0.014, sp);
+      cr = min(cr, f); lp = max(lp, f);
+      f = coatBand(u - 0.458 - 0.005 * sin(ph * 3.0 + 2.0), coatG(gU - 0.015 * cos(ph * 3.0 + 2.0) * gPh, jx, jy), 1.0, 0.012, sp);
+      cr = min(cr, f); lp = max(lp, f);
+      f = coatBand(u - 0.352 - 0.01 * sin(ph * 1.5 + 0.5), coatG(gU - 0.015 * cos(ph * 1.5 + 0.5) * gPh, jx, jy), 1.0, 0.01, sp) * step(-0.6, ph) * step(ph, 2.3);
+      cr = min(cr, f); lp = max(lp, f);
+      // light ridges down the upper sleeve from the shoulder seam to the elbow fold, drifting a little round the arm: the top-front,
+      // the front and the top-back, each 2 px with a dark pixel on its shadow side
+      float sl = step(0.27, u) * step(u, 0.345);
+      f = coatRidge((ph - 0.5 + 2.4 * (u - 0.33)) * 0.06, coatG((gPh + 2.4 * gU) * 0.06, jx, jy), 0.006, sp) * sl;
+      cr = min(cr, f); lp = max(lp, f);
+      f = coatRidge((ph - 1.3 - 1.8 * (u - 0.33)) * 0.06, coatG((gPh - 1.8 * gU) * 0.06, jx, jy), 0.006, sp) * sl;
+      cr = min(cr, f); lp = max(lp, f);
+      f = coatRidge((ph + 0.75 + 2.0 * (u - 0.33)) * 0.06, coatG((gPh + 2.0 * gU) * 0.06, jx, jy), 0.006, sp) * sl;
+      cr = min(cr, f); lp = max(lp, f);
+      // shoulder seam: where the sleeve head is set in
+      f = coatFold(u - 0.258 - 0.006 * sin(ph * 2.0), coatG(gU - 0.012 * cos(ph * 2.0) * gPh, jx, jy), 0.006, 0.0, sp);
+      cr = min(cr, f); lp = max(lp, f);
+    }
+  } else {
+    // ---- body and skirt. Azimuth round the hips th (0 front, +-pi centre back), its gradient; at = |th|
+    float r2 = max(dot(p.xz, p.xz), 1e-4), r = sqrt(r2), th = atan(p.x, p.z), at = abs(th);
+    vec3 gTh = vec3(p.z, 0.0, -p.x) / r2, gR = vec3(p.x, 0.0, p.z) / r;
+    gw = vec2(th * 0.24, p.y); G = gTh * 0.24;   // weave cells upright on the arc round a fixed radius (no shear on the flared skirt)
+    inside = step(dot(nb.xz, p.xz), 0.0);
+    // pocket flaps on the hips (HD), hung from the side seams: across the flap (m) and above its slightly curved lower edge
+    float pa = (at - 1.85) * r, pfy = p.y - 0.765 - 0.008 * (1.0 - pa * pa / 0.0036);
+    vec3 gPa = r * sx * gTh + (at - 1.85) * gR;
+    vec2 gpy = coatG(vec3(0.0, 1.0, 0.0) + 0.016 * pa / 0.0036 * gPa, jx, jy);
+    float hy = coatH(gpy, sp), flap = step(abs(pa), 0.058) * step(-2.0 * hy, pfy) * step(p.y, 0.856) * (1.0 - sp) * L3;
+    // long folds down the skirt. The skirt flares sideways from ~0.2 m half-width at the hip to ~0.4 m at the hem (front to back it
+    // stays ~0.2 m deep): the folds sit at fixed angles tf round the section squeezed back to round (q, z), so they fan out from the
+    // waist toward the hem and radiate from the vent on the back (COAT_FOLD / COAT_SOFT, each jittered and wavering a little). A
+    // front flap's inner face (the far flap of a 3/4 view, seen through the opening: its front edge is then the outline) carries the
+    // same folds; at sprite size each flap face has one (the outer face's down its middle, coatFolds; the inner face's COAT_FOLD_IN)
+    float s = clamp((0.9 - p.y) / 0.5, 0.0, 1.0), m = 1.0 / (1.0 + s * (2.0 - s)), dm = 4.0 * m * m * (1.0 - s) * step(p.y, 0.9);
+    float q = p.x * m, tf = abs(atan(q, p.z));
+    vec3 gTf = sx * vec3(p.z * m, p.z * p.x * dm, -q) / max(q * q + p.z * p.z, 1e-4);
+    bool fin = inside > 0.5 && p.z > 0.0;   // a front flap's inner face
+    // (the far flap of a 3/4 view: in the shade of the coat's inside, a broad plane with no other line on it, so its fold keeps on
+    // where the flap swings out from the leg and runs further from upright)
+    if (fin && sp > 0.5){ on = step(0.75, ns.z) * step(abs(ns.y), 0.85); steep = 1.75; }
+    // px per chart radian here (sprite size: the smoothed-normal frame, so it changes smoothly as the panel turns): neighbouring
+    // dominant folds (0.6 apart) under ~4.5 px apart leave out the side fold (96 px; never at 64), under ~2.5 px all of them; the
+    // inner face's fold only while that face spans ~8 px or more (front edge to COAT_SIDE: its front edge is the outline then)
+    float tpx = 1.0 / max(length(coatG(gTf, jx, jy)), 1e-6), fpx = 0.6 * tpx;
+    vec3 nf = vec3(9.0, 0.0, 0.0), gS = vec3(0.0);   // gS: a sprite face's d tf_mid / d y (up the bind)
+    float spw = 0.0;                                // sprite: the fold's clearance (px) on the face it runs down (coatFolds)
+    if (sp < 0.5){
+      // the dominant folds on the outer face only where they keep ~3 px of it either side, and their waver (coatFolds, measured: a
+      // flap swung open shows its front edge as its outline, a panel turning away ends at the silhouette); on the inner face (not
+      // measured) not the front flap's fold within ~3 px of its front edge. The soft folds from ~156 px up, and below that only ~4 px
+      // or more from the dominant ones (closer, the folds would pack into a pinstripe)
+      float hc = inside > 0.5 ? -1.0 : 3.0 + 0.015 / uPxM;
+      if (inside > 0.5 ? (COAT_FOLD.x - COAT_EDGE) * tpx > 3.0 : coatCFy(coatCF(sx, 2.0), p.y).x > hc) nf = coatNear(nf, tf, COAT_FOLD.x, 1.0, 1.0, sx);
+      if (coatCFy(coatCF(sx, 4.0), p.y).x > hc) nf = coatNear(nf, tf, COAT_FOLD.z, 3.0, 1.0, sx);
+      if (coatCFy(coatCF(sx, 3.0), p.y).x > hc) nf = coatNear(nf, tf, COAT_FOLD.y, 2.0, 1.0, sx);
+      if (L3 > 0.5 || 0.27 * tpx > 4.0){ nf = coatNear(nf, tf, COAT_SOFT.x, 4.0, 0.5, sx); nf = coatNear(nf, tf, COAT_SOFT.y, 5.0, 0.5, sx); }
+    } else if (fin){
+      if (fpx > 2.5 && (COAT_SIDE - COAT_EDGE) * tpx > 8.0) nf = coatNear(nf, tf, COAT_FOLD_IN, 1.0, 1.0, sx);
+    } else {
+      // from what the view sees of the skirt this frame (coatFolds): a fold down the middle of the front flap's face, and the side
+      // and back panel folds - each only where CF_MIN or more of its own face stays clear on both sides, so it never runs along the
+      // outline or an edge, and the side fold only ~4 px or more clear of the flap's
+      vec2 ta = coatCFy(coatCF(sx, 0.0), p.y);
+      float ca = coatCFy(coatCF(sx, 1.0), p.y).x, cs = coatCFy(coatCF(sx, 3.0), p.y).x, cb = coatCFy(coatCF(sx, 4.0), p.y).x;
+      if (ca >= CF_MIN){ nf = vec3(tf - ta.x, 1.0, 1.0); spw = ca; gS = vec3(0.0, ta.y, 0.0); }
+      vec3 nk = coatNear(vec3(9.0, 0.0, 0.0), tf, COAT_FOLD.z, 3.0, 1.0, sx);
+      if (fpx > 2.5 && cb >= CF_MIN && abs(nk.x) < abs(nf.x)){ nf = nk; spw = cb; gS = vec3(0.0); }
+      nk = coatNear(vec3(9.0, 0.0, 0.0), tf, COAT_FOLD.y, 2.0, 1.0, sx);
+      if (L2 > 0.5 && fpx > 4.5 && cs >= CF_MIN && (ca < CF_MIN || abs(COAT_FOLD.y - ta.x) * tpx > 4.0) && abs(nk.x) < abs(nf.x)){ nf = nk; spw = cs; gS = vec3(0.0); }
+    }
+    float w1 = p.y * 5.5 + nf.y * 2.3 + sx, w2 = p.y * 13.0 + nf.y * 1.7;   // the fold's waver (~6 cm of angle at most; HD and the
+    float wv = spw > 0.0 ? 0.0 : 1.0;                                           // inner face: the sprite's measured folds run straight)
+    float dF = (nf.x - wv * (0.045 * sin(w1) + 0.017 * sin(w2))) * 0.18 / m;   // ~metres off the fold (arc on the back panel)
+    vec2 gF = coatG(gTf - gS - wv * vec3(0.0, 0.2475 * cos(w1) + 0.221 * cos(w2), 0.0), jx, jy) * 0.18 / m;
+    float grow = smoothstep(1.0, 0.7, p.y), vy = smoothstep(0.95, 0.45, p.y);   // 0 at the waist .. 1 from 30 cm below it / at the hem
+    // (HD: not where the panel turns away toward the silhouette - there a fold would only run along the outline)
+    float fon = step(p.y, COAT_WAIST) * (1.0 - flap) * (sp > 0.5 ? 1.0 : smoothstep(0.4, 0.5, ns.z));
+    // sprite size: from ~2 px below the waist (no blot where the fold meets the belt) to ~3 px above the hem, while the fold runs
+    // within ~35 degrees of upright on screen (~60 on a flap's inner face)
+    if (sp > 0.5) fon *= on * step(p.y, COAT_WAIST - 2.0 * uPxM) * step(COAT_HEM + 3.0 * uPxM, p.y) * step(abs(gF.y), steep * abs(gF.x));
+    f = coatFold(dF, gF, 0.012 * grow * nf.z * (1.0 - sp), 0.034 * vy * nf.z * (1.0 - sp), sp) * fon;
+    // sprite size, a flap's inner face: in the coat's shade the crease would not show on the black, so the fold is its lit ridge
+    // alone, a light 1 - 2 px staircase (wide enough to stay 4-connected wherever the swung panel slants it)
+    if (fin && sp > 0.5) f = abs(dF) < 1.6 * coatH(gF, sp) ? fon : 0.0;
+    // sprite size, a fold with under CF_MIN + 1 px of clearance (so no room for its lip), and every fold below ~56 px: one pixel - the
+    // crease on the lit plane, a light line on the shadow one
+    if (spw > 0.0 && (spw < CF_MIN + 1.0 || uPxM > 0.034)) f = f < 0.0 ? (tc0 >= 1.0 ? -1.0 : 1.0) : 0.0;
+    if (nf.z < 0.75) f = f < 0.0 ? -0.5 : 0.0;   // the soft folds: a half-step crease and its (narrower) valley, no lit lip
+    cr = min(cr, f); lp = max(lp, f); fl = min(fl, f);
+    if (abs(nf.y - 1.0) < 0.1 || spw > 0.0) lone = 1.0;   // (a front flap's fold, a sprite face's: the one stroke on it)
+    // sprite size: a long fold down the middle of each chest panel (between the lapel's edge, at ~0.7 round the body, and the side
+    // seam at ~1.6), from below the shoulder to the belt - the coat's front panels hang in a fold there; only while the panel spans
+    // ~5 px or more (the 64 px sprite's too), so the fold keeps ~2 px clear of the lapel (the shirt's edge) and of the side
+    float cpx = 1.0 / max(length(coatG(gTh, jx, jy)), 1e-6);   // px per radian round the body
+    if (sp > 0.5 && p.z > 0.0 && p.y > 1.03 && p.y < 1.36 && cpx * 0.45 > 2.5 && ns.z > 0.7){
+      float dc = (at - 1.22 + 0.25 * (p.y - 1.2) - 0.03 * sx) * r;
+      vec2 gc = coatG((sx * gTh + vec3(0.0, 0.25, 0.0)) * r + (at - 1.22 + 0.25 * (p.y - 1.2) - 0.03 * sx) * gR, jx, jy);
+      f = coatFold(dc, gc, 0.0, 0.0, sp) * on * step(abs(gc.y), 0.7 * abs(gc.x)) * step(p.y, 1.36 - 2.0 * uPxM) * step(1.03 + 2.0 * uPxM, p.y);
+      if (L2 < 0.5) f = f < 0.0 ? (tc0 >= 1.0 ? -1.0 : 1.0) : 0.0;   // (64 px: one pixel - the crease, or a light line in the shadow)
+      cr = min(cr, f); lp = max(lp, f);
+      lone = 1.0;
+    }
+    if (sp < 0.5 && L3 > 0.5){
+      // (from ~156 px: below, these pack into a web of short lines) drag folds from the armpit: on each front panel down and in toward
+      // the belt (at 1.5, y 1.25 -> at 1.15, y 1.08), and under the arm down and back across the side panel (at 1.72, y 1.22 -> at
+      // 2.02, y 1.06: the side a raised arm uncovers)
+      float du = (at - 1.15 - 2.06 * (p.y - 1.08)) * 0.16;
+      f = coatFold(du, coatG((sx * gTh - vec3(0.0, 2.06, 0.0)) * 0.16, jx, jy), 0.008, 0.014, sp) * step(1.085, p.y) * step(p.y, 1.25);
+      cr = min(cr, f); lp = max(lp, f); fl = min(fl, f);
+      du = (at - 1.72 + 1.84 * (p.y - 1.24)) * 0.17;
+      f = coatFold(du, coatG((sx * gTh + vec3(0.0, 1.84, 0.0)) * 0.17, jx, jy), 0.008, 0.012, sp) * step(1.06, p.y) * step(p.y, 1.22);
+      cr = min(cr, f); lp = max(lp, f); fl = min(fl, f);
+      // side seams: from under the arm down to the pocket flap hung from it
+      float sa = (at - 1.6) * r;
+      f = coatFold(sa, coatG(r * sx * gTh + (at - 1.6) * gR, jx, jy), 0.006, 0.0, sp) * step(p.y, 1.27) * step(0.85, p.y);
+      cr = min(cr, f); lp = max(lp, f);
+      // pocket flaps: the lower edge a dark line (its shadow, 2 px) with a lit lip above, the sides a seam, the top edge lit
+      if (abs(pa) < 0.05 && pfy > -3.0 * hy && pfy < hy) cr = -1.0;
+      else if (abs(pa) < 0.05 && pfy >= hy && pfy < 3.0 * hy) lp = max(lp, 1.0);
+      else if (flap > 0.5 && pfy > 0.0){
+        if (abs(abs(pa) - 0.05) < coatH(coatG(gPa, jx, jy), sp)) cr = -1.0;
+        else if (abs(p.y - 0.852) < hy) cr = -1.0;
+        else if (p.y < 0.852 && p.y > 0.852 - 3.0 * hy) lp = max(lp, 1.0);
+      }
+    }
+    if (sp < 0.5){
+      // centre back: the vent below y 0.62, a 2 px dark gap with both lips lit; above it a plain seam up to the collar
+      if (p.z < -0.03){
+        vec2 gx = coatG(vec3(1.0, 0.0, 0.0), jx, jy); float vh = coatH(gx, sp);
+        if (p.y < 0.62){ f = ax < 2.0 * vh ? -1.0 : (ax < 4.0 * vh ? 1.0 : (ax < 6.0 * vh ? 0.5 : 0.0)); cr = min(cr, f); lp = max(lp, f); }
+        else if (p.y < 1.45){ f = coatFold(p.x, gx, 0.006, 0.0, sp); cr = min(cr, f); lp = max(lp, f); }
+      }
+      // lapels (collar to belt): along the coat's opening on the chest (a curve fitted to the class map's coat / shirt boundary at
+      // uShirtV 0.07: half width xl at height y) a light edge 2 px wide straddling it (only its coat side is drawn), a stitch line
+      // of 2 px dashes 3 px out from it, and the lapel's roll line, a fold ~3 cm out that meets the edge toward the belt
+      float dy = p.y - 1.35, le = ax - (0.079 + 0.926 * dy * dy);
+      vec2 gle = coatG(vec3(sx, -1.852 * dy, 0.0), jx, jy); float hle = coatH(gle, sp);
+      if (p.z > 0.0 && p.y > 1.1 && p.y < 1.46){
+        if (le < 4.0 * hle) lp = max(lp, 1.0);
+        else if (abs(le - 7.0 * hle) < hle && fract(p.y / (4.0 * uPxM)) < 0.5) cr = min(cr, -0.5);
+        else { f = coatFold(le - 0.03 * smoothstep(1.16, 1.4, p.y), gle, 0.006, 0.01, sp) * step(1.2, p.y); cr = min(cr, f); lp = max(lp, f); fl = min(fl, f); }
+      }
+    }
+  }
+  // no lines where the cloth turns its inside to the view - but for a front flap's inner face: the back panel's inner layer seen
+  // between the legs from the front (the bind normal points in toward the body axis there) - or where it turns edge-on (in HD a seam
+  // at the side would only double the outline of a front view). Creases win, then lips; flanks only on the lit planes. Sprite size:
+  // no lips on the deep shadow plane where folds lie side by side (they would only stripe the black); HD: there half a step (the folds
+  // keep their form in the shadow)
+  if ((inside > 0.5 && (p.z < 0.0 || p.y > COAT_WAIST)) || ns.z < (sp > 0.5 ? 0.2 : 0.3)){ cr = 0.0; lp = 0.0; fl = 0.0; }
+  // (the sprite's lone strokes - a front flap's fold, the chest folds, the sleeve ridge, a flap's inner face, which the inside of the
+  // coat holds in the shadow - keep their light there: on the black the crease would not show)
+  if ((ax > 0.245 && p.y > 1.28) || inside > 0.5) lone = 1.0;
+  float o = cr < 0.0 ? cr : (lp > 0.0 ? (tc0 >= 1.0 || (sp > 0.5 && lone > 0.5) ? lp : (sp > 0.5 ? 0.0 : 0.5 * lp)) : (tc0 >= 1.0 ? fl : 0.0));
+  float tq = clamp(floor(t + 0.5), 0.0, 3.0);   // the tone that would show (sprite)
+  if (sp > 0.5){
+    if (o == 0.0) return t;
+    // whole palette steps from the tone the ramp would pick, so a stroke keeps one tone along its length whatever the dirt and the
+    // cavity terms left under it; the shell's crease takes the coat's ramp (its black under coatD; the same tones above)
+    if (o < 0.0 && shell){ cls = ${CLS.coat}.0; return max(tq - 1.0, 0.0); }
+    float tn = clamp(tq + sign(o), 0.0, 3.0);
+    if (shell && o > 0.0) tn = max(tn, 2.0);   // (the trousers' two darkest tones are one colour: a lip on them takes coatM)
+    return tn == tq ? t : tn;   // (a stroke that cannot step further - a crease on the black, a lip on the top tone - leaves the pixel be)
+  }
+  // HD weave where no line is drawn (from ~150 px): in cells ~2.4 x 4.5 px (across x along the cloth's run: down the body and the
+  // skirt, along the sleeve) a little under half (two in five on the shadow planes) hold one 1 px dash ~2 px long at a random place,
+  // half a step off the half-step tone that would show: on the lit planes darker (lighter in one dash of three), on the shadow planes
+  // lighter - and always toward the inside of the ramp, so a dash on the top tone or on the black still shows
+  if (o == 0.0 && uPxM < 0.0125){
+    vec2 cs = vec2(2.4, 4.5) * uPxM, gq = gw / cs, gi = floor(gq);
+    float g1 = hash3(vec3(gi, 7.3)), gd = (gq.x - gi.x - 0.25 - 0.5 * hash3(vec3(gi, 2.9))) * cs.x;
+    float gy = gq.y - gi.y - 0.1 - 0.45 * hash3(vec3(gi, 5.1));
+    if (g1 < (tc0 >= 1.0 ? 0.45 : 0.4) && gy > 0.0 && gy < 0.44 && abs(gd) < coatH(coatG(G, jx, jy), sp)){
+      float th2 = clamp(floor(t * 2.0 + 0.5) * 0.5, 0.0, 3.0);   // the half step that would show
+      float dn = tc0 >= 1.0 ? (g1 < 0.15 ? 0.5 : -0.5) : 0.5;
+      if (th2 > 2.75) dn = -0.5; else if (th2 < 0.25) dn = 0.5;
+      return th2 + dn;
+    }
+  }
+  return t + o;
+}
 // ---- Trousers (CLS.trou): hand-pixelled cloth detail on the inner layer around the legs, in whole / half ramp steps of the tone ----
 // Everything is anchored to the bind pose (vP), so it rides the legs through every pose and never swims: a dark olive camo (clusters of
 // short horizontal dashes, like the sheet and the owner's sprites), the trousers bloused over the boots (stacked rolls), creases behind /
@@ -485,9 +836,7 @@ float trouDetail(vec3 p, vec3 px, vec3 py, float hd, float tc0, float t, inout f
   st = max(st, trouArc(vec2(-0.003, 0.71), vec2(0.063, 0.71), 0.0, uy, J, 1.0, 1.0));
   if (pf > 0.5 && length(pc - vec2(0.0, 0.038)) < max(0.0065, 0.55 * uPxM)) st = vec3(0.0, 1.0, 0.0);
   // left as they are: the coat's shell where the class takes it in (the outer side of the hip, and of the thigh down to the hem, standing
-  // off the leg) ...
-  float ld = legD(p);
-  if ((th > 0.7 && (p.y > 0.8 || (ld > 0.1 && p.y > 0.42))) || (ld > 0.112 && th > -0.3)) return t;
+  // off the leg: coatShell() - main() hands those pixels to coatDetail and never calls this for them) ...
   // ... and the front of the knee, where only the HD value shift applies: the knee guards' footprint (cap ~11 x 12 cm over the knee, the
   // lame under it: y ~0.43 - 0.6), a rounded square so no plain halo shows round the plates
   float tl = t - hs * (1.0 - bz) * clamp(t - 1.5, 0.0, 0.5);   // HD: the plain lit cloth half a step down, so the light patches and lips fit
@@ -836,7 +1185,13 @@ void main(){
       }
       else if (tc < 1.2 && gl_FrontFacing && cls != ${CLS.orange}.0 && dot(nd, uFill) > 0.75) t += 0.5 * hd * uCav.y;
     }
-    if (cls == ${CLS.trou}.0 && gl_FrontFacing) t = trouDetail(vP, dPx, dPy, hd, tc0, t, cls);   // camo, folds, seams, cargo pocket (may hand an ink pixel the coat's class)
+    // the coat's shell: coat cloth that the leg rule above classes as trousers (coatShell) - the coat draws its folds there, the trousers
+    // leave it alone (legD first: most of the trousers are ruled out without the angle)
+    float ldS = cls == ${CLS.trou}.0 ? legD(vP) : 0.0;
+    bool shell = cls == ${CLS.trou}.0 && (vP.y > 0.8 || ldS > 0.1) && coatShell(vP, coatLegTh(vP), ldS);
+    // coat folds, seams, lapels, weave (before the trousers' detail, which hands its ink pixels the coat's class)
+    if ((cls == ${CLS.coat}.0 || shell) && gl_FrontFacing && eyeT < 0.0 && gSB < 0.5) t = coatDetail(vP, normalize(vNb), nS, dPx, dPy, hd, tc0, t, shell, cls);
+    if (cls == ${CLS.trou}.0 && gl_FrontFacing && !shell) t = trouDetail(vP, dPx, dPy, hd, tc0, t, cls);   // camo, folds, seams, cargo pocket (may hand an ink pixel the coat's class)
     // coat lining (the inside of the shell, back faces): its own dark tone, never the unlit black
     if (!gl_FrontFacing && cloth) t = clamp(t - 1.0, 0.5, 1.0);
     t = clamp(t, 0.0, 3.0);
@@ -929,7 +1284,7 @@ function charMat(opts){
       uPal:SH.uPal, uRamp:SH.uRamp, uRampH:SH.uRampH, uRimW:SH.uRimW, uCD:SH.uCD, uNS:SH.uNS, uPxM:SH.uPxM, uHair:SH.uHair, uN:{value: opts.full ? N_SNAP : N_CHAR}, uWear:SH.uWear,
       nMap:{value:opts.nmap||null}, uUseN:{value:opts.nmap?1:0}, mrMap:{value:opts.mr||null}, uUseMR:{value:opts.mr?1:0},
       uNrm:opts.nscale ? {value:opts.nscale} : SH.uNrm, uNrmK:SH.uNrmK, uNrmB:SH.uNrmB, uNK:SH.uNK, uHue:SH.uHue, uRimK:SH.uRimK, uCav:SH.uCav, uSpec:SH.uSpec,
-      uSBv:SH.uSBv,
+      uSBv:SH.uSBv, uCF:SH.uCF,
       uRimC:SH.uRimC, uCool:SH.uCool, uWarm:SH.uWarm, uFill:SH.uFill, uPart:{value:opts.part||0} },
     vertexShader:CHAR_VS, fragmentShader:CHAR_FS, side: opts.double ? T.DoubleSide : T.FrontSide, defines: opts.smooth ? {SMOOTHN:1} : {}, extensions:{derivatives:true}
   });
@@ -1649,6 +2004,7 @@ function update(dt){
   if (S.spin && !S.dragging) S.yaw += dt*0.6;
   cam.position.set(Math.sin(S.yaw)*6, S.cy, Math.cos(S.yaw)*6); cam.lookAt(0,S.cy,0);
   shirtSeams(dt);   // the shirt's vertical seams / outer belt loops drawn this frame (needs the final pose and camera)
+  coatFolds();      // the coat's skirt as the view sees it this frame: where its folds have room (same)
 }
 
 // ---------- Shirt: which vertical seams are drawn this frame ----------
@@ -1713,6 +2069,125 @@ function shirtSeams(dt){
       on[k] = on[k] === undefined ? px > 4.25 : (on[k] ? px > 3.5 : px > 5);
     }
     SH.uSBv.value[s].set(on[0] ? 1 : 0, on[0] && on[1] ? 1 : 0, on[2] ? 1 : 0);
+  }
+}
+
+// ---------- Coat: the skirt as the view sees it this frame (where its folds have room) ----------
+// A skirt fold (coatDetail) is drawn only where it keeps some of its own face clear on both sides: one that runs along the outline or
+// a panel's edge reads as rim light, not as a fold. Where a face ends is not known in the fragment shader: the simulated panels bend
+// between their chains and the leg (buildCoat: near the front edge the cloth rides on the leg, further round on the chains), so a
+// flap swung back by the leg shows only a narrow strip of its face up to a sharp fold-over, which the smoothed normals do not see.
+// So it is measured here, once per frame like the shirt's seams: a row of probe points on the coat's outer shell (from the front edge
+// to the back, both sides, at four heights; each the point of the triangle under that spot of the bind chart, with its corners'
+// skin weights, so it moves exactly as the rendered cloth does) is posed and projected, and each probe's triangle tested for facing
+// the view as the rasteriser does. The faces the view sees are the runs of front-facing probes along a row. From them: the middle
+// of the front flap's face on screen (the sprite's flap fold runs down it) and, for that fold and the fixed folds (COAT_FOLD: the
+// HD front flap fold, the side and back panel folds), the clearance - from the fold to the nearer end of its face, across the fold's
+// own run down the screen, in chessboard px (the distance an outline keeps from it in pixel steps: a slanted face is narrower in
+// those than straight across). The shader interpolates both down the fold and draws only where the clearance is wide enough. It
+// follows the pose continuously (no per-pixel test, no state), so a fold shortens or gives way as its face turns, never flickers.
+// Result: SH.uCF[side * 5 + k], side 0 = -x, at the heights CFS.Y: k 0 the flap fold's chart angle (tf), 1 its clearance, 2 / 3 / 4
+// the clearance of COAT_FOLD.x / .y / .z (each moved by coatNear's jitter for that side; a fold off every face the view sees: 0).
+const CFS = { probes:null, Y:[0.9, 0.75, 0.6, 0.45] };   // (CHAR_FS coatCFy() interpolates on these heights)
+const _cfW = new T.Matrix4(), _cfP = new T.Vector3(), _cfR = new T.Vector3(), _cfU = new T.Vector3();
+function coatFolds(){
+  if (CFS.probes === false || !COAT.mesh) return;
+  const sm = COAT.mesh;
+  if (!CFS.probes){
+    // probe points: on the coat's outer layer (triangles facing out, off the leg axes like main()'s coat / trousers split), the point
+    // of the triangle under each spot of the row (every 0.05 of the chart angle tf) - the outermost one there - as its corners and
+    // barycentric weights, so it moves exactly as the rendered cloth does: near the front edge the cloth rides on the leg (buildCoat),
+    // further round on the chains, and a leg swung back folds the two apart
+    const g = sm.geometry, P = g.attributes.position, Nm = g.attributes.normal, I = g.index.array;
+    const segD = (x, y, z, a, b) => { const ex = b[0] - a[0], ey = b[1] - a[1], ez = b[2] - a[2], t = Math.min(1, Math.max(0, ((x - a[0])*ex + (y - a[1])*ey + (z - a[2])*ez) / (ex*ex + ey*ey + ez*ez)));
+      return Math.hypot(x - a[0] - ex*t, y - a[1] - ey*t, z - a[2] - ez*t); };
+    const legD = (x, y, z) => { x = Math.abs(x); const d = Math.min(segD(x, y, z, [0.125, 0.957, 0.006], [0.174, 0.578, 0.011]), segD(x, y, z, [0.174, 0.578, 0.011], [0.21, 0.155, -0.01]));
+      const t = Math.min(1, Math.max(0, (z - 0.02) / 0.07)); return d - 0.05 * t * t * (3 - 2 * t); };   // CHAR_FS legD()
+    const chart = i => { const x = P.getX(i), y = P.getY(i), z = P.getZ(i), s = Math.min(1, Math.max(0, (0.9 - y) / 0.5));
+      return [Math.abs(Math.atan2(x / (1 + s * (2 - s)), z)) * 0.25, y]; };   // coatDetail's tf (x ~metres of arc), y
+    const ok = new Uint8Array(P.count);
+    for (let i = 0; i < P.count; i++){ const x = P.getX(i), y = P.getY(i), z = P.getZ(i);
+      ok[i] = y < 1.0 && y > 0.3 && Nm.getX(i) * x + Nm.getZ(i) * z > 0 && legD(x, y, z) > 0.09 ? (x < 0 ? 1 : 2) : 0; }
+    const tris = [];
+    for (let f = 0; f < I.length; f += 3){ const a = I[f], b = I[f+1], c = I[f+2]; if (!ok[a] || ok[a] !== ok[b] || ok[a] !== ok[c]) continue;
+      tris.push([a, b, c, ok[a] === 1 ? -1 : 1, chart(a), chart(b), chart(c)]); }
+    const rows = [], cs = new Map(), pts = [];
+    for (const sd of [-1, 1]) for (const Y of CFS.Y){
+      const row = [];
+      for (let t = 1.07; t < 2.96; t += 0.05){
+        const px = t * 0.25; let best = null, br = -1;
+        for (const T3 of tris){
+          if (T3[3] !== sd) continue; const [A, B, C] = [T3[4], T3[5], T3[6]];
+          const d = (B[1] - C[1]) * (A[0] - C[0]) + (C[0] - B[0]) * (A[1] - C[1]); if (Math.abs(d) < 1e-9) continue;
+          const u = ((B[1] - C[1]) * (px - C[0]) + (C[0] - B[0]) * (Y - C[1])) / d, v = ((C[1] - A[1]) * (px - C[0]) + (A[0] - C[0]) * (Y - C[1])) / d, w = 1 - u - v;
+          if (u < -1e-4 || v < -1e-4 || w < -1e-4) continue;
+          const r = u * Math.hypot(P.getX(T3[0]), P.getZ(T3[0])) + v * Math.hypot(P.getX(T3[1]), P.getZ(T3[1])) + w * Math.hypot(P.getX(T3[2]), P.getZ(T3[2]));
+          if (r > br){ br = r; best = [T3[0], u, T3[1], v, T3[2], w]; }
+        }
+        if (!best) continue;
+        const e = { t, c:[] };
+        for (let j = 0; j < 6; j += 2){ if (!cs.has(best[j])){ cs.set(best[j], pts.length); pts.push(best[j]); } e.c.push(cs.get(best[j]), best[j+1]); }
+        row.push(e);
+      }
+      rows.push(row);
+    }
+    if (!pts.length){ CFS.probes = false; return; }
+    const S3 = skinSet(pts);
+    CFS.probes = { rows, S:S3, bones:[...new Set(Array.from(S3.bi).filter((b, k) => S3.bw[k] > 0))] };
+  }
+  const { rows, S:PS, bones } = CFS.probes, bs = sm.skeleton.bones;
+  for (const j of bones) bs[j].updateWorldMatrix(true, false);
+  sm.updateWorldMatrix(true, false); cam.updateMatrixWorld();
+  const X = skinRun(PS, boneMats(bones));   // (only the probes' bones)
+  const toW = sm.bindMode === 'attached' ? null : _cfW.multiplyMatrices(sm.matrixWorld, sm.bindMatrixInverse);
+  const ce = cam.matrixWorld.elements; _cfR.set(ce[0], ce[1], ce[2]); _cfU.set(ce[4], ce[5], ce[6]);
+  const V = []; for (let k = 0; k < PS.n; k++){ _cfP.set(X[k*3], X[k*3+1], X[k*3+2]); if (toW) _cfP.applyMatrix4(toW); V.push([_cfP.dot(_cfR) * S.ppu, _cfP.dot(_cfU) * S.ppu]); }
+  // the fixed folds' chart angles on each side (the front flap's, side and back panel folds of HD: COAT_FOLD, moved by coatNear's jitter)
+  const jit = (k, sx) => { const f = k * 0.618 + sx * 0.37; return 0.08 * (f - Math.floor(f) - 0.5); };
+  for (let s = 0; s < 2; s++){
+    const sx = s ? 1 : -1, FX = [1.2 + jit(1, sx), 1.9 + jit(2, sx), 2.5 + jit(3, sx)], at = [];   // at[h]: the folds' places at height h
+    for (let h = 0; h < 4; h++){
+      // each probe on screen, and whether its triangle faces the view (its corners' winding, as the rasteriser decides)
+      const row = rows[s * 4 + h], q = row.map(e => { const c = e.c, A = V[c[0]], B = V[c[2]], C = V[c[4]];
+        return { t:e.t, x:A[0] * c[1] + B[0] * c[3] + C[0] * c[5], y:A[1] * c[1] + B[1] * c[3] + C[1] * c[5], f:(B[0] - A[0]) * (C[1] - A[1]) - (B[1] - A[1]) * (C[0] - A[0]) > 0 }; });
+      // the faces the view sees: runs of front-facing probes (a gap in the row ends one)
+      const runs = []; let r0 = -1;
+      for (let j = 0; j <= q.length; j++){
+        const on = j < q.length && q[j].f && (r0 < 0 || q[j].t - q[j - 1].t < 0.11);
+        if (!on && r0 >= 0){ runs.push([r0, j - 1]); r0 = -1; }
+        if (j < q.length && q[j].f && r0 < 0) r0 = j;
+      }
+      // a point at chart angle t on run r (screen), or null
+      const pt = (r, t) => { for (let j = r[0]; j < r[1]; j++) if (q[j].t <= t && q[j + 1].t >= t){ const u = (t - q[j].t) / (q[j + 1].t - q[j].t);
+        return [q[j].x + (q[j + 1].x - q[j].x) * u, q[j].y + (q[j + 1].y - q[j].y) * u]; } return null; };
+      const H = { A:null, F:[null, null, null] };
+      // the front flap: the run at the front edge; its fold half way along it on screen
+      const ra = runs.length && q[runs[0][0]].t < 1.2 ? runs[0] : null;
+      if (ra && ra[1] > ra[0]){
+        let l = 0; const L = [0]; for (let j = ra[0] + 1; j <= ra[1]; j++){ l += Math.hypot(q[j].x - q[j-1].x, q[j].y - q[j-1].y); L.push(l); }
+        let k = 0; while (k < L.length - 2 && L[k + 1] < l / 2) k++;
+        const u = Math.min(1, (l / 2 - L[k]) / Math.max(1e-6, L[k + 1] - L[k])), j = ra[0] + k;
+        H.A = { t:q[j].t + (q[j + 1].t - q[j].t) * u, p:[q[j].x + (q[j + 1].x - q[j].x) * u, q[j].y + (q[j + 1].y - q[j].y) * u], a:[q[ra[0]].x, q[ra[0]].y], b:[q[ra[1]].x, q[ra[1]].y] };
+      }
+      // the fixed folds, where a face the view sees has them
+      FX.forEach((t, i) => { for (const r of runs){ const p = pt(r, t); if (p){ H.F[i] = { t, p, a:[q[r[0]].x, q[r[0]].y], b:[q[r[1]].x, q[r[1]].y] }; break; } } });
+      at.push(H);
+    }
+    // each fold's clearance: from its place to the nearer end of its face, across the fold's own run down the screen (from its places
+    // at the heights either side), in chessboard px - the distance the outline keeps from it in pixel steps (a slanted face is
+    // narrower in those than straight across)
+    const clear = (get, h) => {
+      const c = get(at[h]); if (!c) return 0;
+      const up = h > 0 && get(at[h - 1]), dn = h < 3 && get(at[h + 1]);
+      let tx = 0, ty = 1; const p0 = up ? up.p : c.p, p1 = dn ? dn.p : c.p;
+      if (up || dn){ const L = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]); if (L > 1e-3){ tx = (p1[0] - p0[0]) / L; ty = (p1[1] - p0[1]) / L; } }
+      const nx = -ty, ny = tx, k = Math.abs(nx) + Math.abs(ny);
+      return Math.min(Math.abs((c.a[0] - c.p[0]) * nx + (c.a[1] - c.p[1]) * ny), Math.abs((c.b[0] - c.p[0]) * nx + (c.b[1] - c.p[1]) * ny)) / k;
+    };
+    const tA = at.map(H => H.A ? H.A.t : 0), cA = at.map((H, h) => clear(G => G.A, h)), cF = [0, 1, 2].map(i => at.map((H, h) => clear(G => G.F[i], h)));
+    // (a height without the flap's face takes the middle of the nearest one with it, so the line between them stays on the cloth)
+    for (let it = 0; it < 3; it++) for (let h = 0; h < 4; h++) if (!tA[h]) tA[h] = (h > 0 && tA[h - 1]) || (h < 3 && tA[h + 1]) || 0;
+    const o = SH.uCF.value; o[s * 5].set(...tA); o[s * 5 + 1].set(...cA); for (let i = 0; i < 3; i++) o[s * 5 + 2 + i].set(...cF[i]);
   }
 }
 
