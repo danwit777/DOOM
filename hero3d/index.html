@@ -926,6 +926,8 @@ function update(dt){
       }
     }
   }
+  // the coat collides with every arm; only a free arm (no weapon in that hand) is pushed back out of it
+  COAT.free.r = !armed; COAT.free.l = !armed || !!weapons[S.weapon].userData.freeHand;
   coatStep(dt);
   // camera orbit
   if (S.spin && !S.dragging) S.yaw += dt*0.6;
@@ -1274,6 +1276,9 @@ function buildGear(){
 // angles back but never goes horizontal), a little wind, neighbour coupling (the cloth between two panels never tears or folds through),
 // swing / bend / inward limits, and leg collision: a leg inside a panel pushes the whole panel out from the hip (a straight drape, no
 // knee-shaped kink), the back panels only up to a cap (the trailing shin leaves through the vent instead of spreading the tail into a web).
+// The arms take part too: a hand / forearm against the coat turns the panels under it aside (a bounded offset of their hang, eased in
+// and out) and drags them along as it sweeps past; whatever the coat cannot give way (a leg behind it), a free arm gives, turning out
+// about the shoulder until the glove clears the posed mesh (tested against the coat's own triangles, so nothing passes through).
 // Sub-stepped (fixed small step), so a large dt (sprite export) stays stable. The T-pose rests exactly in the bind shape.
 const COAT = { chains:[], init:false,
   AZ:[1.3, 1.85, 2.4, 2.95], Y:[0.99, 0.80, 0.60, 0.36], R:[0.135, 0.115], ventTop:0.62,
@@ -1282,7 +1287,13 @@ const COAT = { chains:[], init:false,
   follow:[0.12, 0.25, 0.2, 0.1], followMove:[0.25, 0.05],
   flareArmed:[0.06, 0.03, 0.0, 0.0], tailArmed:[0.0, 0.04, 0.16, 0.24],
   back:[0.55, 0.72, 0.85], fwd:[0.55, 0.75, 0.9], outMax:0.75, inMax:0.1, bend:0.4, nbr:0.3, radK:[0.4, 0.8, 1.0, 1.0], open:[0.0, 0.1, 9, 9], push:[1.0, 1.0, 0.6, 0.45],
-  wind:0.04, speed:[1.4, 4.0], speedK:0.5, carry:0.15 };
+  wind:0.04, speed:[1.4, 4.0], speedK:0.5, carry:0.15,
+  // arms: margin around the hand / cuff sample vertices, how deep inside still counts as a contact (the coat's step / the exact test
+  // on the mesh), how far above the hem's root the (rigid) belt still blocks, how far (rad) a hand may turn a panel aside and how fast
+  // that eases in / out, friction rate of a sweeping hand, cap on the angular speed it hands on, how much of last frame's turn-out an
+  // arm starts from
+  arm:{ r:0.01, deep:0.16, near:0.05, top:0.09, give:0.15, ease:10, fric:14, wMax:6, keep:0.97 },
+  free:{ l:true, r:true } };
 function buildCoat(){
   let sm = null; model.traverse(o=>{ if (o.isSkinnedMesh && !sm) sm = o; });
   if (!sm) return;
@@ -1360,6 +1371,9 @@ function buildCoat(){
   for (const ch of COAT.chains) ch.rad = ch.rest.map(p => cap.map(([a, b, R]) => Math.min(R*COAT.radK[ch.i], 0.92*segDistW(p, wpos(a), wpos(b)))));
   // rest thigh directions (the panels partly ride on the thighs when standing: a wide stance flares the coat)
   COAT.th0 = {}; for (const s of ['l','r']) COAT.th0[s] = angOf(wpos('calf_'+s).sub(wpos('thigh_'+s)).normalize());
+  // the chains around the hips in the yaw frame (azimuth from forward toward the character's right), per side front -> back
+  COAT.chains.forEach((ch, c) => { ch.idx = c; const a = Math.atan2(ch.rd.z, ch.rd.x); ch.th = Math.abs(a); ch.ts = Math.sign(a) || 1; });
+  COAT.ring = {}; for (const sd of [1, -1]) COAT.ring[sd] = COAT.chains.filter(c => c.ts === sd).sort((x, y) => x.th - y.th);
   // ring of neighbouring panels (not across the front opening) for the coupling
   const L = COAT.chains.filter(c=>c.side>0), Rr = COAT.chains.filter(c=>c.side<0);
   COAT.ties = [];
@@ -1401,10 +1415,220 @@ function buildCoat(){
   geo.setAttribute('skinIndex', new T.BufferAttribute(SI, 4)); geo.setAttribute('skinWeight', new T.BufferAttribute(SW, 4));
   sm.bind(new T.Skeleton(bones0.concat(newB), inv0.concat(invs)), sm.bindMatrix);
   COAT.mesh = sm; COAT.amt = amt;
+  // radial offset map: the outermost shell vertex per (side, around, down) bin, relative to the chains' heightfield
+  const ov = new Float32Array(2 * OFF.nu * OFF.ns).fill(-9), ev = new Float32Array(2 * OFF.ns).fill(9), PPr = COAT.chains.map(ch => ch.rest), pv = new T.Vector3();
+  for (let w = 0; w < u; w++){
+    if (cRaw[w] < 0.5) continue;
+    const hit = coatAt(pv.copy(wp[w]).applyMatrix4(sm.matrixWorld), PPr, pelW, true); if (!hit) continue;
+    const j = offIdx(hit.sd, hit.u, hit.s); if (j >= 0) ov[j] = Math.max(ov[j], hit.d);
+    const k = edgeIdx(hit.sd, hit.s); ev[k] = Math.min(ev[k], Math.max(OFF.u0, hit.u));
+  }
+  for (let k = 0; k < ev.length; k++) if (ev[k] > 0) ev[k] = 0;
+  COAT.edge = { v: edgeSpread(ev) };
+  // empty bins (the front opening, above / below the coat): the nearest filled value, else 0
+  const NI = 2 * OFF.nu;
+  for (let it = 0; it < 6; it++) for (let i = 0; i < NI; i++) for (let j = 0; j < OFF.ns; j++) if (ov[i*OFF.ns+j] === -9){
+    let m = -9; for (const [a, b] of [[i-1, j], [i+1, j], [i, j-1], [i, j+1]]) if (a >= 0 && a < NI && (a < OFF.nu) === (i < OFF.nu) && b >= 0 && b < OFF.ns && ov[a*OFF.ns+b] > m) m = ov[a*OFF.ns+b];
+    if (m > -9) ov[i*OFF.ns+j] = m - 1e-6;
+  }
+  for (let q2 = 0; q2 < ov.length; q2++) if (ov[q2] <= -9) ov[q2] = 0;
+  COAT.off = { v: ov };
+  // the skirt's triangles the hands can reach (all three corners mostly coat, top above the knee); their corners are skinned once a
+  // frame (COAT.upW, world)
+  const triL = []; for (let f = 0; f < idx.length; f += 3){ const a = idx[f], b = idx[f+1], c = idx[f+2];
+    if (amt[a] > 0.4 && amt[b] > 0.4 && amt[c] > 0.4 && Math.max(P.getY(a), P.getY(b), P.getY(c)) > 0.55) triL.push(a, b, c); }
+  COAT.upV = Int32Array.from(new Set(triL)); const slot = new Int32Array(n).fill(-1); COAT.upV.forEach((v, i) => slot[v] = i);
+  COAT.armTris = Int32Array.from(triL.map(v => slot[v]));
+  COAT.upSkin = skinSet(COAT.upV); COAT.upW = COAT.upSkin.out; COAT.triD = new Float32Array(triL.length / 3 * 22);
+  // arm sample vertices: the extremes of the hand (and fingers) and of the forearm's wrist end in 26 directions; the forearm's radius
+  const dirs = []; for (let x = -1; x <= 1; x++) for (let y = -1; y <= 1; y++) for (let z = -1; z <= 1; z++) if (x || y || z) dirs.push(new T.Vector3(x, y, z).normalize());
+  const allB = sm.skeleton.bones, under = (b, root) => { for (let o = b; o; o = o.parent) if (o === root) return true; return false; };
+  const extremes = (pts, ds = dirs) => { const c = pts.reduce((a, q2) => a.add(q2[1]), new T.Vector3()).divideScalar(Math.max(1, pts.length)), pick = new Set();
+    for (const d of ds){ let bi = -1, bd = -1e9; for (const [i, q2] of pts){ const x = pv.subVectors(q2, c).dot(d); if (x > bd){ bd = x; bi = i; } } if (bi >= 0) pick.add(bi); }
+    return [...pick]; };
+  // evenly spread samples (farthest point first, from the given seeds) so no part of the glove falls between two of them
+  const spread = (pts, seeds, k) => { const P2 = pts.map(q2 => q2[1]), d = P2.map(() => 1e9), out = [], at = new Map(pts.map((q2, j) => [q2[0], j]));
+    const add = j => { out.push(pts[j][0]); P2.forEach((q2, m) => { d[m] = Math.min(d[m], q2.distanceToSquared(P2[j])); }); };
+    seeds.forEach(i => add(at.get(i)));
+    while (out.length < k && out.length < pts.length){ let bj = 0; d.forEach((x, m) => { if (x > d[bj]) bj = m; }); if (d[bj] < 1e-8) break; add(bj); }
+    return out; };
+  COAT.armPts = {}; COAT.armSkin = {}; COAT.armSkinC = {}; COAT.arm.rFore = {}; COAT.armBones = {};
+  const dirs6 = dirs.filter(d => Math.abs(d.x) + Math.abs(d.y) + Math.abs(d.z) < 1.01);
+  model.updateMatrixWorld(true);   // (bind() reset the bind matrix inverse; 'attached' mode takes it from the world matrix again)
+  for (const s of ['l','r']){
+    const ha = B['hand_'+s], lo = B['lowerarm_'+s], hand = [], fore = [];
+    COAT.armBones[s] = allB.map((b, i) => under(b, B['upperarm_'+s]) ? i : -1).filter(i => i >= 0);
+    const loW = lo.getWorldPosition(new T.Vector3()), axW = ha.getWorldPosition(new T.Vector3()).sub(loW), L2 = axW.lengthSq();
+    for (let i = 0; i < n; i++){
+      let bw = 0, bi = 0; for (let k = 0; k < 4; k++) if (SW[i*4+k] > bw){ bw = SW[i*4+k]; bi = SI[i*4+k]; }
+      const bone = allB[bi];
+      if (under(bone, ha)) hand.push([i, sm.boneTransform(i, new T.Vector3()).applyMatrix4(sm.matrixWorld)]);
+      else if (bone === lo){ const q2 = sm.boneTransform(i, new T.Vector3()).applyMatrix4(sm.matrixWorld); fore.push([i, q2, pv.subVectors(q2, loW).dot(axW)/L2]); }
+    }
+    const cuff = fore.filter(f => f[2] > 0.75);
+    COAT.armPts[s] = spread(hand, extremes(hand), 72).concat(spread(cuff, extremes(cuff), 30)); COAT.armSkin[s] = skinSet(COAT.armPts[s]);
+    COAT.armSkinC[s] = skinSet([...new Set(extremes(hand, dirs6).concat(extremes(cuff, dirs6)))]);
+    const ds = fore.filter(f => f[2] > 0.3 && f[2] < 0.9).map(([, q2, t]) => q2.distanceTo(loW.clone().addScaledVector(axW, t))).sort((a, b) => a - b);
+    COAT.arm.rFore[s] = ds.length ? ds[Math.floor(ds.length*0.8)] : 0.04;
+  }
 }
 const _cq = new T.Quaternion(), _cv = new T.Vector3(), _cv2 = new T.Vector3(), _cv3 = new T.Vector3();
 // unit direction of a segment from its fore-aft (a) / sideways (b) swing, in the hips' yaw frame (+x forward, +z the character's right)
 const coatDir = (a, b, out) => out.set(Math.sin(a), -Math.cos(a)*Math.cos(b), -Math.cos(a)*Math.sin(b));
+// the chains' current joints (yaw frame) from their swing angles
+const _cj = new T.Vector3();
+const coatJoints = (PP, rootsY) => COAT.chains.forEach((ch, c) => { const P = PP[c]; P[0].copy(rootsY[c]);
+  for (let k = 0; k < 3; k++) P[k+1].copy(P[k]).addScaledVector(coatDir(ch.a[k], ch.b[k], _cj), ch.len[k]); });
+// CPU skinning of a few vertices (the arm samples, the upper coat): bind-space positions with their bones / weights; in 'attached' mode
+// the world position is sum(w * boneMatrix * bindPos), boneMatrix = bone world x inverse bind
+function skinSet(idxs){
+  const sm = COAT.mesh, g = sm.geometry, P = g.attributes.position, SI = g.attributes.skinIndex, SW = g.attributes.skinWeight, n = idxs.length;
+  const p = new Float32Array(n*3), bi = new Uint16Array(n*4), bw = new Float32Array(n*4), v = new T.Vector3();
+  idxs.forEach((i, k) => { v.fromBufferAttribute(P, i).applyMatrix4(sm.bindMatrix); p[k*3] = v.x; p[k*3+1] = v.y; p[k*3+2] = v.z;
+    bi[k*4] = SI.getX(i); bi[k*4+1] = SI.getY(i); bi[k*4+2] = SI.getZ(i); bi[k*4+3] = SI.getW(i);
+    bw[k*4] = SW.getX(i); bw[k*4+1] = SW.getY(i); bw[k*4+2] = SW.getZ(i); bw[k*4+3] = SW.getW(i); });
+  return { n, p, bi, bw, out: new Float32Array(n*3) };
+}
+const _m4 = new T.Matrix4();
+function boneMats(only){
+  const sk = COAT.mesh.skeleton, nb = sk.bones.length, M = COAT.bm || (COAT.bm = new Float32Array(nb*16));
+  const upd = b => { _m4.multiplyMatrices(sk.bones[b].matrixWorld, sk.boneInverses[b]); M.set(_m4.elements, b*16); };
+  if (only) only.forEach(upd); else for (let b = 0; b < nb; b++) upd(b);
+  return M;
+}
+function skinRun(S, M){
+  const { n, p, bi, bw, out } = S;
+  for (let k = 0; k < n; k++){
+    const x = p[k*3], y = p[k*3+1], z = p[k*3+2]; let ox = 0, oy = 0, oz = 0;
+    for (let j = k*4; j < k*4 + 4; j++){ const w = bw[j]; if (!w) continue; const o = bi[j]*16;
+      ox += w*(M[o]*x + M[o+4]*y + M[o+8]*z + M[o+12]); oy += w*(M[o+1]*x + M[o+5]*y + M[o+9]*z + M[o+13]); oz += w*(M[o+2]*x + M[o+6]*y + M[o+10]*z + M[o+14]); }
+    out[k*3] = ox; out[k*3+1] = oy; out[k*3+2] = oz;
+  }
+  return out;
+}
+// arm colliders (yaw frame): spheres along the forearm (its measured radius) and skinned vertices of the hand and the cuff (their
+// extremes in 26 directions plus an even spread over the glove: its true shape, however it is turned); 'coarse' = only the extremes
+// along the axes (the coat's own step)
+function armSpheres(toY, only, coarse, armOnly){
+  const out = [], M = boneMats(armOnly ? COAT.armBones[only] : null);
+  for (const s of only ? [only] : ['l','r']){
+    const lo = toY(B['lowerarm_'+s].getWorldPosition(new T.Vector3())), ha = toY(B['hand_'+s].getWorldPosition(new T.Vector3()));
+    for (const t of [0.35, 0.6, 0.85]) out.push({ s, r:COAT.arm.rFore[s], q:lo.clone().lerp(ha, t) });
+    const S = (coarse ? COAT.armSkinC : COAT.armSkin)[s], X = skinRun(S, M);
+    for (let k = 0; k < S.n; k++) out.push({ s, r:COAT.arm.r, q:toY(new T.Vector3(X[k*3], X[k*3+1], X[k*3+2])) });
+  }
+  return out;
+}
+// the coat as a heightfield around the hips (yaw frame; PP = the chains' current joints, pc = the hips' axis): every chain is taken
+// at the point's height along its polyline (where it hangs now: a flared front panel or a trailing tail moves round the hips); at
+// the point's azimuth the coat's radius is blended from the two chains either side of it (the front edge chain alone over its flap,
+// nothing in the front opening, the two back panels across the vent). Returns the signed distance out of the coat (horizontal, along
+// n), the chains under the point ([chain, weight, segment (-1 = the rigid belt), lever]) and where it is on the coat: side, u (chain
+// index + fraction toward the next one), s (segment + fraction down it).
+// The chains run along the median of the shell; COAT.off (per side x u x s bin) adds how far the outermost cloth stands out of
+// that (pockets, the flare between two chains), measured on the mesh at bind. (Only the coat's own step uses this approximation; the
+// arms are kept out against the posed triangles themselves, armDepth.)
+const OFF = { u0:-0.6, du:0.1, nu:43, s0:-1, ds:0.25, ns:17 };
+const offIdx = (sd, u, s) => { const i = Math.round((u - OFF.u0) / OFF.du), j = Math.round((s - OFF.s0) / OFF.ds);
+  return i >= 0 && i < OFF.nu && j >= 0 && j < OFF.ns ? ((sd > 0 ? OFF.nu : 0) + i) * OFF.ns + j : -1; };
+function coatOff(sd, u, s){
+  const O = COAT.off; if (!O) return 0;
+  const V = O.v, x = Math.max(0, Math.min(OFF.nu - 1.001, (u - OFF.u0) / OFF.du)), y = Math.max(0, Math.min(OFF.ns - 1.001, (s - OFF.s0) / OFF.ds));
+  const i = Math.floor(x), j = Math.floor(y), fx = x - i, fy = y - j, base = sd > 0 ? OFF.nu : 0, g = (a, b) => V[(base + a)*OFF.ns + b];
+  return lerp(lerp(g(i, j), g(i, j+1), fy), lerp(g(i+1, j), g(i+1, j+1), fy), fx);
+}
+// the front edge of the cloth (in u, < 0: ahead of the front chain) per side x s bin, measured at bind
+const edgeIdx = (sd, s) => (sd > 0 ? OFF.ns : 0) + Math.max(0, Math.min(OFF.ns - 1, Math.round((s - OFF.s0) / OFF.ds)));
+// (sparse bins: each takes the furthest-forward edge of itself and its neighbours)
+const edgeSpread = e => { const c = e.slice(); for (let k = 0; k < e.length; k++){ const b = k < OFF.ns ? 0 : OFF.ns;
+  for (const j of [k-1, k+1]) if (j >= b && j < b + OFF.ns) e[k] = Math.min(e[k], c[j]); } return e; };
+function coatEdge(sd, s){
+  const E = COAT.edge; if (!E) return -9;
+  const V = E.v, y = Math.max(0, Math.min(OFF.ns - 1.001, (s - OFF.s0) / OFF.ds)), j = Math.floor(y), b = sd > 0 ? OFF.ns : 0;
+  return lerp(V[b + j], V[b + j + 1], y - j);
+}
+function chainAtY(ch, P, y, pc){
+  let k = -1, t = 0, x, z, s;
+  if (y > P[0].y){ if (y > P[0].y + COAT.arm.top) return null; x = P[0].x; z = P[0].z; s = -(y - P[0].y) / COAT.arm.top; }
+  else { k = 0; while (k < 3 && y < P[k+1].y) k++; if (k === 3) return null;
+    t = (P[k].y - y) / Math.max(1e-5, P[k].y - P[k+1].y); x = lerp(P[k].x, P[k+1].x, t); z = lerp(P[k].z, P[k+1].z, t); s = k + t; }
+  const dx = x - pc.x, dz = z - pc.z, yy = Math.max(y, P[3].y);
+  return { ch, k, t, s, th: Math.abs(Math.atan2(dz, dx)), r: Math.hypot(dx, dz), L: Math.hypot(x - P[0].x, Math.min(yy, P[0].y) - P[0].y, z - P[0].z) };
+}
+function coatAt(Q, PP, pc, raw){
+  const rx = Q.x - pc.x, rz = Q.z - pc.z, r = Math.hypot(rx, rz); if (r < 1e-4) return null;
+  const az = Math.atan2(rz, rx), sd = az >= 0 ? 1 : -1, a = Math.abs(az), S = COAT.ring[sd], n = S.length - 1;
+  const C = S.map(ch => chainAtY(ch, PP[ch.idx], Q.y, pc));
+  let parts, u;
+  if (C[0] && a < C[0].th){
+    // front flap; nearer the front is the opening (where the posed cloth's front edge is: COAT.edge)
+    const c = C[0]; u = (a - c.th) / Math.max(0.1, C[1] ? C[1].th - c.th : 0.55);
+    if (!raw && u < coatEdge(sd, c.s) - 0.03) return null;
+    parts = [[c, 1]];
+  } else if (C[n] && a > C[n].th){
+    // back, across the vent to the other side's back panel
+    const o = COAT.ring[-sd][n], c2 = chainAtY(o, PP[o.idx], Q.y, pc); if (!c2) return null;
+    const f = Math.min(1, (a - C[n].th) / Math.max(1e-3, 2*Math.PI - C[n].th - c2.th)); parts = [[C[n], 1-f], [c2, f]]; u = n + f;
+  } else {
+    let i = 0; while (i < n-1 && !(C[i+1] && a <= C[i+1].th)) i++;
+    if (!C[i] || !C[i+1] || a < C[i].th) return null;
+    const f = (a - C[i].th) / Math.max(1e-3, C[i+1].th - C[i].th); parts = [[C[i], 1-f], [C[i+1], f]]; u = i + f;
+  }
+  let rs = 0, sp = 0;
+  for (const [c, w] of parts){ rs += w * c.r; sp += w * c.s; }
+  return { d: r - rs - (raw ? 0 : coatOff(sd, u, sp)), n: new T.Vector3(rx/r, 0, rz/r), parts: parts.map(([c, w]) => [c.ch, w, c.k, c.L]), sd, u, s: sp };
+}
+// the upper coat as posed now (skinned on the CPU, world) and its triangle cache for the exact arm test
+const _cr = new T.Vector3();
+function coatRefresh(pcW){
+  const X = skinRun(COAT.upSkin, boneMats());
+  // triangle cache for the exact arm test: outward normal (away from the hips' axis), corner, edges, barycentric terms, box
+  const D = COAT.triD, tr = COAT.armTris;
+  for (let t = 0, o = 0; t < tr.length; t += 3, o += 22){
+    const a = tr[t]*3, b = tr[t+1]*3, c = tr[t+2]*3;
+    const e0x = X[b]-X[a], e0y = X[b+1]-X[a+1], e0z = X[b+2]-X[a+2], e1x = X[c]-X[a], e1y = X[c+1]-X[a+1], e1z = X[c+2]-X[a+2];
+    let nx = e0y*e1z - e0z*e1y, ny = e0z*e1x - e0x*e1z, nz = e0x*e1y - e0y*e1x; const L = Math.hypot(nx, ny, nz) || 1e-9;
+    nx /= L; ny /= L; nz /= L;
+    if (nx*((X[a]+X[b]+X[c])/3 - pcW.x) + nz*((X[a+2]+X[b+2]+X[c+2])/3 - pcW.z) < 0){ nx = -nx; ny = -ny; nz = -nz; }
+    const d00 = e0x*e0x + e0y*e0y + e0z*e0z, d01 = e0x*e1x + e0y*e1y + e0z*e1z, d11 = e1x*e1x + e1y*e1y + e1z*e1z, den = d00*d11 - d01*d01;
+    D[o] = nx; D[o+1] = ny; D[o+2] = nz; D[o+3] = X[a]; D[o+4] = X[a+1]; D[o+5] = X[a+2];
+    D[o+6] = e0x; D[o+7] = e0y; D[o+8] = e0z; D[o+9] = e1x; D[o+10] = e1y; D[o+11] = e1z;
+    D[o+12] = d00; D[o+13] = d01; D[o+14] = d11; D[o+15] = Math.abs(den) > 1e-14 ? 1/den : 0;
+    D[o+16] = Math.min(X[a], X[b], X[c]); D[o+17] = Math.min(X[a+1], X[b+1], X[c+1]); D[o+18] = Math.min(X[a+2], X[b+2], X[c+2]);
+    D[o+19] = Math.max(X[a], X[b], X[c]); D[o+20] = Math.max(X[a+1], X[b+1], X[c+1]); D[o+21] = Math.max(X[a+2], X[b+2], X[c+2]);
+  }
+}
+// exact arm test on the posed mesh (world): for each arm sample its nearest skirt triangle (projecting inside it); the deepest sample
+// on the inner side of its triangle (or closer than its radius) -> [depth, point, the triangle's outward normal]
+const _aq = { q:new Float32Array(512), c:new Int32Array(1024) };
+function armDepth(pts){
+  const D = COAT.triD, M = COAT.arm.near, np = pts.length;
+  if (_aq.q.length < np*4) _aq.q = new Float32Array(np*4);
+  if (_aq.c.length < D.length/22) _aq.c = new Int32Array(D.length/22);
+  const Q = _aq.q, cand = _aq.c;
+  let x0 = 1e9, y0 = 1e9, z0 = 1e9, x1 = -1e9, y1 = -1e9, z1 = -1e9;
+  for (let k = 0; k < np; k++){ const q = pts[k].q; Q[k*4] = q.x; Q[k*4+1] = q.y; Q[k*4+2] = q.z; Q[k*4+3] = pts[k].r;
+    if (q.x < x0) x0 = q.x; if (q.x > x1) x1 = q.x; if (q.y < y0) y0 = q.y; if (q.y > y1) y1 = q.y; if (q.z < z0) z0 = q.z; if (q.z > z1) z1 = q.z; }
+  let nc = 0;
+  for (let o = 0; o < D.length; o += 22) if (D[o+16] <= x1 + M && D[o+19] >= x0 - M && D[o+17] <= y1 + M && D[o+20] >= y0 - M && D[o+18] <= z1 + M && D[o+21] >= z0 - M) cand[nc++] = o;
+  if (!nc) return null;
+  let best = 0.002, bk = -1, bo = -1;
+  for (let k = 0; k < np; k++){
+    const X = Q[k*4], Y = Q[k*4+1], Z = Q[k*4+2];
+    let near = M, nsd = 0, no = -1;
+    for (let c = 0; c < nc; c++){
+      const o = cand[c], px = X - D[o+3], py = Y - D[o+4], pz = Z - D[o+5], sd = px*D[o] + py*D[o+1] + pz*D[o+2];
+      if (sd >= near || -sd >= near) continue;
+      const qx = px - D[o]*sd, qy = py - D[o+1]*sd, qz = pz - D[o+2]*sd;
+      const d20 = qx*D[o+6] + qy*D[o+7] + qz*D[o+8], d21 = qx*D[o+9] + qy*D[o+10] + qz*D[o+11];
+      const v = (D[o+14]*d20 - D[o+13]*d21)*D[o+15]; if (v < -0.02) continue;
+      const w = (D[o+12]*d21 - D[o+13]*d20)*D[o+15]; if (w < -0.02 || v + w > 1.02) continue;
+      near = sd < 0 ? -sd : sd; nsd = sd; no = o;
+    }
+    if (no >= 0 && Q[k*4+3] - nsd > best){ best = Q[k*4+3] - nsd; bk = k; bo = no; }
+  }
+  return bk >= 0 ? [best, pts[bk].q, new T.Vector3(D[bo], D[bo+1], D[bo+2])] : null;
+}
 function coatStep(dt){
   if (!COAT.chains.length) return;
   if (window.HERO && !window.HERO.coat) window.HERO.coat = COAT;
@@ -1453,6 +1677,36 @@ function coatStep(dt){
     }
     return [ta, tb];
   });
+  // arm colliders and how fast each sweeps past the hips (yaw frame; for the friction)
+  const pc = toY(pw.clone()), arms = live > 0.01 ? armSpheres(toY, null, true) : [], rootsY = roots.map(r => toY(r.clone()));
+  const PP = COAT.chains.map(() => [new T.Vector3(), new T.Vector3(), new T.Vector3(), new T.Vector3()]);
+  const rel = arms.map(sp => sp.q.clone().sub(pc)), fresh = !COAT.armPrev || COAT.armPrev.length !== rel.length || dt > 0.2 || dt < 1e-5;
+  arms.forEach((sp, i) => { sp.v = fresh ? new T.Vector3() : rel[i].clone().sub(COAT.armPrev[i]).divideScalar(dt); });
+  COAT.armPrev = rel;
+  // a hand / forearm hanging against the coat takes the room it needs: the panels under it hang turned in / back (an offset of their
+  // target, at most 'give', eased in and out: the cloth swings aside and settles back); what that does not clear, the arm gives (6).
+  // Measured against where the coat would hang without the arms (the targets), so the offset does not chase itself.
+  {
+    const need = COAT.chains.map(() => [[0, 0, 0], [0, 0, 0]]);
+    if (arms.length){
+      COAT.chains.forEach((ch, c) => { const P = PP[c]; P[0].copy(rootsY[c]); for (let k = 0; k < 3; k++) P[k+1].copy(P[k]).addScaledVector(coatDir(tgt[c][0][k], tgt[c][1][k], _cj), ch.len[k]); });
+      for (const sp of arms){
+        const hit = coatAt(sp.q, PP, pc); if (!hit || hit.d < -COAT.arm.deep) continue;
+        const pen = (sp.r - hit.d) * live; if (pen <= 0) continue;
+        for (const [ch, w, k, L] of hit.parts){
+          if (k < 0 || w < 0.02) continue;
+          const al = Math.min(COAT.arm.give, pen * w / Math.max(0.06, L)), da = -hit.n.x*al, db = hit.n.z*al, nd = need[ch.idx];
+          for (let j = 0; j < 3; j++){ const wj = j <= k ? 1 : COAT.carry;
+            if (Math.abs(da*wj) > Math.abs(nd[0][j])) nd[0][j] = da*wj; if (Math.abs(db*wj) > Math.abs(nd[1][j])) nd[1][j] = db*wj; }
+        }
+      }
+    }
+    const ke = dt > 0.2 ? 1 : 1 - Math.exp(-dt * COAT.arm.ease);
+    COAT.chains.forEach((ch, c) => {
+      if (!ch.oa){ ch.oa = [0, 0, 0]; ch.ob = [0, 0, 0]; }
+      for (let j = 0; j < 3; j++){ ch.oa[j] += (need[c][0][j] - ch.oa[j]) * ke; ch.ob[j] += (need[c][1][j] - ch.ob[j]) * ke; tgt[c][0][j] += ch.oa[j]; tgt[c][1][j] += ch.ob[j]; }
+    });
+  }
   if (!COAT.init){ COAT.chains.forEach((ch, c) => { ch.a = tgt[c][0].slice(); ch.b = tgt[c][1].slice(); ch.va = [0,0,0]; ch.vb = [0,0,0]; }); COAT.init = true; }
   const nS = Math.min(40, Math.max(1, Math.ceil(dt * 150))), h = dt / nS, dmp = Math.exp(-COAT.damp*h);
   const ax = -accY.x * COAT.inert, az = accY.z * COAT.inert;
@@ -1497,6 +1751,20 @@ function coatStep(dt){
       if (Math.abs(da) > lim){ const c2 = (da - Math.sign(da)*lim)/2; A1.a[k] -= c2; B1.a[k] += c2; }
       if (Math.abs(db) > lim){ const c2 = (db - Math.sign(db)*lim)/2; A1.b[k] -= c2; B1.b[k] += c2; }
     }
+    // 3b) arms: a hand / forearm touching the coat drags the panels under it along as it sweeps past (friction)
+    if (arms.length){
+      coatJoints(PP, rootsY);
+      for (const sp of arms){
+        const hit = coatAt(sp.q, PP, pc); if (!hit || hit.d < -COAT.arm.deep || sp.r - hit.d < -0.006) continue;
+        const vt = sp.v.clone().addScaledVector(hit.n, -sp.v.dot(hit.n)), wM = COAT.arm.wMax;
+        for (const [ch, w, k, L] of hit.parts){
+          if (k < 0 || w < 0.02) continue;
+          const Lc = Math.max(0.06, L), kf = 1 - Math.exp(-COAT.arm.fric * w * h);
+          const wa = Math.max(-wM, Math.min(wM, vt.x / Lc)), wb = Math.max(-wM, Math.min(wM, -vt.z / Lc));
+          for (let j = 0; j < 3; j++){ const wj = j <= k ? 1 : COAT.carry; ch.va[j] += (wa - ch.va[j]) * kf * wj; ch.vb[j] += (wb - ch.vb[j]) * kf * wj; }
+        }
+      }
+    }
     // 4) legs push the panels out along the panel's own outward direction (the whole panel turns about the hip: a straight drape)
     COAT.chains.forEach((ch, c) => {
       p[0].copy(roots[c]); toY(p[0]);
@@ -1538,6 +1806,26 @@ function coatStep(dt){
       pos.addScaledVector(d, ch.len[k]);
     }
   });
+  if (arms.length) coatRefresh(pw);
+  // 6) what the coat could not give (a leg behind it, its inward limit), the arm gives: a free arm (not holding a weapon) turns out
+  // about the shoulder until the hand and the forearm clear the coat
+  if (arms.length){
+    COAT.fix = COAT.fix || {};
+    for (const s of ['l','r']){
+      const up = B['upperarm_'+s], rv = new T.Vector3(), last = COAT.fix[s];
+      if (!COAT.free[s]){ COAT.fix[s] = null; continue; }
+      // start from most of last frame's turn-out (kept in the yaw frame), so the arm usually settles in one pass
+      if (last && dt <= 0.2){ const ax = last.clone().applyQuaternion(qy), a = ax.length() * COAT.arm.keep * live; if (a > 1e-4){ rotBoneWorld(up, ax.normalize(), a); rv.addScaledVector(ax, a); } }
+      for (let it = 0; it < 4; it++){
+        const hit = armDepth(armSpheres(v => v, s, false, true)); if (!hit) break;
+        const [pen, q, nW] = hit, sh = up.getWorldPosition(new T.Vector3()), axis = new T.Vector3().crossVectors(q.clone().sub(sh), nW), m = axis.length();
+        if (m < 1e-4) break;
+        const a = (pen + 0.002) * live / m; axis.divideScalar(m);
+        rotBoneWorld(up, axis, a); rv.addScaledVector(axis, a);
+      }
+      COAT.fix[s] = rv.lengthSq() > 1e-10 ? rv.applyQuaternion(qyi) : null;
+    }
+  }
 }
 
 // ---------- Load the mesh ----------
