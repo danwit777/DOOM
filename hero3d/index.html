@@ -604,12 +604,14 @@ let mixer=null, ACT={}, model=null;
 const FWD=new T.Vector3(1,0,0), UP=new T.Vector3(0,1,0), RIGHT=new T.Vector3(0,0,1);
 // standing layer (idle / aim): wide A-stance like the sprites, feet planted flat, knees soft, near shin leaning out
 const STANCE = {
-  idle:{ drop:0.08, hip:-0.34, twist:-0.24, lean:0.1, roll:0.12, shift:new T.Vector3(0.09,0,-0.07), footR:new T.Vector3(-0.1,0.155,0.37), footL:new T.Vector3(0.13,0.155,-0.25), kneeR:new T.Vector3(1,0,0.5), kneeL:new T.Vector3(1,0,-0.5) },
-  aim: { drop:0.08, hip:-0.24, twist:-0.16, lean:0.45, roll:-0.1, shift:new T.Vector3(0.2,0,-0.17), footR:new T.Vector3(-0.02,0.155,0.17), footL:new T.Vector3(0.33,0.155,-0.5),  kneeR:new T.Vector3(1,0,0.6), kneeL:new T.Vector3(1,0,-0.4) },
-  pistol:{ drop:0.07, hip:-0.36, twist:-0.3, lean:0.04, roll:-0.06, shift:new T.Vector3(0.05,0,-0.04), footR:new T.Vector3(-0.1,0.155,0.36), footL:new T.Vector3(0.12,0.155,-0.33), kneeR:new T.Vector3(1,0,0.5), kneeL:new T.Vector3(1,0,-0.5) }
+  // unarmed: a natural, symmetric stand — feet under the hips, toes slightly out, knees soft, torso and head straight
+  relaxed:{ drop:0.035, hip:0, twist:0, lean:0.02, roll:0, shift:new T.Vector3(0,0,0), footR:new T.Vector3(0.0,0.155,0.15), footL:new T.Vector3(0.0,0.155,-0.15), kneeR:new T.Vector3(1,0,0.12), kneeL:new T.Vector3(1,0,-0.12), yawR:-0.22, yawL:0.22 },
+  idle:{ drop:0.08, hip:-0.34, twist:-0.24, lean:0.1, roll:0.12, shift:new T.Vector3(0.09,0,-0.07), footR:new T.Vector3(-0.1,0.155,0.37), footL:new T.Vector3(0.13,0.155,-0.25), kneeR:new T.Vector3(1,0,0.5), kneeL:new T.Vector3(1,0,-0.5), yawR:-0.75, yawL:-0.35 },
+  aim: { drop:0.08, hip:-0.24, twist:-0.16, lean:0.45, roll:-0.1, shift:new T.Vector3(0.2,0,-0.17), footR:new T.Vector3(-0.02,0.155,0.17), footL:new T.Vector3(0.33,0.155,-0.5),  kneeR:new T.Vector3(1,0,0.6), kneeL:new T.Vector3(1,0,-0.4), yawR:-0.75, yawL:-0.35 },
+  pistol:{ drop:0.07, hip:-0.36, twist:-0.3, lean:0.04, roll:-0.06, shift:new T.Vector3(0.05,0,-0.04), footR:new T.Vector3(-0.1,0.155,0.36), footL:new T.Vector3(0.12,0.155,-0.33), kneeR:new T.Vector3(1,0,0.5), kneeL:new T.Vector3(1,0,-0.5), yawR:-0.75, yawL:-0.35 }
 };
 // head direction per pose: [yaw (+ = to the character's left), pitch (+ = up)]
-const LOOK = { idle:[0.05,-0.05], rifle:[0.2,-0.04], pistol:[-1.35,0.2] };
+const LOOK = { relaxed:[0,0.07], idle:[0.05,-0.05], rifle:[0.2,-0.04], pistol:[-1.35,0.2] };
 const _v=new T.Vector3(), _v2=new T.Vector3(), _qy=new T.Quaternion(), _qp=new T.Quaternion();
 function update(dt){
   if (!model) return;
@@ -639,7 +641,7 @@ function update(dt){
 
   // 2) standing pose (idle/aim): pelvis down + turned toward the camera side, legs by IK onto planted feet
   const stand = (1-move)*(1-S.tp);
-  const sA = STANCE.idle, sB = pistol ? STANCE.pistol : STANCE.aim, ka = S.aim;
+  const sA = armed ? STANCE.idle : STANCE.relaxed, sB = pistol ? STANCE.pistol : STANCE.aim, ka = S.aim;
   const st = k => lerp(sA[k], sB[k], ka);
   if (stand > 0.001){
     const pw = B.pelvis.getWorldPosition(_v); pw.y -= st('drop')*stand;
@@ -652,7 +654,7 @@ function update(dt){
       const kn = new T.Vector3().lerpVectors(sA['knee'+S2], sB['knee'+S2], ka);
       legIK(s, ft, kn, stand);
       // feet flat on the ground, toes turned out a little
-      _qy.setFromAxisAngle(UP, s==='r' ? -0.75 : -0.35);
+      _qy.setFromAxisAngle(UP, s==='r' ? st('yawR') : st('yawL'));
       setBoneWorldQ(B['foot_'+s], _qy.clone().multiply(BIND['foot_'+s].w), stand);
     }
     // torso: turn back toward the camera, lean into the aim, breathe
@@ -665,8 +667,9 @@ function update(dt){
 
   // head: look where the weapon points (level for the rifle, 3/4 toward the raised pistol)
   {
-    const lk = S.aim>0.001 ? (pistol ? LOOK.pistol : LOOK.rifle) : LOOK.idle;
-    const ly = lerp(LOOK.idle[0], lk[0], S.aim), lp = lerp(LOOK.idle[1], lk[1], S.aim);
+    const l0 = armed ? LOOK.idle : LOOK.relaxed;
+    const lk = S.aim>0.001 ? (pistol ? LOOK.pistol : LOOK.rifle) : l0;
+    const ly = lerp(l0[0], lk[0], S.aim), lp = lerp(l0[1], lk[1], S.aim);
     _qy.setFromAxisAngle(UP, ly); _qp.setFromAxisAngle(RIGHT, lp); _qy.multiply(_qp);
     const hw = (1-S.tp)*(1-move*0.6);
     setBoneWorldQ(B.neck_01, _q.copy(_qy).slerp(new T.Quaternion(), 0.4).multiply(BIND.neck_01.w), hw);
