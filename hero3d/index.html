@@ -930,9 +930,32 @@ function buildGear(){
 const hud = document.getElementById('hud');
 hud.textContent = 'ładowanie modelu…';
 // hero.json (self-contained glTF) is what the published page ships; hero.glb is the same model for engines/Blender
-const MODEL_URLS = ['hero.json', 'hero.glb'];
-function loadModel(i, onLoad, onErr){ new T.GLTFLoader().load(MODEL_URLS[i], onLoad, undefined, e => i+1 < MODEL_URLS.length ? loadModel(i+1, onLoad, onErr) : onErr(e)); }
-loadModel(0, gltf => {
+// The published page ships the model as hero.json = {"glb": "<base64 GLB>"} (the host does not serve .glb, and its CSP blocks
+// fetching data: URIs). Locally hero.glb works too. The GLB is parsed in memory; textures then come from blob: URLs, loaded through
+// <img> (createImageBitmap is hidden during parsing so GLTFLoader does not fetch() them, which the CSP would also refuse).
+async function fetchModel(){
+  for (const url of ['hero.json', 'hero.glb']){
+    try {
+      const r = await fetch(url); if (!r.ok) continue;
+      if (url.endsWith('.json')){
+        const b64 = (await r.json()).glb, bin = atob(b64), out = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+        return out.buffer;
+      }
+      return await r.arrayBuffer();
+    } catch (e) { /* try the next source */ }
+  }
+  throw new Error('nie znaleziono hero.json ani hero.glb');
+}
+function loadModel(onLoad, onErr){
+  fetchModel().then(buf => {
+    const cib = window.createImageBitmap;
+    try { window.createImageBitmap = undefined; } catch (e) {}
+    try { new T.GLTFLoader().parse(buf, '', onLoad, onErr); }
+    finally { try { window.createImageBitmap = cib; } catch (e) {} }
+  }, onErr);
+}
+loadModel(gltf => {
   model = gltf.scene; model.rotation.y = Math.PI/2;          // the mesh faces +Z; the rig convention here is +X forward
   hero.add(model);
   model.traverse(o => {

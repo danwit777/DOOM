@@ -1,0 +1,22 @@
+// Load a page under an artifact-like CSP (connect-src 'self' only, images self/data/blob) and report errors + whether the model loaded.
+import { chromium, webkit } from '/opt/node22/lib/node_modules/playwright/index.mjs';
+import fs from 'fs'; import path from 'path';
+const SP = '/tmp/claude-0/-home-user-DOOM/dfde09f2-3c62-5cd6-b478-4df69e6133b9/scratchpad';
+const [,, htmlPath, engine='chromium', shot] = process.argv;
+const dir = path.dirname(path.resolve(htmlPath)), page = path.basename(htmlPath);
+const CSP = "default-src 'none'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; worker-src 'self' blob:";
+const br = await (engine==='webkit'? webkit : chromium).launch(engine==='webkit'?{}:{args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
+const p = await br.newPage({viewport:{width:420,height:900}});
+const logs=[]; p.on('pageerror',e=>logs.push('PAGEERR '+e.message)); p.on('console',m=>logs.push(m.type()+': '+m.text().slice(0,200)));
+await p.route('**/three.min.js', r=>r.fulfill({path:SP+'/node_modules/three/build/three.min.js', contentType:'text/javascript'}));
+await p.route('**/GLTFLoader.js', r=>r.fulfill({path:SP+'/GLTFLoader.js', contentType:'text/javascript'}));
+await p.route('**/fonts.googleapis.com/**', r=>r.abort());
+await p.route('http://hero.local/**', r=>{ const u=new URL(r.request().url()); const f=path.join(dir, decodeURIComponent(u.pathname));
+  if (u.pathname==='/'+page) r.fulfill({contentType:'text/html', headers:{'content-security-policy':CSP}, body:'<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"></head><body>'+fs.readFileSync(f,'utf8')+'</body></html>'});
+  else if (fs.existsSync(f)) r.fulfill({path:f, headers:{'content-security-policy':CSP}}); else r.fulfill({status:404, body:'nf'}); });
+await p.goto('http://hero.local/'+page);
+await p.waitForTimeout(8000);
+const st = await p.evaluate(()=>({ready:!!window.HERO_READY, hud:document.getElementById('hud')?.textContent}));
+console.log(JSON.stringify(st)); console.log(logs.filter(l=>!/parser-blocking/.test(l)).slice(0,12).join('\n'));
+if (shot) await p.locator('#stage').screenshot({path:shot});
+await br.close();
