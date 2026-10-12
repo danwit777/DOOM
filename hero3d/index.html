@@ -590,9 +590,9 @@ function limbIK(up, lo, ha, a, b, targetW, poleW, w){
 function armIK(side, targetW, poleW, w){
   limbIK(B['upperarm_'+side], B['lowerarm_'+side], B['hand_'+side], LEN['up_'+side], LEN['lo_'+side], targetW, poleW, w);
 }
-function legIK(side, targetW, poleW, w){
+function legIK(side, targetW, poleW, w, reach=0.98){
   // keep the knee soft: a planted foot out of reach slides in toward the hip instead of lifting off the ground
-  const hip = B['thigh_'+side].getWorldPosition(new T.Vector3()), r = (LEN['th_'+side]+LEN['ca_'+side])*0.98;
+  const hip = B['thigh_'+side].getWorldPosition(new T.Vector3()), r = (LEN['th_'+side]+LEN['ca_'+side])*reach;
   const dy = hip.y - targetW.y, h = new T.Vector2(targetW.x-hip.x, targetW.z-hip.z), hm = Math.sqrt(Math.max(0, r*r-dy*dy));
   if (h.length() > hm){ h.setLength(hm); targetW = new T.Vector3(hip.x+h.x, targetW.y, hip.z+h.y); }
   limbIK(B['thigh_'+side], B['calf_'+side], B['foot_'+side], LEN['th_'+side], LEN['ca_'+side], targetW, poleW, w);
@@ -605,7 +605,7 @@ const FWD=new T.Vector3(1,0,0), UP=new T.Vector3(0,1,0), RIGHT=new T.Vector3(0,0
 // standing layer (idle / aim): wide A-stance like the sprites, feet planted flat, knees soft, near shin leaning out
 const STANCE = {
   // unarmed: a natural, symmetric stand — feet under the hips, toes slightly out, knees soft, torso and head straight
-  relaxed:{ drop:0.035, hip:0, twist:0, lean:0.02, roll:0, shift:new T.Vector3(0,0,0), footR:new T.Vector3(0.0,0.155,0.15), footL:new T.Vector3(0.0,0.155,-0.15), kneeR:new T.Vector3(1,0,0.12), kneeL:new T.Vector3(1,0,-0.12), yawR:-0.22, yawL:0.22 },
+  relaxed:{ reach:0.996, drop:0.035, hip:0, twist:0, lean:0.02, roll:0, shift:new T.Vector3(0,0,0), footR:new T.Vector3(0.0,0.155,0.15), footL:new T.Vector3(0.0,0.155,-0.15), kneeR:new T.Vector3(1,0,0.12), kneeL:new T.Vector3(1,0,-0.12), yawR:-0.22, yawL:0.22 },
   idle:{ drop:0.08, hip:-0.34, twist:-0.24, lean:0.1, roll:0.12, shift:new T.Vector3(0.09,0,-0.07), footR:new T.Vector3(-0.1,0.155,0.37), footL:new T.Vector3(0.13,0.155,-0.25), kneeR:new T.Vector3(1,0,0.5), kneeL:new T.Vector3(1,0,-0.5), yawR:-0.75, yawL:-0.35 },
   aim: { drop:0.08, hip:-0.24, twist:-0.16, lean:0.45, roll:-0.1, shift:new T.Vector3(0.2,0,-0.17), footR:new T.Vector3(-0.02,0.155,0.17), footL:new T.Vector3(0.33,0.155,-0.5),  kneeR:new T.Vector3(1,0,0.6), kneeL:new T.Vector3(1,0,-0.4), yawR:-0.75, yawL:-0.35 },
   pistol:{ drop:0.07, hip:-0.36, twist:-0.3, lean:0.04, roll:-0.06, shift:new T.Vector3(0.05,0,-0.04), footR:new T.Vector3(-0.1,0.155,0.36), footL:new T.Vector3(0.12,0.155,-0.33), kneeR:new T.Vector3(1,0,0.5), kneeL:new T.Vector3(1,0,-0.5), yawR:-0.75, yawL:-0.35 }
@@ -644,7 +644,19 @@ function update(dt){
   const sA = armed ? STANCE.idle : STANCE.relaxed, sB = pistol ? STANCE.pistol : STANCE.aim, ka = S.aim;
   const st = k => lerp(sA[k], sB[k], ka);
   if (stand > 0.001){
-    const pw = B.pelvis.getWorldPosition(_v); pw.y -= st('drop')*stand;
+    // unarmed: solve the pelvis drop so the legs end up almost straight with both feet planted
+    let drop = st('drop');
+    const reach = lerp(sA.reach || 0.98, sB.reach || 0.98, ka);
+    if (!armed){
+      let need = 0;
+      for (const s of ['l','r']){
+        const hip = B['thigh_'+s].getWorldPosition(new T.Vector3()), ft = sA[s==='r'?'footR':'footL'];
+        const L = (LEN['th_'+s]+LEN['ca_'+s])*reach, h = Math.hypot(ft.x-hip.x, ft.z-hip.z);
+        need = Math.max(need, hip.y - (ft.y + Math.sqrt(Math.max(0, L*L - h*h))));
+      }
+      drop = lerp(need, drop, ka);
+    }
+    const pw = B.pelvis.getWorldPosition(_v); pw.y -= drop*stand;
     pw.addScaledVector(_v2.lerpVectors(sA.shift, sB.shift, ka), stand);
     B.pelvis.parent.worldToLocal(pw); B.pelvis.position.copy(pw);
     rotBoneWorld(B.pelvis, UP, st('hip')*stand);
@@ -652,7 +664,7 @@ function update(dt){
       const S2 = s==='r' ? 'R' : 'L';
       const ft = _v2.lerpVectors(sA['foot'+S2], sB['foot'+S2], ka);
       const kn = new T.Vector3().lerpVectors(sA['knee'+S2], sB['knee'+S2], ka);
-      legIK(s, ft, kn, stand);
+      legIK(s, ft, kn, stand, reach);
       // feet flat on the ground, toes turned out a little
       _qy.setFromAxisAngle(UP, s==='r' ? st('yawR') : st('yawL'));
       setBoneWorldQ(B['foot_'+s], _qy.clone().multiply(BIND['foot_'+s].w), stand);
