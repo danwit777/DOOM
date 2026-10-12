@@ -55,22 +55,12 @@ kbd{font-family:var(--f-display);font-size:10px;color:var(--muted);margin-left:4
         <button id="a-idle" data-anim="idle" aria-pressed="true">Idle<kbd>1</kbd></button>
         <button id="a-walk" data-anim="walk" aria-pressed="false">Chód<kbd>2</kbd></button>
         <button id="a-run" data-anim="run" aria-pressed="false">Bieg<kbd>6</kbd></button>
-        <button id="a-aim" data-anim="aim" aria-pressed="false">Cel<kbd>3</kbd></button>
-        <button id="a-fire" data-anim="fire" aria-pressed="false">Ogień<kbd>4</kbd></button>
         <button id="a-tpose" data-anim="tpose" aria-pressed="false">T-poza<kbd>5</kbd></button>
         <button id="a-jump_up" data-anim="jump_up" aria-pressed="false">Skok<kbd>7</kbd></button>
         <button id="a-jump_apex" data-anim="jump_apex" aria-pressed="false">Szczyt<kbd>8</kbd></button>
         <button id="a-fall" data-anim="fall" aria-pressed="false">Spadanie<kbd>9</kbd></button>
         <button id="a-land" data-anim="land" aria-pressed="false">Lądowanie<kbd>0</kbd></button>
         <button id="a-climb" data-anim="climb" aria-pressed="false">Wspinaczka<kbd>W</kbd></button>
-      </div>
-    </div>
-    <div class="group">
-      <div class="label">Broń <kbd>Q</kbd></div>
-      <div class="row" id="weapons">
-        <button id="w-none" data-weapon="none" aria-pressed="true">Brak</button>
-        <button id="w-rifle" data-weapon="rifle" aria-pressed="false">Karabin</button>
-        <button id="w-pistol" data-weapon="pistol" aria-pressed="false">Pistolet</button>
       </div>
     </div>
     <div class="group">
@@ -1763,14 +1753,15 @@ function setAnim(a, cut){
   }
   S.anim=a; press(animsEl,'anim',a);
 }
+// Weapons are parked for now (the owner's call): no buttons, no keys, the hero is unarmed. The rifle / pistol, the aim / fire layer
+// and their IK stay in the code (setWeapon from the console or HERO.setWeapon) so they can come back.
 function setWeapon(w){
-  S.weapon=w; press(weapEl,'weapon',w);
+  S.weapon=w; if (weapEl) press(weapEl,'weapon',w);
   const unarmed = w==='none';
   for (const id of ['a-aim','a-fire']){ const el=document.getElementById(id); if (el) el.disabled = unarmed; }
   if (unarmed && (S.anim==='aim' || S.anim==='fire')) setAnim('idle');
 }
 animsEl.addEventListener('click',e=>{ const b=e.target.closest('button'); if(b) setAnim(b.dataset.anim); });
-weapEl.addEventListener('click',e=>{ const b=e.target.closest('button'); if(b) setWeapon(b.dataset.weapon); });
 resEl.addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; S.pxChar=+b.dataset.px; press(resEl,'px',S.pxChar); resize(); });
 document.getElementById('side').addEventListener('click',()=>{ S.yaw=SIDE_YAW; S.spin=false; document.getElementById('spin').setAttribute('aria-pressed','false'); updateHud(); });
 document.getElementById('spin').addEventListener('click',e=>{ S.spin=!S.spin; e.currentTarget.setAttribute('aria-pressed',String(S.spin)); });
@@ -1779,8 +1770,7 @@ document.getElementById('toon').addEventListener('change',e=>SH.uBands.value=e.t
 document.getElementById('palon').addEventListener('change',e=>SH.uPalOn.value=e.target.checked?1:0);
 window.addEventListener('keydown',e=>{
   if (e.target.tagName==='INPUT') return;
-  const m={ '1':'idle','2':'walk','3':'aim','4':'fire','5':'tpose','6':'run','7':'jump_up','8':'jump_apex','9':'fall','0':'land','w':'climb','W':'climb' }[e.key]; if (m) setAnim(m);
-  if (e.key==='q'||e.key==='Q') setWeapon({none:'rifle', rifle:'pistol', pistol:'none'}[S.weapon]);
+  const m={ '1':'idle','2':'walk','5':'tpose','6':'run','7':'jump_up','8':'jump_apex','9':'fall','0':'land','w':'climb','W':'climb' }[e.key]; if (m) setAnim(m);
 });
 let dragX=0;
 stage.addEventListener('pointerdown',e=>{ S.dragging=true; dragX=e.clientX; stage.setPointerCapture(e.pointerId); });
