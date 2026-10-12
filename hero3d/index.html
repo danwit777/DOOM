@@ -129,18 +129,34 @@ const LIGHT = { value: new T.Vector3(-0.45,0.75,0.5).normalize() };   // screen-
 // Material classes. The colour texture is classified once on load (hue / saturation / value) into a class map; the shader refines a
 // few classes by bind-pose position (dark/navy on the torso = shirt, light grey on the head = hair, front of the knees = pads, feet = boots).
 // Each class maps the light band through its own ramp of palette colours: deep, dark, mid, light, rim.
-const CLS = { coat:0, shirt:1, skin:2, hair:3, boot:4, pad:5, orange:6, eye:7, metal:8, beard:9 };
+const CLS = { coat:0, shirt:1, skin:2, hair:3, boot:4, pad:5, orange:6, eye:7, metal:8, beard:9, trou:10 };
 const RAMP = [
   ['black','coatD','coatM','coatL','coatL'],      // coat: dark olive-grey planes, #5c5646 only in the light band
   ['black','black','coatD','coatM','coatL'],      // shirt: black
   ['skinS','skinM','skinL','skinL','skinL'],      // skin: tan with a darker side
-  ['tealD','tealD','teal','grey','greyL'],        // hair: teal-dark locks, grey / light-grey streaks
+  ['teal','grey','greyL','hairL','hairL'],        // hair: light silver-grey, darker teal-grey strands between the locks
   ['black','black','navy','navy','navyL'],        // boots, gloves: navy-black
-  ['coatD','coatM','coatL','greyL','greyL'],      // knee pads: grey (the only pale patch on the legs)
+  ['coatD','grey','greyL','greyL','hairL'],       // knee pads: neutral grey (the only pale patch on the legs)
   ['skinS','rust','orange','orange','amber'],     // pauldron: orange toward the light, rust shadow side, amber glint on top
   ['black','skinS','eye','eye','eye'],            // eyes: dark bar, red pupils
   ['black','coatD','coatM','grey','greyL'],       // weapons, metal: dark steel, grey lit faces, light bevels
-  ['tealD','teal','grey','grey','greyL']          // beard: heavy grey
+  ['tealD','teal','grey','greyL','hairL'],        // beard: heavy grey, silver on the lit side
+  ['coatD','coatD','coatM','coatL','coatL']       // trousers (inner layer around the legs): the coat's tones without its black, so the coat reads in front
+];
+// HD ramps (fade in above sprite size): the same classes with more, hue-shifted steps - cool olive / teal shadows, warm lights.
+// The coat is a warm grey-brown, the trousers a cooler, lighter olive, the vest a modelled near-black, the hair neutral silver.
+const RAMP_HD = [
+  ['#0d0c0a','#1a1814','#302b24','#4c4639','#615a49'],   // coat
+  ['#0a0c0c','#141817','#202523','#313733','#46504b'],   // vest / undershirt: dark but modelled (pure black is for lines only)
+  ['#2c1813','#66311f','#8d5245','#b18465','#c99e7c'],   // skin
+  ['#25282a','#3d4143','#5f625e','#8e8c85','#b6b4ac'],   // hair: neutral silver-grey, near-neutral dark strands
+  ['#020204','#05060b','#0c0f20','#13172e','#1e2544'],   // boots, gloves: navy-black, a small glint
+  ['#232320','#474744','#6c6b66','#94928a','#b3b1a8'],   // knee pads: neutral light grey
+  ['skinS','rust','orange','orange','amber'],            // pauldron
+  ['black','skinS','eye','eye','eye'],                   // eyes
+  ['black','coatD','coatM','grey','greyL'],              // metal
+  ['#25282a','#3d4143','#62645f','#908e87','#b3b1a9'],   // beard
+  ['#10110e','#1f201b','#35372d','#4f5245','#636658']    // trousers: cooler and one step lighter than the coat
 ];
 const NCLS = RAMP.length;
 const SMOOTH_ITERS = 14;
@@ -153,19 +169,29 @@ const SH = {
   uHair:{value:new T.Vector3(0.4, 4.0, 2.5)},           // hair strands: texture luminance pivot, gain for hair, gain for beard
   uPal:{value:PAL_LIST.map(h=>new T.Color(h))},
   uRamp:{value:[].concat(...RAMP.map(r=>r.map(k=>new T.Color(PAL[k]))))},
+  uRampH:{value:[].concat(...RAMP_HD.map(r=>r.map(k=>new T.Color(PAL[k] || k))))},
   // per class: x = texture detail weight, y = tone offset (in ramp steps), z = normal smoothing (0 = mesh normal, 1 = smoothed)
-  uCD:{value:[[0.25,0],[0,0],[0.3,0.6],[0,0.1],[0,0],[0,0.65],[0.2,0.3],[0,0],[0,0.2],[0,0.35]].map(v=>new T.Vector2(v[0],v[1]))},
-  uNS:{value:[0.85,0.6,0.35,0.3,0.7,0.6,0.6,0,0,0.4]}
+  uCD:{value:[[0.25,0],[0,0],[0.3,0.6],[0,-0.4],[0,0],[0,0.65],[0,0.3],[0,0],[0,0.2],[0,0],[0.25,0]].map(v=>new T.Vector2(v[0],v[1]))},
+  uNS:{value:[0.85,0.6,0.35,0.3,0.7,0.6,0.6,0,0,0.4,0.85]},
+  // HD shading (fades in above sprite size, off at 64 px): normal-map strength, hue shift, rim light, cavity, specular
+  uNrm:{value:new T.Vector2(1,-1)}, uNrmK:{value:2.2}, uNrmB:{value:3.0}, uHue:{value:1.0}, uRimK:{value:1.0}, uCav:{value:new T.Vector2(1.0, 1.0)}, uSpec:{value:1.0},
+  uNK:{value:[0.45,0.6,0.55,0.8,0.8,0.8,0.35,0,0.6,0.8,0.45]},     // per class normal-map weight
+  uRimW:{value:[0.45,0.5,0.6,1.0,0.0,0.6,0.5,0.0,0.8,0.8,0.4]},    // per class rim / back-light weight (none on boots)
+  uFill:{value:new T.Vector3(0.55, -0.2, 0.6).normalize()},          // bounce / fill light direction (view space)
+  uRimC:{value:new T.Color('#86a59b')}, uCool:{value:new T.Color('#16302c')}, uWarm:{value:new T.Color('#ffce87')}
 };
 const CHAR_VS = `
 #include <common>
 #include <skinning_pars_vertex>
-varying vec2 vUv; varying vec3 vN; varying vec3 vP; varying vec3 vNs;
+varying vec2 vUv; varying vec3 vN; varying vec3 vP; varying vec3 vNs; varying vec3 vV; varying vec2 vCav;
 #ifdef SMOOTHN
-attribute vec3 sNormal;
+attribute vec3 sNormal; attribute vec2 aCav;
 #endif
 void main(){
-  vUv = uv; vP = position;
+  vUv = uv; vP = position; vCav = vec2(0.0);
+  #ifdef SMOOTHN
+    vCav = aCav;
+  #endif
   #include <beginnormal_vertex>
   #include <skinbase_vertex>
   #include <skinnormal_vertex>
@@ -179,14 +205,40 @@ void main(){
   #include <begin_vertex>
   #include <skinning_vertex>
   vN = normalize(normalMatrix * objectNormal); vNs = normalize(normalMatrix * sn);
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(transformed, 1.0);
+  vec4 mv = modelViewMatrix * vec4(transformed, 1.0); vV = mv.xyz;
+  gl_Position = projectionMatrix * mv;
 }`;
 const CHAR_FS = `
 uniform sampler2D map; uniform float uUseMap; uniform sampler2D uMat; uniform float uUseMat; uniform vec3 uColor; uniform float uFlat;
 uniform vec3 uL; uniform float uBands; uniform float uPalOn; uniform vec4 uB; uniform vec4 uLv; uniform float uSat; uniform float uGain;
 uniform float uDetail; uniform float uRim; uniform float uShirtV; uniform float uGreyOff; uniform float uOff; uniform float uEyeBar; uniform vec3 uBO; uniform float uBootOff; uniform float uDbg; uniform float uCls;
-uniform vec3 uPal[${NP}]; uniform float uN; uniform vec3 uRamp[${NCLS*5}]; uniform vec2 uCD[${NCLS}]; uniform float uNS[${NCLS}]; uniform float uPxM; uniform vec3 uHair;
-varying vec2 vUv; varying vec3 vN; varying vec3 vP; varying vec3 vNs;
+uniform vec3 uPal[${NP}]; uniform float uN; uniform vec3 uRamp[${NCLS*5}]; uniform vec3 uRampH[${NCLS*5}]; uniform float uRimW[${NCLS}]; uniform vec2 uCD[${NCLS}]; uniform float uNS[${NCLS}]; uniform float uPxM; uniform vec3 uHair;
+uniform sampler2D nMap; uniform float uUseN; uniform sampler2D mrMap; uniform float uUseMR; uniform vec2 uNrm; uniform float uNrmK; uniform float uNrmB; uniform float uNK[${NCLS}];
+uniform float uHue; uniform float uRimK; uniform vec2 uCav; uniform float uSpec; uniform vec3 uRimC; uniform vec3 uCool; uniform vec3 uWarm; uniform vec3 uFill;
+varying vec2 vUv; varying vec3 vN; varying vec3 vP; varying vec3 vNs; varying vec3 vV; varying vec2 vCav;
+// tangent-free normal mapping (screen-space derivatives of view position and uv)
+vec3 perturbN(vec3 p, vec3 N, vec3 mapN, float fd){
+  vec3 q0 = dFdx(p), q1 = dFdy(p); vec2 st0 = dFdx(vUv), st1 = dFdy(vUv);
+  vec3 q1p = cross(q1, N), q0p = cross(N, q0);
+  vec3 Tg = q1p * st0.x + q0p * st1.x, Bg = q1p * st0.y + q0p * st1.y;
+  float det = max(dot(Tg, Tg), dot(Bg, Bg)); float sc = det == 0.0 ? 0.0 : fd * inversesqrt(det);
+  return normalize(Tg * (mapN.x * sc) + Bg * (mapN.y * sc) + mapN.z * N);
+}
+// HD finishing: cool (teal-olive) shadows, warm highlights, cool rim light on the edge facing away from the key light
+vec3 finish(vec3 rc, float t, vec3 nr, float hd, bool tint){
+  if (hd <= 0.0) return rc;
+  if (tint){
+    float sh = clamp(1.5 - t, 0.0, 1.0), hl = clamp(t - 2.0, 0.0, 1.0);
+    // luminance-preserving hue shift: blacks stay black, the shadow planes turn teal-olive, the lit planes warm up
+    vec3 lw = vec3(0.299, 0.587, 0.114); float lr = dot(rc, lw);
+    rc = mix(rc, uCool * (lr / dot(uCool, lw)), 0.45 * sh * hd * uHue);
+    rc = mix(rc, uWarm * (lr / dot(uWarm, lw)), 0.22 * hl * hd * uHue);
+  }
+  return rc;
+}
+float toneOf(float d){   // n.l -> light band (0 deep .. 3 light); the deep shadow stays one flat tone up to a narrow terminator
+  return d > uB.y ? 2.0 + (d - uB.y) / (uB.x - uB.y) : (d > uB.z ? 1.0 + (d - uB.z) / (uB.y - uB.z) : max(0.0, 1.0 + (d - uB.z) / 0.15));
+}
 vec3 snapPal(vec3 c){
   float bd = 1e9; vec3 b = c;
   for (int i = 0; i < ${NP}; i++){
@@ -197,11 +249,19 @@ vec3 snapPal(vec3 c){
   }
   return b;
 }
+float gHd = 0.0;   // HD amount of the current fragment: the ramps fade from the sprite palette to the richer HD ramps
 vec3 ramp(float cls, float i){
   int k = int(cls * 5.0 + clamp(floor(i + 0.5), 0.0, 4.0));
-  vec3 c = uRamp[0];
-  for (int j = 0; j < ${NCLS*5}; j++){ if (j == k) c = uRamp[j]; }
-  return c;
+  vec3 c = uRamp[0], h = uRampH[0];
+  for (int j = 0; j < ${NCLS*5}; j++){ if (j == k){ c = uRamp[j]; h = uRampH[j]; } }
+  return mix(c, h, gHd);
+}
+// bind-pose distance from the leg axes (hip - knee - ankle), the front of each leg counted closer
+float segD(vec3 p, vec3 a, vec3 b){ vec3 ab = b - a; float t = clamp(dot(p - a, ab) / dot(ab, ab), 0.0, 1.0); return length(p - a - ab * t); }
+float legD(vec3 p){
+  vec3 q = vec3(abs(p.x), p.y, p.z);
+  float d = min(segD(q, vec3(0.125, 0.957, 0.006), vec3(0.174, 0.578, 0.011)), segD(q, vec3(0.174, 0.578, 0.011), vec3(0.21, 0.155, -0.01)));
+  return d - 0.05 * smoothstep(0.02, 0.09, p.z);
 }
 void main(){
   vec3 n = normalize(vN), nS = normalize(vNs); if (!gl_FrontFacing){ n = -n; nS = -nS; }
@@ -235,9 +295,11 @@ void main(){
       // beard: grey on the lower face (chin, jaw, moustache, sideburns); hair above
       if (cls == ${CLS.hair}.0 && vP.y < 1.665 && vP.z > -0.01) cls = ${CLS.beard}.0;
       if (vP.y < 0.2){ cls = ${CLS.boot}.0; off = uOff + uBootOff; dw = 0.0; }   // boots: one clean navy-black material
+      // trousers: cloth texels on the inner layer around the leg axes (the coat is the outer shell, open at the front, with a back vent)
+      if (cls == ${CLS.coat}.0 && vP.y < (vP.z < -0.03 ? 0.8 : 0.99) && (legD(vP) < 0.133 || (abs(vP.x) < 0.11 && vP.z > -0.05))) cls = ${CLS.trou}.0;
       // knee pads: front of each knee (the texture paints them as dark camo)
       vec2 kq = vec2(abs(vP.x) - 0.175, vP.y - 0.49) / vec2(0.07, 0.065);
-      kq *= kq; if (cls == ${CLS.coat}.0 && dot(kq, kq) < 1.0 && vP.z > 0.06){ cls = ${CLS.pad}.0; off = uOff;
+      kq *= kq; if ((cls == ${CLS.coat}.0 || cls == ${CLS.trou}.0) && dot(kq, kq) < 1.0 && vP.z > 0.06){ cls = ${CLS.pad}.0; off = uOff;
         if (dot(kq, kq) > 1.0 - 0.5 * clamp((0.016 - uPxM) / 0.008, 0.0, 1.0)) off -= 1.5; }   // HD: dark pad rim, reads as a strapped plate
       // eyes: a dark bar across the sockets with a red pupil in each (at least one output pixel wide)
       vec2 eq = vec2(abs(vP.x) - 0.042, vP.y - 1.684) / vec2(max(0.03, 1.1 * uPxM), max(0.0085, 0.55 * uPxM));
@@ -245,25 +307,44 @@ void main(){
         vec2 pq = vec2(abs(vP.x) - 0.04, vP.y - 1.684) / vec2(max(0.008, 0.5 * uPxM), max(0.0055, 0.38 * uPxM));
         cls = ${CLS.eye}.0; eyeT = dot(pq, pq) < 1.0 ? 3.0 : 0.6;
       }
-      if (uDbg > 0.5){ vec3 dc[10]; dc[0]=vec3(.3,.3,.25); dc[1]=vec3(0.); dc[2]=vec3(1.,.7,.5); dc[3]=vec3(.8); dc[4]=vec3(.1,.1,.6);
+      if (uDbg > 0.5){ vec3 dc[11]; dc[10]=vec3(.6,.6,.2); dc[0]=vec3(.3,.3,.25); dc[1]=vec3(0.); dc[2]=vec3(1.,.7,.5); dc[3]=vec3(.8); dc[4]=vec3(.1,.1,.6);
         dc[5]=vec3(0.,.8,.8); dc[6]=vec3(1.,.5,0.); dc[7]=vec3(1.,0.,0.); dc[8]=vec3(.8,0.,.8); dc[9]=vec3(.5,.9,.5);
-        vec3 o = dc[0]; for (int j=0;j<10;j++) if (float(j)==cls) o = dc[j]; if (dw < 0.5) o = vec3(.5,.5,.35); gl_FragColor = vec4(o,1.0); return; }
+        vec3 o = dc[0]; for (int j=0;j<11;j++) if (float(j)==cls) o = dc[j]; if (dw < 0.5) o = vec3(.5,.5,.35); if (uDbg > 1.5){ vec4 mr = texture2D(mrMap, vUv); o = vec3(mr.b * 2.0, 1.0 - mr.g, 0.2) * (uDbg > 2.5 ? 0.0 : 1.0) + (uDbg > 2.5 ? vec3(0.5 + vCav * 0.5, 0.5) : vec3(0.0)); } gl_FragColor = vec4(o,1.0); return; }
     }
-    vec2 cd = uCD[0]; float ns = 0.0;
-    for (int j = 0; j < ${NCLS}; j++){ if (float(j) == cls){ cd = uCD[j]; ns = uNS[j]; } }
-    // per-material normal: cloth uses the smoothed normal (broad planes, no wrinkle speckle), faces keep the mesh detail
-    vec3 nn = normalize(mix(n, nS, ns)); d = dot(nn, uL);
-    // tone: light band (0 deep .. 3 light) + smoothed texture value offset; top-facing silhouette rim = one step up
-    float t = d > uB.x ? 3.0 : (d > uB.y ? 2.0 : (d > uB.z ? 1.0 : 0.0));
+    vec2 cd = uCD[0]; float ns = 0.0, nk = 0.0;
+    for (int j = 0; j < ${NCLS}; j++){ if (float(j) == cls){ cd = uCD[j]; ns = uNS[j]; nk = uNK[j]; } }
+    float hd = clamp((0.022 - uPxM) / 0.008, 0.0, 1.0);    // 0 at sprite size (64 px), ~0.2 at 96 px, 1 from ~150 px up
+    gHd = smoothstep(0.3, 0.8, hd);   // sprite palette up to ~100 px, HD ramps from ~130 px
+    bool cloth = cls == ${CLS.coat}.0 || cls == ${CLS.trou}.0 || cls == ${CLS.shirt}.0;
+    float fd = gl_FrontFacing ? 1.0 : -1.0;
+    // per-material normal: cloth uses the smoothed normal (broad planes, no wrinkle speckle), faces keep the mesh detail;
+    // above sprite size part of the mesh folds come back and the normal map adds seams, folds and wrinkles
+    vec3 nn = normalize(mix(n, nS, ns * (1.0 - 0.55 * hd)));
+    vec3 nd = nn;
+    // tone: light band (0 deep .. 3 light) + smoothed texture value offset; top-facing silhouette rim = one step up.
+    // HD: half steps between the bands (blended neighbouring ramp tones)
+    float tc0 = toneOf(dot(nn, uL)), tc = tc0;
+    float lit = step(1.0, tc0);   // hard gate: surface detail only inside the lit planes, the shadow side stays one broad plane
+    if (uUseN > 0.5 && hd > 0.0 && nk > 0.0){
+      vec3 mn = texture2D(nMap, vUv, uNrmB).xyz * 2.0 - 1.0;   // deep mip bias: only fold-scale features survive, not the bake grain
+      mn.xy *= uNrm * uNrmK * nk * hd;
+      nd = perturbN(vV, nn, normalize(mn), fd);
+      tc = tc0 + clamp(toneOf(dot(nd, uL)) - tc0, -1.0, 1.0) * mix(0.15, 1.0, lit);   // at most one ramp step
+    }
+    d = dot(nd, uL);
+    float t = hd > 0.5 ? tc - 0.5 : floor(tc);   // HD: continuous here, quantised to half steps below
     if (cls == ${CLS.orange}.0){   // armour: lit from above (orange cap, amber glint, rust lower half) so from any side it reads as a plate, not an orange ball
-      float dO = dot(nn, normalize(uL * 0.5 + vec3(0.0, 1.0, 0.0)));
+      float dO = dot(nd, normalize(uL * 0.5 + vec3(0.0, 1.0, 0.0)));
       t = dO > uBO.x ? 3.0 : (dO > uBO.y ? 2.0 : (dO > uBO.z ? 1.0 : 0.0));
     }
     if (uBands < 0.5) t = clamp((d - uB.z) / (uB.x - uB.z) + 1.0, 0.0, 3.0);
-    t += (g - 0.5) * 4.0 * uDetail * cd.x * dw + cd.y + off;
+    t += (g - 0.5) * 4.0 * uDetail * cd.x * dw * (1.0 - 0.8 * hd) + cd.y + off;   // painted dirt: half strength or less at HD (no camo mottle)
+    if (cls == ${CLS.skin}.0) t -= 0.35 * hd;   // HD faces / arms: room for the brow, nose and cheek shadow planes
+    // HD: the coat's occlusion on the trousers - the outer side of the thighs (under the panels) sits half a step lower
+    if (cls == ${CLS.trou}.0) t -= 0.5 * hd * smoothstep(0.19, 0.25, abs(vP.x)) * smoothstep(0.35, 0.5, vP.y);
     // hair and beard keep the unblurred texture strands (comb lines, locks) on top of the light band
     if (cls == ${CLS.hair}.0 || cls == ${CLS.beard}.0){
-      t += (dot(alb, vec3(0.299, 0.587, 0.114)) - uHair.x) * (cls == ${CLS.hair}.0 ? uHair.y : uHair.z);
+      t += (dot(alb, vec3(0.299, 0.587, 0.114)) - uHair.x) * (cls == ${CLS.hair}.0 ? uHair.y : uHair.z) - 0.6 * hd;   // HD: mid silver, light only where lit
       // combed locks at HD (fade out below ~128 px, where the sprite reads the hair as 2-3 tone clusters): swept-back strands that
       // fan out from the crown, dark gaps between the locks, a lighter streak on each
       float gs = clamp((0.016 - uPxM) / 0.008, 0.0, 1.0);
@@ -272,8 +353,23 @@ void main(){
                                       : fract(vP.x * 48.0 + sin(vP.y * 70.0) * 0.35);
         t += gs * (f < 0.2 ? -1.2 : (f > 0.48 && f < 0.66 ? 0.8 : 0.0));
       }
-      t += clamp((0.03 - uPxM) / 0.015, 0.0, 1.0) * 0.6;   // above sprite size the hair reads mid grey like sheet C; at 64 px it stays teal-dark
     }
+    // HD cavity: creases and folds (mesh concavity, fine + broad) sink one step; the inside of the coat sits in shadow
+    if (hd > 0.0 && eyeT < 0.0){
+      float cv = vCav.x * fd, oc = vCav.y * fd;
+      t -= hd * mix(0.5, 1.0, lit) * (uCav.x * smoothstep(0.3, 0.8, cv) + uCav.y * 0.75 * smoothstep(0.25, 0.75, oc));
+      if (cloth && gl_FrontFacing){
+        // coat fold shading: clear ridges of the mesh folds (mesh normal vs the smoothed one) catch half a step, valleys lose half
+        // (trousers and vest stay broad planes)
+        float fo = dot(n - nS, uL);
+        if (cls == ${CLS.coat}.0) t += hd * 0.5 * sign(fo) * step(0.1, abs(fo));
+        // teal bounce light from the lower right lifts the bottom of the shadow side, so the skirt's shadow keeps its form
+        if (tc0 < 1.2) t += 0.5 * hd * smoothstep(0.05, 0.5, dot(nS, uFill));
+      }
+      else if (tc < 1.2 && gl_FrontFacing && cls != ${CLS.orange}.0 && dot(nd, uFill) > 0.75) t += 0.5 * hd * uCav.y;
+    }
+    // coat lining (the inside of the shell, back faces): its own dark tone, never the unlit black
+    if (!gl_FrontFacing && cloth) t = clamp(t - 1.0, 0.5, 1.0);
     t = clamp(t, 0.0, 3.0);
     if (nn.y > 0.35 && abs(nn.z) < uRim && t > 1.5) t += 1.0;
     if (cls == ${CLS.orange}.0 && abs(nn.z) < 0.2 * clamp((0.02 - uPxM) / 0.01, 0.0, 1.0)) t = min(t, 1.0);   // dark armour rim (HD only)
@@ -283,15 +379,38 @@ void main(){
       vec2 ew = max(fwidth(vUv), vec2(1e-5)), ed = min(vUv, 1.0 - vUv) / ew;
       if (min(ed.x, ed.y) < 1.0 + 0.004 / uPxM) t += d > 0.2 ? 1.0 : -1.0;
     }
+    if (hd > 0.5 && uBands > 0.5) t = cls == ${CLS.orange}.0 ? floor(t + 0.5) : floor(t * 2.0 + 0.5) * 0.5;   // HD: half steps between the ramp tones (posterised, not smooth)
     vec3 rc = ramp(cls, t);
-    if (uBands < 0.5){ float t0 = floor(t); rc = mix(ramp(cls, t0), ramp(cls, t0 + 1.0), t - t0); }   // smooth light: blend neighbouring ramp tones
-    gl_FragColor = vec4(rc, 1.0);
+    if (uBands < 0.5 || (hd > 0.5 && fract(t) > 0.01)){ float t0 = floor(t); rc = mix(ramp(cls, t0), ramp(cls, t0 + 1.0), t - t0); }   // smooth light / HD half steps
+    bool tint = cls != ${CLS.skin}.0 && cls != ${CLS.eye}.0 && cls != ${CLS.orange}.0 && cls != ${CLS.hair}.0 && cls != ${CLS.beard}.0 && cls != ${CLS.pad}.0;
+    rc = finish(rc, t, nn, hd, tint);
+    // specular glints (HD): glossy orange pauldron, boots and gloves, metal fittings
+    if (hd > 0.0 && eyeT < 0.0){
+      float sp = dot(nd, normalize(uL + vec3(0.0, 0.0, 1.0)));
+      float mt = uUseMR > 0.5 ? texture2D(mrMap, vUv).b : 0.0;
+      if (cls == ${CLS.orange}.0 && sp > 1.0 - 0.03 * uSpec) rc = mix(rc, uWarm, hd);
+      else if (cls == ${CLS.boot}.0 && sp > 1.0 - 0.025 * uSpec) rc = mix(rc, ramp(cls, 4.0) + 0.05, hd);   // small leather glint
+      else if (mt > 0.3 && sp > 1.0 - 0.1 * uSpec && cls != ${CLS.orange}.0 && cls != ${CLS.skin}.0) rc = mix(rc, uPal[${PAL_LIST.indexOf(PAL.hairL)}], hd);
+    }
+    // back-light weight for the post pass (alpha 1 = none): per material, only where the smoothed normal turns away from the key
+    // light (screen right / up-right) and toward the silhouette; the post pass draws it only on the outer silhouette pixels
+    float rw = 0.0;
+    if (hd > 0.0 && eyeT < 0.0){
+      float cw = 0.0; for (int j = 0; j < ${NCLS}; j++){ if (float(j) == cls) cw = uRimW[j]; }
+      vec3 nr = normalize(n + nS); float sl = length(nr.xy), aw = sl > 1e-3 ? dot(nr.xy / sl, vec2(0.86, 0.5)) : 0.0;
+      rw = cw * hd * smoothstep(0.0, 0.45, aw) * smoothstep(0.1, 0.35, sl);
+    }
+    gl_FragColor = vec4(rc, 1.0 - 0.5 * rw);
     return;
   }
   float l = dot(alb, vec3(0.299, 0.587, 0.114));
   alb = mix(vec3(l), alb, uSat) * uGain;
   vec3 c = alb * k;
   if (uPalOn > 0.5) c = snapPal(c);
+  if (uFlat < 0.5){
+    float hd = clamp((0.022 - uPxM) / 0.008, 0.0, 1.0);
+    c = finish(c, d > uB.y ? 2.0 : (d > uB.z ? 1.0 : 0.0), n, hd, true);
+  }
   gl_FragColor = vec4(c, 1.0);
 }`;
 function charMat(opts){
@@ -299,7 +418,10 @@ function charMat(opts){
     uniforms:{ map:{value:opts.map||null}, uUseMap:{value:opts.map?1:0}, uMat:{value:opts.mat||null}, uUseMat:{value:opts.mat?1:0},
       uColor:{value:new T.Color(opts.color||'#343027')}, uFlat:{value:opts.flat?1:0}, uCls:{value: opts.cls===undefined ? -1 : opts.cls}, uOff:{value:opts.off||0},
       uL:LIGHT, uBands:SH.uBands, uPalOn:SH.uPalOn, uB:SH.uB, uLv:SH.uLv, uSat:SH.uSat, uGain:SH.uGain, uDetail:SH.uDetail, uRim:SH.uRim, uShirtV:SH.uShirtV, uGreyOff:SH.uGreyOff, uEyeBar:SH.uEyeBar, uBO:SH.uBO, uBootOff:SH.uBootOff, uDbg:SH.uDbg,
-      uPal:SH.uPal, uRamp:SH.uRamp, uCD:SH.uCD, uNS:SH.uNS, uPxM:SH.uPxM, uHair:SH.uHair, uN:{value: opts.full ? NP : N_CHAR} },
+      uPal:SH.uPal, uRamp:SH.uRamp, uRampH:SH.uRampH, uRimW:SH.uRimW, uCD:SH.uCD, uNS:SH.uNS, uPxM:SH.uPxM, uHair:SH.uHair, uN:{value: opts.full ? NP : N_CHAR},
+      nMap:{value:opts.nmap||null}, uUseN:{value:opts.nmap?1:0}, mrMap:{value:opts.mr||null}, uUseMR:{value:opts.mr?1:0},
+      uNrm:opts.nscale ? {value:opts.nscale} : SH.uNrm, uNrmK:SH.uNrmK, uNrmB:SH.uNrmB, uNK:SH.uNK, uHue:SH.uHue, uRimK:SH.uRimK, uCav:SH.uCav, uSpec:SH.uSpec,
+      uRimC:SH.uRimC, uCool:SH.uCool, uWarm:SH.uWarm, uFill:SH.uFill },
     vertexShader:CHAR_VS, fragmentShader:CHAR_FS, side: opts.double ? T.DoubleSide : T.FrontSide, defines: opts.smooth ? {SMOOTHN:1} : {}, extensions:{derivatives:true}
   });
   m.skinning = !!opts.skinning;
@@ -322,6 +444,21 @@ function addSmoothNormals(geo, iters){
   for (let e = 0; e < E.length; e += 2){ adj[fill[E[e]]++] = E[e+1]; adj[fill[E[e+1]]++] = E[e]; }
   const norm = B => { for (let i = 0; i < u; i++){ const l = Math.hypot(B[3*i],B[3*i+1],B[3*i+2]) || 1; B[3*i]/=l; B[3*i+1]/=l; B[3*i+2]/=l; } };
   norm(A);
+  // concavity per welded vertex (HD crease / fold darkening): mean sine of the angle between the normal and the edges to the
+  // neighbours (> 0 = the surface curves up around the vertex = crease); x = fine (2 passes), y = broad (8 passes), p95 -> 1
+  const Pw = new Float32Array(u*3);
+  for (let i = 0; i < n; i++){ const w = weld[i]*3; Pw[w] = P.getX(i); Pw[w+1] = P.getY(i); Pw[w+2] = P.getZ(i); }
+  let cv = new Float32Array(u);
+  for (let i = 0; i < u; i++){ let a = 0, c = 0;
+    for (let j = off[i]; j < off[i+1]; j++){ const q = adj[j]*3, dx = Pw[q]-Pw[3*i], dy = Pw[q+1]-Pw[3*i+1], dz = Pw[q+2]-Pw[3*i+2], l = Math.hypot(dx,dy,dz);
+      if (l > 1e-6){ a += (dx*A[3*i] + dy*A[3*i+1] + dz*A[3*i+2]) / l; c++; } }
+    cv[i] = c ? a / c : 0; }
+  const blur = (src, k) => { let X = src; for (let it = 0; it < k; it++){ const Y = new Float32Array(u);
+      for (let i = 0; i < u; i++){ let a = X[i], c = 1; for (let j = off[i]; j < off[i+1]; j++){ a += X[adj[j]]; c++; } Y[i] = a / c; } X = Y; } return X; };
+  const p95 = X => { const s = Float32Array.from(X, Math.abs).sort(); return s[Math.floor(s.length*0.95)] || 1; };
+  const cf = blur(cv, 2), cb = blur(cv, 8), sf = p95(cf), sb = p95(cb);
+  const cav = new Float32Array(n*2); for (let i = 0; i < n; i++){ cav[2*i] = cf[weld[i]] / sf; cav[2*i+1] = cb[weld[i]] / sb; }
+  geo.setAttribute('aCav', new T.BufferAttribute(cav, 2));
   for (let it = 0; it < iters; it++){
     const Bn = new Float32Array(u*3);
     for (let i = 0; i < u; i++){ let x = A[3*i], y = A[3*i+1], z = A[3*i+2];
@@ -395,10 +532,10 @@ const cam = new T.OrthographicCamera(-1,1,1,-1,0.1,20);
 let rt = null;
 const post = new T.ShaderMaterial({
   uniforms:{ tC:{value:null}, tD:{value:null}, px:{value:new T.Vector2(1,1)}, uOutline:{value:1}, uInner:{value:0.004}, uDesp:{value:1}, uOW:{value:1}, uEyeC:{value:new T.Color(PAL.eye)},
-    bgTop:{value:new T.Color('#11181a')}, bgLow:{value:new T.Color('#0b0f10')}, floorC:{value:new T.Color('#1d211d')}, floorL:{value:new T.Color('#343027')},
+    uRimC:SH.uRimC, uRimK:SH.uRimK, bgTop:{value:new T.Color('#11181a')}, bgLow:{value:new T.Color('#0b0f10')}, floorC:{value:new T.Color('#1d211d')}, floorL:{value:new T.Color('#343027')},
     groundY:{value:0}, shC:{value:new T.Vector2()}, shR:{value:new T.Vector2(1,1)}, uClear:{value:0} },
   vertexShader:`varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.0,1.0); }`,
-  fragmentShader:`uniform sampler2D tC; uniform sampler2D tD; uniform vec2 px; uniform float uOutline; uniform float uInner; uniform float uDesp; uniform float uOW; uniform vec3 uEyeC;
+  fragmentShader:`uniform sampler2D tC; uniform sampler2D tD; uniform vec2 px; uniform float uOutline; uniform float uInner; uniform float uDesp; uniform float uOW; uniform vec3 uEyeC; uniform vec3 uRimC; uniform float uRimK;
   uniform vec3 bgTop; uniform vec3 bgLow; uniform vec3 floorC; uniform vec3 floorL; uniform float groundY; uniform vec2 shC; uniform vec2 shR; uniform float uClear;
   varying vec2 vUv;
   float D(vec2 o){ return texture2D(tD, vUv + o*px).r; }
@@ -437,6 +574,25 @@ const post = new T.ShaderMaterial({
       if (fa&&fb&&fc&&fe && !same(col,uEyeC) && !same(col,a) && !same(col,b) && !same(col,c2) && !same(col,e)){   // red eye pixels are kept
         if (same(a,b) && (same(a,c2)||same(a,e))) col = a;
         else if (same(c2,e) && (same(c2,a)||same(c2,b))) col = c2;
+      }
+    }
+    // rim / back light above sprite size: the edge facing away from the key light (screen right, a little up) - pixels whose
+    // right-hand neighbours (within the outline width) are background or clearly farther - catches a crisp cool line
+    // The character shader writes a per-material back-light weight into alpha (1 = none): hair, leather and metal catch it strongly,
+    // cloth weakly, boots not at all, and only where the surface turns away from the key light. Strong rims get 2 px, weak ones 1.
+    float rw = (1.0 - texture2D(tC, vUv).a) * 2.0 * uRimK;
+    if (uDesp < 0.5 && rw > 0.05){
+      float hit = 0.0;
+      for (int i = 1; i <= 5; i++){
+        float w = uOW + (rw > 0.6 ? 1.0 : 0.0);
+        if (float(i) > w + 0.5) break;
+        float dn = D(vec2(float(i), 0.0)), dq = D(vec2(float(i), float(i)));
+        if (dn > dc + uInner * 4.0 || dq > dc + uInner * 6.0){ hit = float(i) <= uOW + 0.5 ? 1.0 : 0.55; break; }
+      }
+      if (hit > 0.0){
+        float l = dot(col, vec3(0.299, 0.587, 0.114));
+        vec3 rc = max(uRimC * (0.45 + 1.4 * l), col * 1.35 + 0.05);   // brighter than the surface it sits on, tinted cool
+        col = mix(col, rc, clamp(rw * hit, 0.0, 1.0));
       }
     }
     if (uOutline > 0.5 && (nearIn || dl < dc-uInner || dr < dc-uInner || du < dc-uInner || dd < dc-uInner)) col = vec3(0.0);
@@ -770,6 +926,7 @@ function update(dt){
       }
     }
   }
+  coatStep(dt);
   // camera orbit
   if (S.spin && !S.dragging) S.yaw += dt*0.6;
   cam.position.set(Math.sin(S.yaw)*6, S.cy, Math.cos(S.yaw)*6); cam.lookAt(0,S.cy,0);
@@ -832,13 +989,14 @@ requestAnimationFrame(loop);
 // Built in character space at the rest pose (+X forward, +Y up, +Z = character's right). The pack is rigid and re-parented
 // to spine_03, so it follows the torso through every pose, the walk / run clips and the IK; the straps are skinned to the body.
 const GEAR = {
-  body:  charMat({color:'#2c2b16', full:true}),     // olive canvas, coat-dark: oliveM lit / oliveD shade
-  flap:  charMat({color:'#3c3a17', full:true}),     // lid, pockets: oliveL on the lit faces
+  body:  charMat({color:'#38361b', full:true}),     // olive canvas: oliveL lit / oliveM mid / oliveD shade (one step above the coat)
+  flap:  charMat({color:'#4a4720', full:true}),     // lid, pockets: oliveL on the lit and mid faces
   strap: charMat({color:'#161509', full:true}),     // webbing, straps -> oliveD / black
   dark:  charMat({color:'#0c0b05', full:true}),
   metal: charMat({color:'#474747', full:true}),     // buckles
-  strapS: charMat({color:'#221f0c', full:true, skinning:true}),
-  metalS: charMat({color:'#474747', full:true, skinning:true})
+  strapS: charMat({color:'#4d4a1e', full:true, skinning:true}),    // harness: saturated pack olive (oliveL lit + mid, oliveM shade), a step above the grey-brown coat
+  metalS: charMat({color:'#686868', full:true, skinning:true}),    // ladder locks, buckle: grey / greyL
+  edgeS: charMat({color:'#0e0d06', full:true, skinning:true})      // dark under-band a little wider than each strap: its 1 px edge line in HD
 };
 // rounded box (chamfered edges, optional pillow bulge towards -X) in character space
 function gearBox(parent, mat, cx, cy, cz, dx, dy, dz, r=0.012, bulge=0, seg=[3,6,4]){
@@ -867,27 +1025,28 @@ function gearStrap(parent, mat, pts, w, t, wDir=new T.Vector3(0,0,1)){
 }
 // merge a group of rest-pose character-space meshes into one SkinnedMesh on the body's skeleton:
 // weights from the nearest body vertices (rest pose), positions moved back to the bind pose by the inverse skin matrix
-function skinToBody(group, mat, name){
+function skinToBody(group, mat, name, opt={}){
   let sm = null; model.traverse(o=>{ if (o.isSkinnedMesh && !sm) sm = o; });
   hero.updateMatrixWorld(true); sm.skeleton.update();
   const toLocal = new T.Matrix4().copy(sm.matrixWorld).invert().multiply(hero.matrixWorld);
-  const P=[], N=[], I=[], v=new T.Vector3(), n=new T.Vector3();
+  const P=[], N=[], I=[], R=[], v=new T.Vector3(), n=new T.Vector3();
   group.children.forEach(m=>{
     m.updateMatrix(); const M = new T.Matrix4().multiplyMatrices(toLocal, m.matrix), NM = new T.Matrix3().getNormalMatrix(M);
     const g = m.geometry, gp = g.attributes.position, gn = g.attributes.normal, base = P.length/3;
     for (let i=0;i<gp.count;i++){ v.fromBufferAttribute(gp,i).applyMatrix4(M); n.fromBufferAttribute(gn,i).applyMatrix3(NM).normalize(); P.push(v.x,v.y,v.z); N.push(n.x,n.y,n.z); }
     const ix = g.index.array; for (let i=0;i<ix.length;i++) I.push(ix[i]+base);
+    if (opt.rigid) for (let i=0;i<gp.count;i++){ v.fromBufferAttribute(gp,i).applyMatrix4(m.matrix); R.push(v.x,v.y,v.z); }
   });
   // body vertices in the rest pose (candidates: not head / hands / forearms)
   const bp = sm.geometry.attributes.position, bi = sm.geometry.attributes.skinIndex, bw = sm.geometry.attributes.skinWeight, bones = sm.skeleton.bones;
-  const skip = /head|hand|lowerarm|finger|thumb|index|middle|ring|pinky/i, cand = [];
+  const skip = opt.skip || /head|hand|lowerarm|finger|thumb|index|middle|ring|pinky/i, cand = [];
   for (let i=0;i<bp.count;i++){
     let top=0, tw=-1; for (let k=0;k<4;k++){ const w=[bw.getX(i),bw.getY(i),bw.getZ(i),bw.getW(i)][k]; if (w>tw){ tw=w; top=k; } }
     const bn = bones[[bi.getX(i),bi.getY(i),bi.getZ(i),bi.getW(i)][top]]; if (bn && skip.test(bn.name)) continue;
     v.fromBufferAttribute(bp,i); sm.boneTransform(i,v); cand.push(i, v.x, v.y, v.z);
   }
   const boneM = bones.map((b,j)=>new T.Matrix4().multiplyMatrices(sm.bindMatrixInverse, new T.Matrix4().multiplyMatrices(b.matrixWorld, sm.skeleton.boneInverses[j])).multiply(sm.bindMatrix));
-  const SI=[], SW=[], K=4, nV=P.length/3, Sk=new T.Matrix4();
+  const SI=[], SW=[], K=opt.K||4, nV=P.length/3, Sk=new T.Matrix4(), sg=opt.sigma||0, noW=opt.noWeight||null;   // sigma: gaussian falloff (smooth weight field), noWeight: bones never used
   for (let a=0;a<nV;a++){
     const x=P[3*a], y=P[3*a+1], z=P[3*a+2], best=[];
     for (let c=0;c<cand.length;c+=4){
@@ -895,8 +1054,12 @@ function skinToBody(group, mat, name){
       if (best.length<K || d<best[K-1][0]){ best.push([d,cand[c]]); best.sort((p,q)=>p[0]-q[0]); if (best.length>K) best.pop(); }
     }
     const acc = new Map();
-    for (const [d,i] of best){ const f=1/(Math.sqrt(d)+1e-4); const ids=[bi.getX(i),bi.getY(i),bi.getZ(i),bi.getW(i)], ws=[bw.getX(i),bw.getY(i),bw.getZ(i),bw.getW(i)];
-      for (let k=0;k<4;k++) if (ws[k]>0) acc.set(ids[k], (acc.get(ids[k])||0)+ws[k]*f); }
+    for (const [d,i] of best){ const f = sg ? Math.exp(-d/(sg*sg)) + 1e-6 : 1/(Math.sqrt(d)+1e-4); const ids=[bi.getX(i),bi.getY(i),bi.getZ(i),bi.getW(i)], ws=[bw.getX(i),bw.getY(i),bw.getZ(i),bw.getW(i)];
+      for (let k=0;k<4;k++) if (ws[k]>0 && !(noW && noW.test(bones[ids[k]].name))) acc.set(ids[k], (acc.get(ids[k])||0)+ws[k]*f); }
+    if (!acc.size) acc.set(bones.indexOf(B.spine_03), 1);
+    // optional rigid share (0..1, from the rest-pose character-space position) on one bone, e.g. the pack's spine_03
+    if (opt.rigid){ const r = opt.rigid(R[3*a],R[3*a+1],R[3*a+2]); if (r>0){ const tot=[...acc.values()].reduce((s,w)=>s+w,0), j=bones.indexOf(opt.rigidBone);
+      for (const k of acc.keys()) acc.set(k, acc.get(k)*(1-r)); acc.set(j, (acc.get(j)||0)+tot*r); } }
     const top = [...acc.entries()].sort((p,q)=>q[1]-p[1]).slice(0,4); const sum = top.reduce((s,e)=>s+e[1],0);
     while (top.length<4) top.push([0,0]);
     top.forEach(([j,w])=>{ SI.push(j); SW.push(w/sum); });
@@ -914,6 +1077,139 @@ function skinToBody(group, mat, name){
   skm.bind(sm.skeleton, sm.bindMatrix);
   return skm;
 }
+// ---- harness: padded shoulder straps over the shoulders and down the chest, webbing back under the armpits to the pack's lower
+// corners, sternum strap with a buckle, ladder locks with dangling tails. Swept ribbons (each face its own normal, lighter stitched
+// edges) laid on the rest-pose body surface, then skinned to the torso only (no arm / leg / head weights, so arm swing, T-pose and
+// aim poses never drag them) and blended rigidly onto spine_03 where they run into the pack.
+function bodyCloud(skip){
+  let sm = null; model.traverse(o=>{ if (o.isSkinnedMesh && !sm) sm = o; });
+  hero.updateMatrixWorld(true); sm.skeleton.update();
+  const toChar = new T.Matrix4().copy(hero.matrixWorld).invert().multiply(sm.matrixWorld), NM = new T.Matrix3().getNormalMatrix(toChar);
+  const bp = sm.geometry.attributes.position, bn = sm.geometry.attributes.normal, bi = sm.geometry.attributes.skinIndex, bw = sm.geometry.attributes.skinWeight, bones = sm.skeleton.bones;
+  const P = [], N = [], v = new T.Vector3(), n = new T.Vector3(), all = new Float32Array(bp.count*3), keep = new Uint8Array(bp.count);
+  for (let i=0;i<bp.count;i++){
+    let top=0, tw=-1; for (let k=0;k<4;k++){ const w=[bw.getX(i),bw.getY(i),bw.getZ(i),bw.getW(i)][k]; if (w>tw){ tw=w; top=k; } }
+    v.fromBufferAttribute(bp,i); sm.boneTransform(i,v); v.applyMatrix4(toChar); all[3*i]=v.x; all[3*i+1]=v.y; all[3*i+2]=v.z;
+    const b = bones[[bi.getX(i),bi.getY(i),bi.getZ(i),bi.getW(i)][top]]; if (b && skip.test(b.name)) continue;
+    if (v.y < 1.0 || v.y > 1.7) continue;
+    keep[i] = 1; n.fromBufferAttribute(bn,i).applyMatrix3(NM).normalize(); P.push(v.x,v.y,v.z); N.push(n.x,n.y,n.z);
+  }
+  // triangle surface of the kept torso (the scan's triangles are large: vertices alone miss the coat between them)
+  const ix = sm.geometry.index.array, tri = [];
+  for (let f=0;f<ix.length;f+=3) if (keep[ix[f]] && keep[ix[f+1]] && keep[ix[f+2]]) tri.push(ix[f],ix[f+1],ix[f+2]);
+  const g = new T.BufferGeometry(); g.setAttribute('position', new T.BufferAttribute(all,3)); g.setIndex(tri);
+  const mesh = new T.Mesh(g, new T.MeshBasicMaterial({side:T.DoubleSide}));
+  return { P:new Float32Array(P), N:new Float32Array(N), n:P.length/3, mesh };
+}
+function buildStraps(){
+  const C = bodyCloud(/head|neck|hand|arm|finger|thumb|index|middle|ring|pinky|thigh|calf|foot|ball/i);
+  // outward direction: normal of a torso ellipsoid (wider than deep, capped over the shoulders). The scan's own normals are too noisy
+  // on the coat folds / lapels to orient a strap; this field keeps the chest pads facing forward and the shoulder pads facing up.
+  const surfN = p => { const yc = Math.min(1.42, Math.max(1.15, p.y));
+    return new T.Vector3((p.x-0.02)/0.0289, (p.y-yc)/0.0256, p.z/0.0625).normalize(); };
+  // lay p on the surface: outermost torso surface along the outward normal (rays over a small disc, the highest hit wins), plus an offset
+  const rc = new T.Raycaster();
+  const proj = (p, off, R=0.012) => { const n = surfN(p), u = new T.Vector3().crossVectors(n, Math.abs(n.y)<0.9 ? new T.Vector3(0,1,0) : new T.Vector3(1,0,0)).normalize(), w = new T.Vector3().crossVectors(n, u);
+    let h = -1;
+    for (const [a,b] of [[0,0],[1,0],[-1,0],[0,1],[0,-1]]){
+      const o = p.clone().addScaledVector(u, a*R).addScaledVector(w, b*R).addScaledVector(n, 0.12);
+      rc.set(o, n.clone().negate()); rc.far = 0.24; const hit = rc.intersectObject(C.mesh, false)[0];
+      if (hit) h = Math.max(h, 0.12 - hit.distance);
+    }
+    return h > -1 ? p.clone().addScaledVector(n, h+off) : p.clone(); };
+  // smooth sampled frame along control points: P (centre on the surface), Nn (outward), Bn (across the strap)
+  const frames = (ctrl, step=0.01) => {
+    const cv = new T.CatmullRomCurve3(ctrl, false, 'centripetal'), m = Math.max(3, Math.ceil(cv.getLength()/step));
+    const P = cv.getSpacedPoints(m); let Nn = P.map(p=>surfN(p));
+    for (let it=0;it<4;it++) Nn = Nn.map((n,i)=>n.clone().add(Nn[Math.max(0,i-1)]).add(Nn[Math.min(Nn.length-1,i+1)]).normalize());
+    const Tn = P.map((p,i)=>P[Math.min(P.length-1,i+1)].clone().sub(P[Math.max(0,i-1)]).normalize());
+    const Bn = Tn.map((t,i)=>new T.Vector3().crossVectors(t, Nn[i]).normalize());
+    Nn = Bn.map((b,i)=>new T.Vector3().crossVectors(b, Tn[i]).normalize());
+    return { P, Nn, Bn, Tn };
+  };
+  // swept box section (w across, t thick), shifted by sb across / sn outward; w may be a function of u (0..1)
+  // lift: the top face's normal tilts toward +Y so the chest run takes the mid (not the dark) band under the top-left light
+  const UP = new T.Vector3(0,1,0);
+  const sweep = (group, F, w, t, sb=0, sn=0, crown=0, roll=0.3, lift=0.3) => {
+    const pos=[], nor=[], idx=[], m=F.P.length, W = typeof w==='function' ? w : ()=>w;
+    // outward face: crowned (padding / webbing weave) - a raised centre line with the normals rolled across, so the light band
+    // splits the strap into a lit and a shaded half instead of one flat tone
+    { const base = pos.length/3;
+      for (let i=0;i<m;i++){
+        const p=F.P[i], n=F.Nn[i], b=F.Bn[i], hw=W(i/(m-1))/2, c=p.clone().addScaledVector(b,sb).addScaledVector(n,sn);
+        for (const cb of [-1,0,1]){ const q=c.clone().addScaledVector(n,t/2 + (cb?0:crown*t)).addScaledVector(b,cb*hw); pos.push(q.x,q.y,q.z);
+          const fnv = n.clone().addScaledVector(b, cb*roll).addScaledVector(UP, lift).normalize(); nor.push(fnv.x,fnv.y,fnv.z); }
+      }
+      for (let i=0;i<m-1;i++) for (let k=0;k<2;k++){ const a=base+3*i+k; idx.push(a,a+1,a+3, a+1,a+4,a+3); }   // CCW seen from outside (+Nn)
+    }
+    const faces = [[0,1],[-1,0],[0,-1]];   // +across, inward, -across
+    for (const [fn,fb] of faces){
+      const base = pos.length/3;
+      for (let i=0;i<m;i++){
+        const p=F.P[i], n=F.Nn[i], b=F.Bn[i], hw=W(i/(m-1))/2, c=p.clone().addScaledVector(b,sb).addScaledVector(n,sn);
+        const corners = fn ? [[fn,-fn],[fn,fn]] : [[-fb,fb],[fb,fb]];   // [n-sign, b-sign] of the face's two edges
+        for (const [cn,cb] of corners){ const q=c.clone().addScaledVector(n,cn*t/2).addScaledVector(b,cb*hw); pos.push(q.x,q.y,q.z);
+          const fnv = n.clone().multiplyScalar(fn).addScaledVector(b,fb); nor.push(fnv.x,fnv.y,fnv.z); }
+      }
+      for (let i=0;i<m-1;i++){ const a=base+2*i; if (fn < 0) idx.push(a,a+1,a+2, a+1,a+3,a+2); else idx.push(a,a+2,a+1, a+1,a+2,a+3); }   // inward face: wound to face -Nn
+    }
+    // end caps
+    for (const i of [0,m-1]){ const p=F.P[i], n=F.Nn[i], b=F.Bn[i], hw=W(i/(m-1))/2, c=p.clone().addScaledVector(b,sb).addScaledVector(n,sn), tt=F.Tn[i].clone().multiplyScalar(i?1:-1), base=pos.length/3;
+      for (const [cn,cb] of [[-1,-1],[-1,1],[1,1],[1,-1]]){ const q=c.clone().addScaledVector(n,cn*t/2).addScaledVector(b,cb*hw); pos.push(q.x,q.y,q.z); nor.push(tt.x,tt.y,tt.z); }
+      if (i) idx.push(base,base+2,base+1, base,base+3,base+2); else idx.push(base,base+1,base+2, base,base+2,base+3); }
+    const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(pos,3)); g.setAttribute('normal', new T.Float32BufferAttribute(nor,3)); g.setIndex(idx);
+    const mesh = new T.Mesh(g, GEAR.strap); mesh.frustumCulled = false; group.add(mesh); return mesh;
+  };
+  // oriented box at a frame sample (buckles, ladder locks)
+  const obox = (group, p, t, n, b, dt, dn, db, r=0.003) => {
+    const g = new T.BoxGeometry(dt, dn, db); const m = new T.Mesh(g, GEAR.metal);
+    m.quaternion.setFromRotationMatrix(new T.Matrix4().makeBasis(t, n, b)); m.position.copy(p); m.frustumCulled=false; group.add(m); return m; };
+  const V = (x,y,z) => new T.Vector3(x,y,z);
+  const at = (a, y, r=0.24) => V(0.02 + r*Math.cos(a*Math.PI/180), y, r*Math.sin(a*Math.PI/180));
+  const PAD = 0.062, PADT = 0.02, WEB = 0.036, WEBT = 0.009, RIM = 0.0055;
+  const straps = new T.Group(), edges = new T.Group(), metal = new T.Group();
+  // dark under-band, RIM wider than the strap on each side and a little below its top face: a crisp dark edge line in HD
+  const band = (F, w, t) => sweep(edges, F, typeof w==='function' ? u=>w(u)+2*RIM : w+2*RIM, t*0.75, 0, -t*0.2);
+  let sternum = [];
+  for (const s of [1,-1]){
+    const M = p => V(p.x, p.y, s*p.z);
+    // padded shoulder strap: out from behind the pack's lid, up over the shoulder outside the collar, down the chest, curving out
+    // to the side of the ribs in front of the armpit
+    const back = [V(-0.19,1.43,0.125),V(-0.168,1.455,0.13),V(-0.148,1.50,0.138),V(-0.122,1.545,0.148),V(-0.082,1.578,0.157),V(-0.03,1.592,0.163),V(0.035,1.574,0.166),V(0.095,1.53,0.163)]
+      .map((p,i)=> i<2 ? M(p) : proj(M(p), PADT/2+0.004, PAD/2));
+    const front = [V(0.15,1.475,0.152),V(0.19,1.425,0.142),V(0.205,1.375,0.138),V(0.205,1.33,0.145),at(44,1.29),at(56,1.255),at(63,1.238)].map(p=>proj(M(p), PADT/2+0.004, PAD/2));
+    const A = frames([...back, ...front]);
+    const padW = u => PAD*(u<0.1 ? 0.8+u*2 : 1);
+    sweep(straps, A, padW, PADT); band(A, padW, PADT);
+    // ladder lock at the end of the pad (a 2-3 px grey block at sprite size), webbing on under the arm to the pack's lower corner
+    const k = A.P.length-1, lockP = A.P[k].clone().addScaledVector(A.Tn[k], 0.008);
+    obox(metal, lockP.clone().addScaledVector(A.Nn[k], 0.002), A.Tn[k], A.Nn[k], A.Bn[k], 0.032, PADT*1.15, PAD*1.08);
+    const under = [lockP, ...[at(78,1.222),at(98,1.205),at(116,1.183),at(132,1.165)].map(p=>proj(M(p), WEBT/2+0.004, WEB/2)), M(V(-0.138,1.155,0.188)), M(V(-0.165,1.148,0.183)), M(V(-0.20,1.145,0.17))];
+    const Bw = frames(under);
+    sweep(straps, Bw, WEB, WEBT); band(Bw, WEB, WEBT);
+    // tri-glide where the webbing enters the pack's lower corner
+    const j = Bw.P.length-4; obox(metal, Bw.P[j].clone().addScaledVector(Bw.Nn[j], 0.002), Bw.Tn[j], Bw.Nn[j], Bw.Bn[j], 0.016, WEBT*1.8, WEB*1.2);
+    // adjuster tail hanging from the ladder lock down the front of the ribs
+    const tail = [lockP.clone().addScaledVector(A.Nn[k], 0.006), ...[at(66,1.215),at(66,1.19),at(65,1.165)].map(p=>proj(M(p), WEBT*1.5+0.005))];
+    const TF = frames(tail); sweep(straps, TF, u=>WEB*(1-0.2*u), WEBT); band(TF, u=>WEB*(1-0.2*u), WEBT);
+    // sternum strap height: where the pad crosses y 1.40 on the chest
+    let bi = 0; for (let i=0;i<A.P.length;i++) if (A.P[i].x>0.1 && Math.abs(A.P[i].y-1.40) < Math.abs(A.P[bi].y-1.40)) bi = i;
+    sternum.push(A.P[bi].clone().addScaledVector(A.Nn[bi], PADT/2+WEBT/2));
+  }
+  // sternum strap across the open coat (bridging, a little proud of the shirt) with a centre buckle
+  const [sR, sL] = sternum, mid = sR.clone().lerp(sL, 0.5);
+  const st = [sR, sR.clone().lerp(sL,0.25), mid, sR.clone().lerp(sL,0.75), sL].map(p=>{ const q = proj(p, WEBT/2+0.004, 0.03); return q.x > p.x ? q : p; });
+  const SF = frames(st);
+  sweep(straps, SF, WEB*0.8, WEBT); band(SF, WEB*0.8, WEBT);
+  const c = Math.floor(SF.P.length/2);
+  obox(metal, SF.P[c].clone().addScaledVector(SF.Nn[c], 0.004), SF.Tn[c], SF.Nn[c], SF.Bn[c], 0.045, WEBT*2, WEB*1.15);
+  // smooth weight field (many neighbours, gaussian falloff) without any arm / leg / head share: no kinks where the webbing passes
+  // the armpit when the clavicles and upper arms move (aim, T-pose, run)
+  const opt = { skip:/head|hand|arm|finger|thumb|index|middle|ring|pinky|thigh|calf|foot|ball/i, rigidBone:B.spine_03, K:32, sigma:0.05,
+    noWeight:/head|neck|hand|arm|finger|thumb|index|middle|ring|pinky|thigh|calf|foot|ball/i,
+    rigid:(x,y,z)=>Math.min(1, Math.max(0, (-0.07 - x)/0.06)) };
+  skinToBody(straps, GEAR.strapS, 'shoulderStraps', opt); skinToBody(edges, GEAR.edgeS, 'strapEdges', opt); skinToBody(metal, GEAR.metalS, 'strapLocks', opt);
+}
 function buildGear(){
   const pack = new T.Group(); pack.name = 'backpack';
   // main body (sheet C back view): ~3/4 of the back's width, top on the shoulder line so the high collar shows above it,
@@ -922,10 +1218,10 @@ function buildGear(){
   const cx = X0 - D/2, cy = (Y0+Y1)/2, XB = X0 - D;                        // XB: back face
   gearBox(pack, GEAR.body, cx, cy, 0, D, Y1-Y0, HW*2, 0.035, 0.012, [3,8,6]);
   // top flap (lid): rounded, overhanging the back and the sides a little, with its dark edge
-  gearBox(pack, GEAR.flap, cx-0.008, Y1-0.03, 0, D+0.022, 0.085, HW*2+0.016, 0.034, 0.012, [3,3,6]);
-  gearBox(pack, GEAR.dark, XB-0.012, Y1-0.075, 0, 0.012, 0.012, HW*2-0.02, 0.004);
+  gearBox(pack, GEAR.flap, cx-0.008, Y1-0.012, 0, D+0.022, 0.09, HW*2+0.016, 0.034, 0.012, [3,3,6]);
+  gearBox(pack, GEAR.dark, XB-0.012, Y1-0.06, 0, 0.012, 0.012, HW*2-0.02, 0.004);
   // grab handle on the lid
-  gearStrap(pack, GEAR.strap, [[cx+0.012,Y1+0.004,-0.045],[cx+0.004,Y1+0.026,-0.03],[cx+0.004,Y1+0.032,0.0],[cx+0.004,Y1+0.026,0.03],[cx+0.012,Y1+0.004,0.045]], 0.02, 0.012, new T.Vector3(1,0,0));
+  gearStrap(pack, GEAR.strap, [[cx+0.012,Y1+0.022,-0.045],[cx+0.004,Y1+0.044,-0.03],[cx+0.004,Y1+0.05,0.0],[cx+0.004,Y1+0.044,0.03],[cx+0.012,Y1+0.022,0.045]], 0.02, 0.012, new T.Vector3(1,0,0));
   // centre pocket column (1/3 of the width): webbing ladder rungs down it, two buckled straps across it
   const PY0 = Y0+0.03, PY1 = Y1-0.09, pcy = (PY0+PY1)/2, PW = 0.105;
   gearBox(pack, GEAR.flap, XB-0.016, pcy, 0, 0.044, PY1-PY0, PW, 0.014, 0.008, [2,4,3]);
@@ -941,8 +1237,8 @@ function buildGear(){
     gearStrap(pack, GEAR.dark, [[XB+0.006, Y1-0.02, z*1.25],[XB-0.011, Y1-0.12, z*1.25],[XB-0.013, cy-0.05, z*1.25],[XB-0.004, Y0+0.02, z*1.25]], 0.022, 0.012);
   // narrow side pouches, side compression straps + buckles
   for (const s of [-1,1]){
-    gearBox(pack, GEAR.flap, cx-0.01, Y1-0.2, s*(HW+0.026), D*0.78, 0.25, 0.054, 0.018, 0, [2,3,2]);
-    for (const [y,o] of [[Y1-0.13,0.054],[Y1-0.26,0.054]]){
+    gearBox(pack, GEAR.flap, cx-0.01, Y1-0.2, s*(HW+0.04), D*0.78, 0.25, 0.064, 0.02, 0, [2,3,2]);
+    for (const [y,o] of [[Y1-0.13,0.073],[Y1-0.26,0.073]]){
       gearBox(pack, GEAR.strap, cx-0.005, y, s*(HW+o), D+0.012, 0.022, 0.01, 0.004);
       gearBox(pack, GEAR.metal, XB*0.5+cx*0.5, y, s*(HW+o+0.006), 0.026, 0.03, 0.007, 0.003);
     }
@@ -956,22 +1252,292 @@ function buildGear(){
     for (let i=0;i<gp.count;i++){ const y = gp.getY(i); gp.setX(i, gp.getX(i) + (backX(y) - (-0.152))); }
     m.geometry.computeVertexNormals();
   });
-  // shoulder straps: out of the lid, under the collar, out below the lapels and down the chest (right side, mirrored).
-  // Skinned to the body (weights of the nearest coat vertices) so they stay on the coat when the shoulders and chest move.
-  const SP = [[-0.17,1.43,0.1],[-0.152,1.49,0.11],[-0.13,1.535,0.12],[-0.09,1.565,0.13],[-0.03,1.578,0.14],[0.04,1.56,0.148],
-              [0.10,1.515,0.155],[0.145,1.475,0.16],[0.182,1.425,0.165],[0.203,1.365,0.165],[0.202,1.30,0.165],[0.19,1.215,0.165]];
-  const straps = new T.Group(), locks = new T.Group();
-  for (const s of [-1,1]){
-    gearStrap(straps, GEAR.strap, SP.map(([x,y,z])=>[x,y,s*z]), 0.046, 0.014);
-    gearBox(locks, GEAR.metal, 0.203, 1.262, s*0.165, 0.012, 0.03, 0.05, 0.004);       // ladder lock
-  }
-  skinToBody(straps, GEAR.strapS, 'shoulderStraps'); skinToBody(locks, GEAR.metalS, 'strapLocks');
+  buildStraps();
   // re-parent to spine_03 keeping the bind-pose placement
   const bone = B.spine_03; hero.updateMatrixWorld(true); bone.updateWorldMatrix(true,false);
   const M = new T.Matrix4().copy(bone.matrixWorld).invert().multiply(hero.matrixWorld);
   M.decompose(pack.position, pack.quaternion, pack.scale);
   bone.add(pack);
   return pack;
+}
+
+// ---------- Coat skirt: its own bones + secondary motion ----------
+// The scan skins the whole skirt 100% to the thigh / calf bones, so it moved like the trousers and split into two tubes in the walk.
+// At load the outer shell below the belt (bind-pose distance from the leg bones; the trousers, knee pads and the front opening stay
+// on the legs) is taken off the legs: near the belt it rides on the pelvis, below it on 8 panel chains hung around the hips
+// (front edge / side / rear side / back, left and right, 3 bones each, children of the pelvis). The back vent's two lips go to their
+// own side, so the vent opens when a leg swings back.
+// coatStep() simulates each chain in angle space (fore-aft swing a and sideways swing b of every segment, relative to the hanging
+// rest shape, in the frame that turns with the hips' yaw): springs toward the rest hang (gravity, scaled by the pelvis' vertical
+// acceleration so the skirt lifts at the top of a running stride and drops on landing), a bend spring that keeps each panel a straight
+// drape, inertia from the hips' movement, air drag that trails the coat behind a walk / run (balanced against gravity, so the tail
+// angles back but never goes horizontal), a little wind, neighbour coupling (the cloth between two panels never tears or folds through),
+// swing / bend / inward limits, and leg collision: a leg inside a panel pushes the whole panel out from the hip (a straight drape, no
+// knee-shaped kink), the back panels only up to a cap (the trailing shin leaves through the vent instead of spreading the tail into a web).
+// Sub-stepped (fixed small step), so a large dt (sprite export) stays stable. The T-pose rests exactly in the bind shape.
+const COAT = { chains:[], init:false,
+  AZ:[1.3, 1.85, 2.4, 2.95], Y:[0.99, 0.80, 0.60, 0.36], R:[0.135, 0.115], ventTop:0.62,
+  kg:[34, 20, 13], kb:[0, 60, 32], damp:3.2, inert:0.55, geffK:0.45,
+  drag:[0.22, 0.62], dragAz:[0.35, 0.6, 0.95, 1.0], dragK:[0.75, 1.0, 1.2],
+  follow:[0.12, 0.25, 0.2, 0.1], followMove:[0.25, 0.05],
+  flareArmed:[0.06, 0.03, 0.0, 0.0], tailArmed:[0.0, 0.04, 0.16, 0.24],
+  back:[0.55, 0.72, 0.85], fwd:[0.55, 0.75, 0.9], outMax:0.75, inMax:0.1, bend:0.4, nbr:0.3, radK:[0.4, 0.8, 1.0, 1.0], open:[0.0, 0.1, 9, 9], push:[1.0, 1.0, 0.6, 0.45],
+  wind:0.04, speed:[1.4, 4.0], speedK:0.5, carry:0.15 };
+function buildCoat(){
+  let sm = null; model.traverse(o=>{ if (o.isSkinnedMesh && !sm) sm = o; });
+  if (!sm) return;
+  model.updateMatrixWorld(true);
+  const geo = sm.geometry, P = geo.attributes.position, SIa = geo.attributes.skinIndex, SWa = geo.attributes.skinWeight, n = P.count;
+  const toL = new T.Matrix4().copy(sm.matrixWorld).invert();
+  const lp = nm => B[nm].getWorldPosition(new T.Vector3()).applyMatrix4(toL);
+  const segs = []; for (const s of ['l','r']) segs.push([lp('thigh_'+s), lp('calf_'+s)], [lp('calf_'+s), lp('foot_'+s)]);
+  const q = new T.Vector3(), ab = new T.Vector3();
+  const segDist = (p, a, b) => { ab.subVectors(b, a); const t = Math.min(1, Math.max(0, q.subVectors(p, a).dot(ab)/ab.lengthSq())); return q.copy(a).addScaledVector(ab, t).distanceTo(p); };
+  // leg distance with the front of each leg counted closer (the trousers there show through the coat's front opening)
+  const legDist = p => { let best = 9, fz = 0; for (const [a, b] of segs){ const dd = segDist(p, a, b); if (dd < best){ best = dd; fz = (p.z - q.z) / Math.max(dd, 1e-5); } }
+    return best - 0.05 * ss(0.2, 0.7, fz); };
+  const ss = (a, b, x) => { const t = Math.min(1, Math.max(0, (x-a)/(b-a))); return t*t*(3-2*t); };
+  const pc = lp('pelvis'), cx = pc.x, cz = pc.z;
+  // weld UV seams (same position -> same weights) and build the welded adjacency for smoothing
+  const key = new Map(), weld = new Int32Array(n), wp = []; let u = 0;
+  for (let i = 0; i < n; i++){ const k = Math.round(P.getX(i)*2e4)+','+Math.round(P.getY(i)*2e4)+','+Math.round(P.getZ(i)*2e4);
+    let w = key.get(k); if (w === undefined){ w = u++; key.set(k, w); wp.push(new T.Vector3(P.getX(i), P.getY(i), P.getZ(i))); } weld[i] = w; }
+  const nb = Array.from({length:u}, ()=>new Set()), idx = geo.index.array;
+  for (let f = 0; f < idx.length; f += 3) for (let e = 0; e < 3; e++){ const a = weld[idx[f+e]], b = weld[idx[f+(e+1)%3]]; if (a !== b){ nb[a].add(b); nb[b].add(a); } }
+  // the side of the back vent each (unwelded) vertex sits on: mean x of the faces that use it (the vent's lips share positions)
+  const fx = new Float32Array(n), fc = new Float32Array(n);
+  for (let f = 0; f < idx.length; f += 3){ const x = (P.getX(idx[f]) + P.getX(idx[f+1]) + P.getX(idx[f+2]))/3; for (let e = 0; e < 3; e++){ fx[idx[f+e]] += x; fc[idx[f+e]]++; } }
+  // shell amount per welded vertex: outer shell (away from the leg axes), smoothed over the surface
+  let A = new Float32Array(u);
+  for (let w = 0; w < u; w++){
+    const p = wp[w], ld = legDist(p);
+    // (not the crotch: the inside of the trousers between the legs is far from both leg axes too)
+    const crotch = Math.max(ss(-0.02, -0.08, p.z - cz), ss(0.08, 0.14, Math.abs(p.x - cx)));
+    // around the hips the coat sits on the body (too close to the leg axes to tell apart): there everything outside the front
+    // opening (the belt and the trousers' fly) is coat
+    const az = Math.abs(Math.atan2(p.x - cx, p.z - cz)), hip = ss(1.0, 1.3, az) * ss(0.78, 0.86, p.y) * ss(0.06, 0.1, Math.hypot(p.x - cx, p.z - cz));
+    A[w] = (p.y > 0.22 && p.y < 1.08) ? Math.max(ss(0.112, 0.155, ld) * crotch, hip) * ss(1.08, 1.0, p.y) : 0;
+  }
+  const cRaw = A.slice();
+  for (let it = 0; it < 3; it++){ const A2 = new Float32Array(u);
+    for (let w = 0; w < u; w++){ let s = 0, c = 0; for (const j of nb[w]){ s += A[j]; c++; } A2[w] = c ? 0.5*A[w] + 0.5*s/c : A[w]; } A = A2; }
+  // panel chains: joints on the coat surface (median radius of the shell around that azimuth / height)
+  const th = new Float32Array(u), rr = new Float32Array(u);
+  for (let w = 0; w < u; w++){ th[w] = Math.atan2(wp[w].x-cx, wp[w].z-cz); rr[w] = Math.hypot(wp[w].x-cx, wp[w].z-cz); }
+  const pel = B.pelvis, pelQ = pel.getWorldQuaternion(new T.Quaternion()), pelQi = pelQ.clone().invert();
+  const pelW = pel.getWorldPosition(new T.Vector3());
+  const bones0 = sm.skeleton.bones.slice(), inv0 = sm.skeleton.boneInverses.slice(), nb0 = bones0.length, newB = [];
+  const pelI = bones0.indexOf(pel);
+  const dA = a => { let d = a; while (d > Math.PI) d -= 2*Math.PI; while (d < -Math.PI) d += 2*Math.PI; return d; };
+  const angOf = d => [Math.asin(Math.max(-1, Math.min(1, d.x))), Math.atan2(-d.z, -d.y)];
+  for (const sg of [1, -1]) COAT.AZ.forEach((az0, i) => {
+    const az = sg*az0, ch = { az, side:sg, i, rest:[], seg:[], len:[], a0:[], b0:[], bones:[], bi:[] };
+    COAT.Y.forEach((y, k) => {
+      const rs = []; for (let w = 0; w < u; w++) if (cRaw[w] > 0.5 && Math.abs(dA(th[w]-az)) < 0.4 && Math.abs(wp[w].y-y) < 0.06) rs.push(rr[w]);
+      rs.sort((a, b)=>a-b); const r = rs.length > 2 ? rs[rs.length>>1] : 0.2;
+      ch.rest.push(new T.Vector3(cx + Math.sin(az)*r, y, cz + Math.cos(az)*r).applyMatrix4(sm.matrixWorld));
+    });
+    for (let k = 0; k < 3; k++){
+      const b = new T.Bone(); b.name = 'coat_'+(sg>0?'l':'r')+i+'_'+k; pel.add(b);
+      b.position.copy(pel.worldToLocal(ch.rest[k].clone())); b.quaternion.copy(pelQi);
+      ch.bones.push(b); ch.bi.push(nb0 + newB.length); newB.push(b);
+      ch.seg.push(ch.rest[k+1].clone().sub(ch.rest[k])); ch.len.push(ch.seg[k].length());
+      const [a0, b0] = angOf(ch.seg[k].clone().normalize()); ch.a0.push(a0); ch.b0.push(b0);
+    }
+    ch.root = ch.bones[0].position.clone();
+    // horizontal outward direction of the panel (rest frame) and the tangent; outward sideways swing sign
+    const rd = new T.Vector3(ch.rest[2].x - pelW.x, 0, ch.rest[2].z - pelW.z).normalize();
+    ch.rd = rd; ch.td = new T.Vector3(-rd.z, 0, rd.x); ch.so = rd.z >= 0 ? -1 : 1;     // b * so > 0 = the hem swings outward
+    ch.leg = sg > 0 ? 'l' : 'r';
+    ch.a = ch.a0.slice(); ch.b = ch.b0.slice(); ch.va = [0, 0, 0]; ch.vb = [0, 0, 0];
+    COAT.chains.push(ch);
+  });
+  // collision radius per joint and leg capsule: never closer than at rest (minus a little), capped at the trouser + coat thickness
+  const cap = []; for (const s of ['l','r']) cap.push(['thigh_'+s, 'calf_'+s, COAT.R[0]], ['calf_'+s, 'foot_'+s, COAT.R[1]]);
+  COAT.cap = cap;
+  const wpos = nm => B[nm].getWorldPosition(new T.Vector3());
+  const segDistW = (p, a, b) => { const e = b.clone().sub(a), t = Math.min(1, Math.max(0, p.clone().sub(a).dot(e)/e.lengthSq())); return a.clone().addScaledVector(e, t).distanceTo(p); };
+  for (const ch of COAT.chains) ch.rad = ch.rest.map(p => cap.map(([a, b, R]) => Math.min(R*COAT.radK[ch.i], 0.92*segDistW(p, wpos(a), wpos(b)))));
+  // rest thigh directions (the panels partly ride on the thighs when standing: a wide stance flares the coat)
+  COAT.th0 = {}; for (const s of ['l','r']) COAT.th0[s] = angOf(wpos('calf_'+s).sub(wpos('thigh_'+s)).normalize());
+  // ring of neighbouring panels (not across the front opening) for the coupling
+  const L = COAT.chains.filter(c=>c.side>0), Rr = COAT.chains.filter(c=>c.side<0);
+  COAT.ties = [];
+  for (const side of [L, Rr]) for (let i = 0; i < side.length-1; i++) COAT.ties.push([side[i], side[i+1], 1]);
+  COAT.ties.push([L[L.length-1], Rr[Rr.length-1], 0.6]);
+  // bind: the new bones' inverses from the bind pose (boneMatrix * inverse = mesh matrix at rest, like the scan's own bones)
+  model.updateMatrixWorld(true);
+  const invs = newB.map(b => new T.Matrix4().copy(b.matrixWorld).invert().multiply(sm.matrixWorld));
+  // re-weight: shell vertices leave the legs; at the belt they ride on the pelvis, below it on the two nearest chains (by azimuth)
+  // x the two nearest bones (by height). The vent's lips stay on their own side below the top of the vent.
+  const yc = [0, 1, 2].map(k => (COAT.Y[k]+COAT.Y[k+1])/2), AZ = COAT.AZ, gap = 2*Math.PI - 2*AZ[3];
+  const chainOf = (sg, i) => COAT.chains[(sg > 0 ? 0 : 4) + i];
+  const SI = new Uint16Array(n*4), SW = new Float32Array(n*4), amt = new Float32Array(n);
+  for (let i = 0; i < n; i++){
+    const w = weld[i], cs = A[w], y = wp[w].y, hc = ss(1.07, 0.95, y), a = cs*hc, acc = new Map();
+    amt[i] = a;
+    const o = [[SIa.getX(i), SWa.getX(i)], [SIa.getY(i), SWa.getY(i)], [SIa.getZ(i), SWa.getZ(i)], [SIa.getW(i), SWa.getW(i)]];
+    for (const [j, x] of o) if (x > 0) acc.set(j, (acc.get(j)||0) + x*(1-cs));
+    if (cs*(1-hc) > 0.001) acc.set(pelI, (acc.get(pelI)||0) + cs*(1-hc));
+    if (a > 0.001){
+      const t = th[w], at = Math.abs(t), cw = [];
+      let sg = t >= 0 ? 1 : -1, own = 0;
+      if (at > AZ[3] && fc[i]){
+        // vent lip: the side its faces are on, below the top of the vent (above it the back is one panel)
+        const sx = fx[i]/fc[i] - cx; own = ss(COAT.ventTop + 0.06, COAT.ventTop - 0.02, y);
+        if (own > 0 && Math.abs(sx) > 1e-4) sg = Math.sign(sx);
+      }
+      if (at <= AZ[0]) cw.push([chainOf(sg, 0), 1]);
+      else if (at >= AZ[3]){ const f = (at - AZ[3]) / gap * (1 - own); cw.push([chainOf(sg, 3), 1 - f], [chainOf(-sg, 3), f]); }
+      else { let k = 0; while (at > AZ[k+1]) k++; const f = ss(0, 1, (at - AZ[k]) / (AZ[k+1] - AZ[k])); cw.push([chainOf(sg, k), 1-f], [chainOf(sg, k+1), f]); }
+      const hw = [];
+      if (y >= yc[0]) hw.push([0, 1]); else if (y <= yc[2]) hw.push([2, 1]);
+      else { const k = y >= yc[1] ? 0 : 1, f = (yc[k] - y) / (yc[k] - yc[k+1]); hw.push([k, 1-f], [k+1, f]); }
+      for (const [ch, x] of cw) for (const [k, y2] of hw) if (x*y2 > 0) acc.set(ch.bi[k], (acc.get(ch.bi[k])||0) + a*x*y2);
+    }
+    const top = [...acc.entries()].sort((p, r) => r[1]-p[1]).slice(0, 4), sum = top.reduce((s, e) => s + e[1], 0) || 1;
+    for (let k = 0; k < 4; k++){ SI[i*4+k] = top[k] ? top[k][0] : 0; SW[i*4+k] = top[k] ? top[k][1]/sum : 0; }
+  }
+  geo.setAttribute('skinIndex', new T.BufferAttribute(SI, 4)); geo.setAttribute('skinWeight', new T.BufferAttribute(SW, 4));
+  sm.bind(new T.Skeleton(bones0.concat(newB), inv0.concat(invs)), sm.bindMatrix);
+  COAT.mesh = sm; COAT.amt = amt;
+}
+const _cq = new T.Quaternion(), _cv = new T.Vector3(), _cv2 = new T.Vector3(), _cv3 = new T.Vector3();
+// unit direction of a segment from its fore-aft (a) / sideways (b) swing, in the hips' yaw frame (+x forward, +z the character's right)
+const coatDir = (a, b, out) => out.set(Math.sin(a), -Math.cos(a)*Math.cos(b), -Math.cos(a)*Math.sin(b));
+function coatStep(dt){
+  if (!COAT.chains.length) return;
+  if (window.HERO && !window.HERO.coat) window.HERO.coat = COAT;
+  dt = Math.min(dt, 0.25);
+  const pel = B.pelvis; pel.updateWorldMatrix(true, false);
+  const pelQ = pel.getWorldQuaternion(new T.Quaternion());
+  // the coat hangs: it turns with the hips' yaw, their pitch / roll do not tilt it
+  const qd = pelQ.clone().multiply(_cq.copy(BIND.pelvis.w).invert());
+  const f = _cv.set(1, 0, 0).applyQuaternion(qd), qy = new T.Quaternion().setFromAxisAngle(UP, Math.atan2(-f.z, f.x)), qyi = qy.clone().invert();
+  const live = 1 - S.tp, move = Math.min(1, S.walk + S.run), armed = S.weapon !== 'none';
+  const stand = (1 - move) * live;
+  const toY = v => v.applyQuaternion(qyi);       // world -> yaw frame (about the world origin; only differences are used)
+  // leg capsules (yaw frame)
+  const caps = COAT.cap.map(([a, b]) => [toY(B[a].getWorldPosition(new T.Vector3())), toY(B[b].getWorldPosition(new T.Vector3()))]);
+  const roots = COAT.chains.map(ch => pel.localToWorld(ch.root.clone()));
+  // hips' acceleration (world, smoothed, clamped): inertia of the cloth and the effective gravity
+  const pw = pel.getWorldPosition(new T.Vector3());
+  if (!COAT.init || dt > 0.2 || !COAT.pv){ COAT.pp = pw.clone(); COAT.pv = new T.Vector3(); COAT.pa = new T.Vector3(); }
+  else if (dt > 1e-5){
+    const v = pw.clone().sub(COAT.pp).divideScalar(dt), a = v.clone().sub(COAT.pv).divideScalar(dt);
+    if (a.length() > 30) a.setLength(30);
+    COAT.pa.lerp(a, 1 - Math.exp(-dt*25)); COAT.pv.copy(v); COAT.pp.copy(pw);
+  }
+  const accY = toY(COAT.pa.clone()).multiplyScalar(live);
+  // the clips run in place: the travel speed they stand for still starts / stops the coat (it lags when setting off, swings on when stopping)
+  const spd = S.walk*COAT.speed[0] + S.run*COAT.speed[1];
+  if (COAT.spd !== undefined && dt > 1e-5 && dt <= 0.2) accY.x += Math.max(-12, Math.min(12, (spd - COAT.spd)/dt)) * COAT.speedK * live;
+  COAT.spd = spd;
+  const geff = Math.min(1.7, Math.max(0.4, 1 + COAT.geffK*accY.y/9.8));
+  // thigh swing (yaw frame) per side, relative to the bind
+  const thA = {}; for (const s of ['l','r']){ const d = toY(B['calf_'+s].getWorldPosition(new T.Vector3()).sub(B['thigh_'+s].getWorldPosition(new T.Vector3())).normalize());
+    const a = Math.asin(Math.max(-1, Math.min(1, d.x))), b = Math.atan2(-d.z, -d.y); thA[s] = [a - COAT.th0[s][0], b - COAT.th0[s][1]]; }
+  const fm = Math.max(0, 1 - (1-COAT.followMove[0])*S.walk - (1-COAT.followMove[1])*S.run) * live;
+  const dragBase = (S.walk*COAT.drag[0] + S.run*COAT.drag[1]) * live;
+  // targets per chain / segment
+  const tgt = COAT.chains.map(ch => {
+    const i = ch.i, fl = COAT.follow[i]*fm, ta = [], tb = [];
+    for (let k = 0; k < 3; k++){
+      const ad = -Math.atan(dragBase * COAT.dragAz[i] * COAT.dragK[k] / geff);
+      let a = ch.a0[k] + fl*thA[ch.leg][0] + ad, b = ch.b0[k] + fl*thA[ch.leg][1];
+      // armed stance: the front panels open out, the back panels flare back into a pointed tail
+      const arm = armed ? stand : 0;
+      b += ch.so * COAT.flareArmed[i] * arm * (0.6 + 0.4*k);
+      a -= COAT.tailArmed[i] * arm * (0.7 + 0.3*k);
+      ta.push(a); tb.push(b);
+    }
+    return [ta, tb];
+  });
+  if (!COAT.init){ COAT.chains.forEach((ch, c) => { ch.a = tgt[c][0].slice(); ch.b = tgt[c][1].slice(); ch.va = [0,0,0]; ch.vb = [0,0,0]; }); COAT.init = true; }
+  const nS = Math.min(40, Math.max(1, Math.ceil(dt * 150))), h = dt / nS, dmp = Math.exp(-COAT.damp*h);
+  const ax = -accY.x * COAT.inert, az = accY.z * COAT.inert;
+  const p = [new T.Vector3(), new T.Vector3(), new T.Vector3(), new T.Vector3()], dv = _cv2, v = _cv3, cp = new T.Vector3(), e = new T.Vector3();
+  for (let st = 0; st < nS; st++){
+    const tt = S.t - dt + (st+1)*h;
+    // 1) springs: gravity toward the target hang, bend toward a straight panel, inertia, wind
+    COAT.chains.forEach((ch, c) => {
+      const [ta, tb] = tgt[c];
+      let pa = 0, pb = 0;
+      for (let k = 0; k < 3; k++){
+        const ea = ch.a[k] - ta[k], eb = ch.b[k] - tb[k], lev = 0.3 + 0.22*k;
+        let fa = -COAT.kg[k]*geff*ea, fb = -COAT.kg[k]*geff*eb;
+        if (k > 0){ fa += COAT.kb[k]*(pa - ea); fb += COAT.kb[k]*(pb - eb); }
+        fa += ax*Math.cos(ch.a[k])/lev; fb += az/lev;
+        const ph = c*1.7 + k*0.6, kk = (k+1)/3;
+        const wnd = COAT.wind * live * kk * 30 * (0.6*Math.sin(tt*1.3 + ph) + 0.4*Math.sin(tt*2.9 + 2*ph));
+        fa -= wnd; fb += 0.6*wnd*ch.so;
+        ch.va[k] = (ch.va[k] + fa*h)*dmp; ch.vb[k] = (ch.vb[k] + fb*h)*dmp;
+        ch.a[k] += ch.va[k]*h; ch.b[k] += ch.vb[k]*h;
+        pa = ea; pb = eb;
+      }
+    });
+    // 2) limits: swing caps (the tail never goes horizontal), outward / inward, bend between segments
+    COAT.chains.forEach(ch => { for (let k = 0; k < 3; k++){
+      const lo = -COAT.back[k], hi = COAT.fwd[k];
+      if (ch.a[k] < lo){ ch.a[k] = lo; if (ch.va[k] < 0) ch.va[k] *= -0.1; }
+      if (ch.a[k] > hi){ ch.a[k] = hi; if (ch.va[k] > 0) ch.va[k] *= -0.1; }
+      let o = (ch.b[k] - ch.b0[k]) * ch.so;
+      if (o < -COAT.inMax){ ch.b[k] = ch.b0[k] - COAT.inMax*ch.so; if (ch.vb[k]*ch.so < 0) ch.vb[k] = 0; }
+      else if (o > COAT.outMax){ ch.b[k] = ch.b0[k] + COAT.outMax*ch.so; if (ch.vb[k]*ch.so > 0) ch.vb[k] = 0; }
+      if (k > 0){
+        const da = (ch.a[k]-ch.a0[k]) - (ch.a[k-1]-ch.a0[k-1]), db = (ch.b[k]-ch.b0[k]) - (ch.b[k-1]-ch.b0[k-1]);
+        if (Math.abs(da) > COAT.bend) ch.a[k] -= da - Math.sign(da)*COAT.bend;
+        if (Math.abs(db) > COAT.bend) ch.b[k] -= db - Math.sign(db)*COAT.bend;
+      }
+    } });
+    // 3) neighbouring panels stay together (deviation from rest within nbr of each other)
+    for (const [A1, B1, wgt] of COAT.ties) for (let k = 0; k < 3; k++){
+      const lim = COAT.nbr / wgt;
+      const da = (A1.a[k]-A1.a0[k]) - (B1.a[k]-B1.a0[k]), db = (A1.b[k]-A1.b0[k]) - (B1.b[k]-B1.b0[k]);
+      if (Math.abs(da) > lim){ const c2 = (da - Math.sign(da)*lim)/2; A1.a[k] -= c2; B1.a[k] += c2; }
+      if (Math.abs(db) > lim){ const c2 = (db - Math.sign(db)*lim)/2; A1.b[k] -= c2; B1.b[k] += c2; }
+    }
+    // 4) legs push the panels out along the panel's own outward direction (the whole panel turns about the hip: a straight drape)
+    COAT.chains.forEach((ch, c) => {
+      p[0].copy(roots[c]); toY(p[0]);
+      for (let k = 0; k < 3; k++) p[k+1].copy(p[k]).addScaledVector(coatDir(ch.a[k], ch.b[k], dv), ch.len[k]);
+      for (let j = 1; j < 4; j++){
+        let need = 0;
+        caps.forEach(([A2, B2], m) => {
+          e.subVectors(B2, A2); const t = Math.min(1, Math.max(0, v.subVectors(p[j], A2).dot(e)/e.lengthSq()));
+          cp.copy(A2).addScaledVector(e, t); v.subVectors(p[j], cp);
+          const R = ch.rad[j][m], tn = v.dot(ch.td); if (Math.abs(tn) >= R || -v.x > COAT.open[ch.i]) return;   // (a leg ahead of a front panel leaves through the opening)
+          const sN = v.dot(ch.rd), smin = Math.sqrt(R*R - tn*tn);
+          if (sN < smin && sN > -0.35) need = Math.max(need, smin - sN);
+        });
+        if (need <= 1e-5) continue;
+        need *= COAT.push[ch.i];
+        // turn the segments above about the hip so that joint j moves out by 'need' (direction rd in the yaw frame)
+        const Lj = p[j].distanceTo(p[0]) || 0.1, da = ch.rd.x*need/Lj, db = -ch.rd.z*need/Lj;
+        for (let k = 0; k < 3; k++){
+          const w = k < j ? 1 : COAT.carry;
+          ch.a[k] += da*w; ch.b[k] += db*w;
+          if (ch.va[k]*da < 0) ch.va[k] *= 0.3; if (ch.vb[k]*db < 0) ch.vb[k] *= 0.3;
+        }
+        for (let k = 0; k < 3; k++){ ch.a[k] = Math.max(-COAT.back[k], Math.min(COAT.fwd[k], ch.a[k])); p[k+1].copy(p[k]).addScaledVector(coatDir(ch.a[k], ch.b[k], dv), ch.len[k]); }
+      }
+    });
+  }
+  // pose the bones along the chains (the T-pose blends exactly to the bind shape)
+  const pelQi = pelQ.clone().invert();
+  COAT.chains.forEach((ch, c) => {
+    const pos = roots[c].clone();
+    for (let k = 0; k < 3; k++){
+      const b = ch.bones[k];
+      const a = lerp(ch.a[k], ch.a0[k], S.tp), bb = lerp(ch.b[k], ch.b0[k], S.tp);
+      const d = coatDir(a, bb, new T.Vector3()).applyQuaternion(qy), r0 = coatDir(ch.a0[k], ch.b0[k], new T.Vector3()).applyQuaternion(qy);
+      _cq.setFromUnitVectors(r0, d).multiply(qy);
+      b.quaternion.copy(pelQi).multiply(_cq);
+      b.position.copy(pel.worldToLocal(pos.clone()));
+      b.updateMatrixWorld(true);
+      pos.addScaledVector(d, ch.len[k]);
+    }
+  });
 }
 
 // ---------- Load the mesh ----------
@@ -1009,7 +1575,7 @@ loadModel(gltf => {
   model.traverse(o => {
     if (o.isSkinnedMesh || o.isMesh){
       const map = o.material.map, smooth = addSmoothNormals(o.geometry, SMOOTH_ITERS);
-      o.material = charMat({ map, mat: map && map.image ? buildMatTex(map) : null, skinning:o.isSkinnedMesh, double:true, smooth });
+      o.material = charMat({ map, mat: map && map.image ? buildMatTex(map) : null, skinning:o.isSkinnedMesh, double:true, smooth, nmap:o.material.normalMap, mr:o.material.metalnessMap });
       o.frustumCulled = false;
     }
     if (o.isBone) B[o.name] = o;
@@ -1022,6 +1588,7 @@ loadModel(gltf => {
   mixer = new T.AnimationMixer(model);
   for (const c of gltf.animations){ const a = mixer.clipAction(c); a.play(); a.setEffectiveWeight(0); ACT[c.name.toLowerCase().startsWith('run')?'run':'walk'] = a; }
   buildGear();
+  buildCoat();
   updateHud();
   window.HERO = { T, hero, model, B, S, SH, LIGHT, PAL, RAMP, CLS, post, weapons, flash, update, render, setAnim, setWeapon, setSize,
     frame(w,h,px){ S.pxChar=px; setSize(w,h,1); } };
