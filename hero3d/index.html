@@ -1569,6 +1569,40 @@ function loadModel(onLoad, onErr){
     finally { try { window.createImageBitmap = cib; } catch (e) {} }
   }, onErr);
 }
+// ---------- Slimmer build: pull each vertex toward its bones' axes (bind pose, skin-weighted), before the gear/coat are fitted ----------
+// Factor per bone: < 1 slims radially around the bone segment. Legs: the trousers (close to the leg axis) slim more than the coat shell.
+const SLIM = { torso:0.86, neck:0.93, clav:0.93, upper:0.86, fore:0.89, legIn:0.84, legOut:0.93, legInR:0.13, legOutR:0.18 };
+function slimBody(mesh){
+  const g = mesh.geometry, P = g.attributes.position, SI = g.attributes.skinIndex, SW = g.attributes.skinWeight;
+  const sk = mesh.skeleton, bones = sk.bones, bm = mesh.bindMatrix, bmi = new T.Matrix4().copy(bm).invert();   // not mesh.bindMatrixInverse: in 'attached' mode it tracks the (rotated) world matrix
+  const head = bones.map((b,i) => new T.Vector3().setFromMatrixPosition(new T.Matrix4().copy(sk.boneInverses[i]).invert()));
+  const tail = bones.map((b,i) => { const c = b.children.find(ch => ch.isBone && bones.includes(ch)); return c ? head[bones.indexOf(c)] : null; });
+  const kOf = (name, r) => {
+    if (/^(pelvis|spine_0[123])$/.test(name)) return SLIM.torso;
+    if (name === 'neck_01') return SLIM.neck;
+    if (/^clavicle_/.test(name)) return SLIM.clav;
+    if (/^upperarm_/.test(name)) return SLIM.upper;
+    if (/^lowerarm_/.test(name)) return SLIM.fore;
+    if (/^(thigh|calf)_/.test(name)){ const u = Math.min(1, Math.max(0, (r - SLIM.legInR) / (SLIM.legOutR - SLIM.legInR))); return SLIM.legIn + (SLIM.legOut - SLIM.legIn) * u; }
+    return 1;                                                           // head, hands, fingers, feet: unchanged
+  };
+  const v = new T.Vector3(), d = new T.Vector3(), q = new T.Vector3(), ab = new T.Vector3();
+  const comp = (attr, i, k) => k === 0 ? attr.getX(i) : k === 1 ? attr.getY(i) : k === 2 ? attr.getZ(i) : attr.getW(i);   // r128 has no getComponent
+  for (let i = 0; i < P.count; i++){
+    v.fromBufferAttribute(P, i).applyMatrix4(bm);
+    d.set(0,0,0);
+    for (let k = 0; k < 4; k++){
+      const w = comp(SW, i, k); if (w <= 0) continue;
+      const bi = comp(SI, i, k), a = head[bi], b = tail[bi]; if (!b) continue;
+      ab.subVectors(b, a); const t = Math.min(1, Math.max(0, q.subVectors(v, a).dot(ab) / Math.max(1e-6, ab.lengthSq())));
+      const axis = q.copy(a).addScaledVector(ab, t), r = v.distanceTo(axis), kk = kOf(bones[bi].name, r);
+      d.addScaledVector(axis.sub(v), (1 - kk) * w);                  // move toward the axis by (1-k) of the distance
+    }
+    v.add(d).applyMatrix4(bmi); P.setXYZ(i, v.x, v.y, v.z);
+  }
+  P.needsUpdate = true; g.computeBoundingSphere();
+}
+
 loadModel(gltf => {
   model = gltf.scene; model.rotation.y = Math.PI/2;          // the mesh faces +Z; the rig convention here is +X forward
   hero.add(model);
@@ -1581,6 +1615,7 @@ loadModel(gltf => {
     if (o.isBone) B[o.name] = o;
   });
   model.updateMatrixWorld(true);
+  model.traverse(o => { if (o.isSkinnedMesh) slimBody(o); });
   for (const n in B) BIND[n] = { p:B[n].position.clone(), q:B[n].quaternion.clone(), w:B[n].getWorldQuaternion(new T.Quaternion()) };
   const wp = n => B[n].getWorldPosition(new T.Vector3());
   for (const s of ['l','r']){ LEN['up_'+s] = wp('upperarm_'+s).distanceTo(wp('lowerarm_'+s)); LEN['lo_'+s] = wp('lowerarm_'+s).distanceTo(wp('hand_'+s));
