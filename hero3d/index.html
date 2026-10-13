@@ -987,16 +987,16 @@ float coatDetail(vec3 p, vec3 nb, vec3 ns, vec3 px, vec3 py, float hd, float tc0
 //    with a dark edge on its far side from the light) - in the shadow band only the folds and one crow's-foot ray round the eye; the
 //    brows near-black with dark grey hair ticks through their outer two thirds; the beard (faceBeardTone) a grizzled charcoal to mid
 //    grey like the references' (under the lit skin), darker at the sides and under the jaw; the lower face's focal structure as in all
-//    three references - a light moustache and chin framed, face-on and in 3/4, by charcoal cheeks and jaw (in profile the side beard
-//    keeps its mid grey, as in the side reference), a dark parting under the nose between the moustache's halves (its edges stepped
-//    along the strands), the moustache a mid-grey drooping horseshoe (its middle darker, light strands along its halves and down its
-//    tips, a dark outline down their outer edges), the mouth a dark 1 px line, the lower lip at the chin's value (warm, never the
-//    brightest point of the lower face), a shadow under it between the tips, the chin the lightest of the beard; from ~230 px dense
-//    short strokes over the whole beard, the shadow side included (dark gaps kept apart in a knit, light 2 px clumps and lone light
-//    strands round each region's mid tone; on the charcoal only gaps and sparse lone grey hairs), from ~190 px a few lone light
-//    strands, below that flat tones. A crease is a dark 1 px core a step down with (from ~430 px on the forehead) a lip half a step
-//    up toward the key light; from ~230 px sparse short ticks weather the lit forehead. The fine ones (the upper wrinkles, crow's
-//    feet) only from ~430 px.
+//    three references - a light moustache and chin framed by charcoal where the cheeks and the jaw turn away from the view (face-on the
+//    sides, under the jaw; in profile the near cheek keeps its mid grey, as in the side reference), a dark parting under the nose
+//    between the moustache's halves (its edges stepped along the strands), the moustache a mid-grey drooping horseshoe (its middle
+//    darker, light strands along its halves and down its tips, a dark outline down their outer edges), the mouth a dark 1 px line, the
+//    lower lip at the chin's value (warm, never the brightest point of the lower face), a shadow under it between the tips, the chin
+//    the lightest of the beard; from ~230 px dense short strokes over the whole beard, the shadow side included (dark gaps kept apart
+//    in a knit, light 2 px clumps and lone light strands round each region's mid tone; on the charcoal only gaps and lone grey hairs,
+//    thinning out as it turns away), from ~190 px a few lone light strands, below that flat tones. A crease is a dark 1 px core a step
+//    down with (from ~430 px on the forehead) a lip half a step up toward the key light; from ~230 px sparse short ticks weather the
+//    lit forehead. The fine ones (the upper wrinkles, crow's feet) only from ~430 px.
 //  - faceColor(): the beard (and the brows, a step darker) on the hair's own warm grey ramp (HAIR_HD) at every size, the nearest tone
 //    by luminance (never its lightest) - one hue family on the head, the beard's values kept; HD - the head's skin turned to the
 //    references' weathered tan (warm brown in the shadows, never grey-brown).
@@ -1065,11 +1065,6 @@ vec4 faceMo(float s, float y, float my){
   bool body = y > (s < 0.0335 ? my + 0.0015 : 1.5885);
   return vec4(s < so && (body || (y > 1.562 && s > si)) ? 1.0 : 0.0, f, s - so, body ? -1.0 : si - s);
 }
-// how squarely the view looks at the face: the direction to the camera in the head's bind pose (the last row of uHairRot, the head
-// bone's bind pose -> view rotation that hairFrame sets every frame; read only), its forward part over its horizontal length - 1
-// face-on, ~0.78 in 3/4 (yaw 0.9), ~0.34 at the game's angle (SIDE_YAW), 0 in profile, under 0 from behind; the same for the
-// whole head, whatever the surface's own slant
-float faceFront(){ vec3 v = vec3(uHairRot[0][2], uHairRot[1][2], uHairRot[2][2]); return v.z / max(length(v.xz), 1e-4); }
 // in the face's box: the head's own beard-class texels (the face's front, round the jaw's back, under the ears), not the collar's -
 // those lie 9.4 cm or more from the neck's axis, its lower edge tapering in, and its front flaps are left out below y 1.515. The
 // radius is hairOnHead's collar bound (the same literal, the hair task's; kept in step by hand - if one moves, move the other)
@@ -1175,28 +1170,35 @@ void faceClass(inout float cls, inout float off, vec3 p, vec3 px, vec3 py){
 // the beard; from ~230 px under the lower lip a crescent shadow between the tips (a full step); half a step down along the lower
 // edge (rolling under the jaw), where the beard turns away from the view and at the roots along its top; the cheeks and the jaw's
 // sides half a step to a step darker toward the ears. The charcoal (kw): outside the moustache, from just past the tips' outer edge
-// (under them the light chin's side, its edge ragged in 2 px rows and coming in a little toward the bottom) back to the ears, the
-// cheeks and the jaw HAIR_HD 2 whatever the light, with only gaps and sparse lone grey hairs, and a step lighter along the beard's
-// lower edge and the jaw's outer side (over the collar's dark: the outline never merges into it) - but only while the view looks at
-// the face (faceFront: face-on and in 3/4, fading out from ~52 to ~63 degrees off the front; at the game's angle and in profile the
-// side beard keeps its mid grey, as in the side reference). The moustache (faceMo): its halves half a step over the beard and its
-// middle at the beard's tone (at most HAIR_HD 5 and 4 before the strands, whatever the light: the upper lip faces the key light more
-// than the chin), its tips as its halves down to their points; from ~230 px its lower edge a full step down in shadow over the
+// (under them the light chin's side, its edge ragged in 2 px rows and coming in a little toward the bottom) back to the ears, where the
+// beard turns away from the view - per pixel by the smoothed normal (nz under 0.45: face-on the cheeks' sides, the jaw's underside, in
+// 3/4 the far side; a half-step band over it to nz 0.75; facing the view the beard's own tones - in profile and at the game's angle the
+// near cheek keeps its mid grey, as in the side reference), so as the head turns its edge slides across the beard; whatever the light,
+// graded out from the light chin: its ~1 cm HAIR_HD 3 with lone HAIR_HD 4 hairs (on the band and the charcoal alike - face-on the
+// chin's edge lies in the band), past it the band HAIR_HD 3 under HAIR_HD 4 hairs and the charcoal HAIR_HD 2 under grey hairs that thin
+// out as it turns away (half of the strokes at nz 0.45, 1 in 5 from 0.25: by the ears, under the jaw), both over gaps a step down
+// (HAIR_HD 2, 1) - grey hair over dark roots, never a flat shadow plane; a step lighter along the beard's lower edge and the jaw's
+// outer side (over the collar's dark: the outline never merges into it). The moustache (faceMo): its halves half a step over the beard
+// and its middle at the beard's tone (at most HAIR_HD 5 and 4 before the strands, whatever the light: the upper lip faces the key light
+// more than the chin), its tips as its halves down to their points; from ~230 px its lower edge a full step down in shadow over the
 // mouth, and the parting under the nose - a dark wedge between the halves, its edges stepped +-1 px along the strands' fall, a step
-// under the halves' tone (HAIR_HD 2, at the roots HAIR_HD 1: gFaceK - the nostrils' shadow); a dark 1 px line just outside the
-// halves' and the tips' outer edge (a full step) and half a step along the tips' inner edges, both stopping short of the tips' ends
-// (no staple's feet), with a clean 2 px margin either side of the outer line (nb: no strokes; half a step down outside it - inside
-// the charcoal, which takes it, the line and the margin are its plain tone). Then the grizzle (from ~230 px), on m floored at the
-// beard's darkest flat tone (the charcoal at its own floor): short strokes along the fall of the hair (faceStrand) - dark gaps, kept
-// apart by the knit gate, a full step down (a step and a half on the lit chin; on the charcoal one HAIR_HD step, to HAIR_HD 1): a
-// third on the cheeks off the charcoal and the chin's sides, a quarter on the charcoal, a fifth on the chin's middle, a tenth under
-// the lip and on the moustache's halves (none on its middle, none in the outline's margin); light strands a full step up on the lit
-// middle, half a step on the dark side - on the moustache's halves 1 in 4 a full step and a few more half a step along their fall,
-// on its tips half of them (1 in 5 a full step: the horseshoe's legs), none on its middle; elsewhere 2 px clumps and lone strands
-// (about a third of the chin's middle, a fifth of the rest); on the charcoal lone strands only, 1 in 8 (1 in 3 in the 2 px beside
-// the light chin's edge, the hairs' tips crossing it), half a step; none under the lip or in the margin. From ~190 to ~230 px only
-// a few lone light strands; below ~190 px the flat tones alone (2 - 3 per side: at 110 - 190 px 1 px strands mottle into camo
-// blotches). nz: the smoothed normal's view z
+// under the halves' tone (HAIR_HD 2, at the roots HAIR_HD 1: gFaceK - the nostrils' shadow); a dark 1 px line just outside the halves'
+// and the tips' outer edge (a full step) and half a step along the tips' inner edges, both stopping short of the tips' ends (no
+// staple's feet), with a clean 2 px margin either side of the outer line (nb: no strokes; half a step down outside it) - on the
+// charcoal and its band the line half a step under their tone, never under HAIR_HD 2 (HAIR_HD 2 by the light chin's HAIR_HD 3: face-on
+// the horseshoe's legs stand two steps over the cheek beside them, as in the references) and the margin outside it their plain tone
+// with their own lone hairs and gaps. Then the grizzle (from ~230 px), on m floored at the beard's darkest flat tone (the charcoal at
+// its own floor): short strokes along the fall of the hair (faceStrand) - dark gaps, kept apart by the knit gate, a full step down (a
+// step and a half on the lit chin; on the charcoal one HAIR_HD step: off HAIR_HD 2 to HAIR_HD 1): a third on the cheeks off the
+// charcoal and the chin's sides, a quarter on the charcoal and its band, a fifth on the chin's middle, a tenth under the lip and on the
+// moustache's halves (none on its middle, none in the outline's margin off the charcoal); light strands a full step up on the lit
+// middle, half a step on the dark side - on the moustache's halves 1 in 4 a full step and a few more half a step along their fall, on
+// its tips half of them (1 in 5 a full step: the horseshoe's legs), none on its middle; elsewhere 2 px clumps and lone strands (about a
+// third of the chin's middle, a fifth of the rest); on the charcoal lone strands only, half a step (1 in 6 next to the light chin and
+// in the outline's margin there, 1 in 5 on the half-step band, half where the charcoal starts thinning to 1 in 5 by the ears, 1 in 3 in
+// the 2 px beside the light chin's edge, the hairs' tips crossing it); none under the lip or in the margin off the charcoal. From ~190
+// to ~230 px only a few lone light strands; below ~190 px the flat tones alone (2 - 3 per side: at 110 - 190 px 1 px strands mottle
+// into camo blotches). nz: the smoothed normal's view z
 float faceBeardTone(float tc0, vec3 p, vec3 S, float nz, vec3 px, vec3 py, float hd){
   float ax = abs(p.x), y = p.y, s = S.x, pw = max(uPxM, 0.0028), my = faceMouthY(ax);
   if (hd < 0.5) return tc0 > 1.5 ? (hd > 0.0 && ax < 0.02 && faceLine(y - (1.5965 - 0.0055 * (ax / 0.026) * (ax / 0.026)), vec3(0.0, 1.0, 0.0), px, py, 1.0).x > 0.5 ? 2.0 : 3.0) : 2.0;
@@ -1210,14 +1212,19 @@ float faceBeardTone(float tc0, vec3 p, vec3 S, float nz, vec3 px, vec3 py, float
   if (ul) tb -= 1.0;
   if (!mo) tb -= 0.5 * smoothstep(0.045, 0.06, s) + 0.5 * smoothstep(0.06, 0.085, s);   // the cheeks and the jaw's sides round the
                                                                               // moustache: darker toward the ears (the roots; off
-                                                                              // the charcoal: the game's angle, profile)
-  // the charcoal: outside the moustache from s ~0.0475 (just past the tips' outer edge; under them the light chin's side, ragged in 2 px
-  // rows +-1 px, coming in 6 mm toward the beard's lower edge); kw: its weight by the view (full face-on and in 3/4, none from ~63
-  // degrees off the front: the game's angle, profile, the back) - in walk / run the head's turn keeps faceFront within 0.28 - 0.38 at
-  // the game's angle and 0.74 - 0.81 in 3/4, clear of the ramp (0.45 - 0.62)
+                                                                              // the charcoal: the game's angle, profile, the 3/4
+                                                                              // near cheek)
+  // the charcoal: outside the moustache from s ~0.0475 (just past the tips' outer edge; under them the light chin's side, ragged in 2
+  // px rows +-1 px, coming in 6 mm toward the beard's lower edge), by the beard's own form, per pixel - kw: 1 where it turns away from
+  // the view (nz under 0.45: face-on the cheeks' sides out to the ears, the jaw's underside - face-on the cheek's nz runs from ~0.66 at
+  // the light chin's edge to ~0.2 at its outline), 0.5 a half-step band (to 0.75), 0 facing the view (its own tones: in profile and at
+  // the game's angle the near cheek, in 3/4 its front). Posterised per pixel, so as the head turns the edges slide across the beard and
+  // no region flips at once; from ~230 px each edge ragged along the strands (nz +-0.04 per 1 x 3 px strand cell, staggered by column -
+  // the hairs' tips, not a terminator line)
   float ce = 0.0475 - 0.006 * smoothstep(1.56, 1.53, y) + (faceHash(vec2(floor(y / (2.0 * pw)), sx)) - 0.5) * 2.0 * pw;
-  float kw = !mo && s > ce ? smoothstep(0.45, 0.62, faceFront()) : 0.0;
-  bool ck = kw > 0.5;
+  float kc = floor(s / pw) + sx, nj = nz + (hi ? 0.08 * (faceHash(vec2(kc, floor(y / (3.0 * pw) + faceHash(vec2(kc, 5.0))) + 37.0)) - 0.5) : 0.0);
+  float kw = !mo && s > ce ? 0.5 * (step(nj, 0.75) + step(nj, 0.45)) : 0.0;
+  bool ck = kw > 0.25;
   if (y - faceBeardBot(s) < 2.0 * pw) tb -= 0.5;                              // its lower edge, rolling under the jaw
   // the moustache: its halves half a step over the beard, the middle at its tone - mid greys whatever the light (at most HAIR_HD 5 and
   // 4 before the strands: the upper lip faces the key light more than the chin, and the chin stays the lightest of the beard)
@@ -1232,7 +1239,7 @@ float faceBeardTone(float tc0, vec3 p, vec3 S, float nz, vec3 px, vec3 py, float
   float yb = my + 0.0015 + e + pw, wj = (faceHash(vec2(floor(dot(vec2(s, y), vec2(0.8, 0.6)) / pw), floor(dot(vec2(s, y), vec2(0.6, -0.8)) / (3.0 * pw))) + sx) - 0.5) * 2.0 * pw;
   bool pt = mo && hi && !sh && y > yb && s < mix(0.0025, 0.016, clamp((y - yb) / max(1.629 - yb, 1e-3), 0.0, 1.0)) + wj * step(yb + pw, y);
   if (pt){ sh = true; tb = min(m0, 1.0) - 1.0; }
-  float nb = 0.0;
+  float nb = 0.0; bool ol = false;
   if (hi && mq.y < 0.75){
     // the outline (the edges' chart gradients: d so / dy = 0.226 f, d si / dy = -0.79 sqrt f; a 2 px core of which only the outer pixel
     // is drawn - the pixel just outside the edge, whatever the slant); nb: 2 px either side of the outer one, where no light clump or
@@ -1240,37 +1247,47 @@ float faceBeardTone(float tc0, vec3 p, vec3 S, float nz, vec3 px, vec3 py, float
     // framing the horseshoe's legs, as in the references)
     vec3 go = faceGrad(vec2(1.0, -0.2264 * mq.y), S);
     nb = faceLine(mq.z, go, px, py, 5.0).x;
-    if (!mo && mq.z > 0.0 && faceLine(mq.z, go, px, py, 2.0).x > 0.5){ sh = true; tb -= 1.0; }
+    if (!mo && mq.z > 0.0 && faceLine(mq.z, go, px, py, 2.0).x > 0.5){ sh = true; ol = true; tb -= 1.0; }
     else if (!mo && mq.w > 0.0 && faceLine(mq.w, faceGrad(vec2(-1.0, -0.7925 * sqrt(mq.y)), S), px, py, 2.0).x > 0.5){ sh = true; tb -= 0.5; }
     else if (!mo && mq.z > 0.0 && nb > 0.5) tb -= 0.5;
   }
   tb -= 0.5 * smoothstep(0.5, 0.25, nz);                                      // where it turns away from the view (the cheeks' sides
                                                                               // face-on, the chin's front in profile): half a step down
   if (faceBeardTop(s) - y < 1.2 * pw) tb -= 0.5;                              // the roots
-  // the charcoal: its own floor whatever the light; its lower edge and the jaw's outer side (both over the collar's dark) a step lighter
-  // - grey tips, so the beard's outline never merges into the collar
+  // the charcoal (cc): its own tones whatever the light - from ~230 px graded out from the light chin: ~1 cm past its edge (tz: s 0.016,
+  // ~3 px face-on at 600 px; the edge ragged in 3 px runs +-1 px) HAIR_HD 3, then HAIR_HD 2 out to the ears and under the jaw (smaller
+  // flat HAIR_HD 2); its lower edge and the jaw's outer side (both over the collar's dark) a step lighter - grey tips, so the beard's
+  // outline never merges into the collar. The half-step band: half a step over it, whatever the light too (both cheeks alike face-on),
+  // but never over HAIR_HD 3 by the light chin (tz - face-on the chin's edge lies in the band, nz ~0.66: one ring, not a light halo).
+  // The tips' outer line (ol) half a step under either, floored at HAIR_HD 2 (HAIR_HD 2 by the ring: a dark line framing the legs)
   bool fr = y - faceBeardBot(s) < 2.0 * pw || (s > 0.088 && y < 1.59);
-  tb = mix(tb, fr ? 0.5 : 0.0, kw);
+  bool tz = hi && s - ce < 0.016 + (faceHash(vec2(floor(y / (3.0 * pw)), sx + 3.0)) - 0.5) * 2.0 * pw;
+  float cc = fr || tz ? 0.5 : 0.0;
+  if (ck) tb = cc + (kw < 0.75 && (fr || !tz) ? 0.5 : 0.0) - (ol ? 0.5 : 0.0);
   if (sh){ gFaceK = pt && tb < -0.25 ? 1.0 : 0.0; return clamp(tb, 0.0, 2.5); }   // the drawn edges: no strokes over them
   tb = max(tb, 0.5 - 0.5 * float(ck));                                        // m: never under the darkest flat tone before the strokes
+  float mg = ck && mq.z > 0.0 ? nb : 0.0;                                     // the outline's outer margin on the charcoal: its strokes
   // the grizzle: dark gaps (before the knit gate) about a third on the cheeks off the charcoal and the chin's sides, a quarter on the
-  // charcoal, a fifth on the chin's middle, a tenth under the lip and on the moustache's halves, none on its middle or beside its
-  // outline - a full step down, a step and a half on the lit chin (the references' charcoal between the light hairs: salt and pepper,
-  // its middle tone kept); under ~430 px fewer, ramping from half at ~230 px to full at ~430 px (a stroke is a larger share of the
-  // beard there). The moustache's strokes run down and out from the middle, straight down along its tips (the droop)
-  float dk = hi ? mix(0.5, 1.0, smoothstep(0.0085, 0.0045, uPxM)) * (mo ? 0.12 * step(0.01, s) : (ck ? 0.24 : (ul ? 0.1 : mix(0.32, 0.2, cn)))) * (1.0 - nb) : 0.0;
+  // charcoal and its band (mg: in the outline's outer margin too), a fifth on the chin's middle, a tenth under the lip and on the
+  // moustache's halves, none on its middle or beside its outline off the charcoal - a full step down, a step and a half on the lit chin
+  // (the references' charcoal between the light hairs: salt and pepper, its middle tone kept); under ~430 px fewer, ramping from half
+  // at ~230 px to full at ~430 px (a stroke is a larger share of the beard there). The moustache's strokes run down and out from the
+  // middle, straight down along its tips (the droop)
+  float dk = hi ? mix(0.5, 1.0, smoothstep(0.0085, 0.0045, uPxM)) * (mo ? 0.12 * step(0.01, s) : (ck ? 0.24 : (ul ? 0.1 : mix(0.32, 0.2, cn)))) * (1.0 - nb + mg) : 0.0;
   vec3 h = faceStrand(vec2(s, y), mo ? 0.75 * (1.0 - mq.y) : -0.2 - 0.4 * smoothstep(0.005, 0.06, s), (p.x < 0.0 ? 41.0 : 0.0) + (mo ? 17.0 : 0.0), dk);
   if (hi){
     // light, in half steps: the moustache's halves 2 strands in 5 (1 in 4 a full step: HAIR_HD 7 on the lit side), its drooping tips
     // half (1 in 5 a full step: light hairs along the droop, the horseshoe's legs), none on its middle; elsewhere 2 px clumps and lone
-    // strands, a full step (about a third of the chin's middle, a fifth of the rest); on the charcoal lone strands only, 1 in 8 (1 in 3
-    // in the 2 px beside the light chin's edge), half a step (sparse grey hairs, no clumps); none under the lip or beside the outline;
-    // on the dark side half as much
+    // strands, a full step (about a third of the chin's middle, a fifth of the rest); on the charcoal and its half-step band lone strands
+    // only, half a step (grey hairs over the dark roots, no clumps) - 1 in 6 next to the light chin and in the outline's margin there
+    // (tz: HAIR_HD 4 on 3), 1 in 5 on the half-step band (HAIR_HD 4 on 3), on the charcoal half of them where it starts to turn away
+    // thinning to 1 in 5 by the ears and under the jaw (nj 0.45 -> 0.25: HAIR_HD 3 on 2), 1 in 3 in the 2 px beside the light chin's
+    // edge; none under the lip or beside the outline off the charcoal; on the dark side half as much
     float tp = smoothstep(0.0, 0.3, mq.y);
     float lg = mo ? (step(mix(0.6, 0.5, tp), h.x) + step(mix(0.75, 0.8, tp), h.x)) * step(0.01, s)
-                  : (ul || nb > 0.5 ? 0.0 : (ck ? 2.0 * step(s - ce < 2.0 * pw ? 0.67 : 0.875, h.x) : 2.0 * max(step(mix(0.86, 0.8, cn), h.y), step(mix(0.9, 0.86, cn), h.x))));
-    if (ck && h.z > 0.5){ tb -= 0.5; gFaceK = fr ? 0.0 : 1.0; }               // the charcoal's gaps a step down (HAIR_HD 1: under the
-                                                                              // ramp's floor)
+                  : (ul || nb - mg > 0.5 ? 0.0 : (ck ? 2.0 * step(s - ce < 2.0 * pw && mg < 0.5 ? 0.67 : (tz ? 0.833 : (kw > 0.75 ? mix(0.8, 0.5, smoothstep(0.25, 0.45, nj)) : 0.8)), h.x) : 2.0 * max(step(mix(0.86, 0.8, cn), h.y), step(mix(0.9, 0.86, cn), h.x))));
+    if (ck && h.z > 0.5){ tb -= 0.5; gFaceK = tb < -0.25 ? 1.0 : 0.0; }        // the charcoal's gaps a step down (off HAIR_HD 2: HAIR_HD
+                                                                              // 1, under the ramp's floor)
     else tb += h.z > 0.5 ? -1.0 - 0.5 * step(1.75, tb) : 0.5 * lg * (tb > 1.25 ? 1.0 : 0.5);
   }
   else if (uPxM < 0.0105) tb += 0.5 * step(0.84, h.x);
