@@ -1921,7 +1921,10 @@ const post = new T.ShaderMaterial({
 const postScene = new T.Scene(); postScene.add(new T.Mesh(new T.PlaneGeometry(2,2), post));
 const postCam = new T.Camera();
 
-const SIDE_YAW = 0.9;
+// the game's sprite view (the level's sheet is rendered at it; facing left, from pi - it): near profile, turned a little toward the
+// viewer. The viewer opens at it, the #side button returns to it and the HUD reads 'sprite' there; the climb faces into it (S.view,
+// which the sheet exporter sets to its own camera).
+const SIDE_YAW = 0.35;
 const S = { anim:'idle', weapon:'none', pxChar:96, yaw:SIDE_YAW, spin:false, outline:true,
   t:0, walk:0, run:0, aim:0, tp:0, shotT:9, dragging:false,
   // platformer clips: clip start (S.t), layer weight, current / cross-fade-from pose and switch time, the sprite view the climb faces
@@ -2186,14 +2189,17 @@ function lerpPose(a, b, k){
   for (const n in POSE0){ const x = a[n], y = b[n]; o[n] = Array.isArray(x) ? x.map((v, i) => v + (y[i] - v)*k) : x + (y - x)*k; }
   return o;
 }
-// fall: legs reaching down for the ground (near one forward), arms thrown out wide for balance (in the screen plane, so they read in
-// the 3/4 view), a small flail; the head looks down. The coat billows up in the air under it (vy) and flutters (fl).
+// fall: the legs letting down for the ground, apart - his right foot reaching forward and down, the left one trailing under the hips with
+// the knee bent, toes down; the arms lower and looser than at the apex: the left fist forward and down from a bent elbow (the forearm
+// slanting down, not a level stick that would read as pointing), the right one back by the hip and a little out, each hand on a slow
+// loop of 4 cm, out of step (a small balance motion, no windmill), fists loosely closed; the head level, eyes on the landing. The coat
+// billows up in the air under it (vy) and flutters (fl).
 function fallPose(ph){
-  const a = Math.sin(2*Math.PI*ph), b = Math.sin(2*Math.PI*ph + 2.1);
-  return pose({ p:[0,0.05,0], pp:-0.06, ln:-0.03, rl:0.03*a,
-    fR:[0.14 + 0.03*a, 0.28 + 0.06*a, 0.17], fL:[-0.1 - 0.03*a, 0.28 - 0.06*a, -0.17], kR:[1,-0.2,0.3], kL:[1,0.1,-0.3], tR:0.3, tL:0.5,
-    hR:[-0.04 + 0.04*b, 0.08 + 0.12*b, 0.41], hL:[0.08 - 0.04*b, 0.12 - 0.12*b, -0.4], eR:[-0.5,-1,0.2], eL:[-0.3,-1,-0.2], sR:0.1, sL:0.1, g:0.3,
-    hd:[0,-0.32], vy:-7, ay:0, fl:1 });
+  const a = Math.sin(2*Math.PI*ph), b = Math.sin(2*Math.PI*ph + 2.1), c = Math.cos(2*Math.PI*ph + 2.1);
+  return pose({ p:[0,0.04,0], pp:-0.04, ln:0.04, rl:0.02*a,
+    fR:[0.19 + 0.02*a, 0.26 + 0.03*a, 0.13], fL:[-0.02 - 0.02*a, 0.33 - 0.03*a, -0.13], kR:[1,-0.1,0.15], kL:[1,0.1,-0.15], tR:0.3, tL:0.5,
+    hR:[-0.06 + 0.04*c, -0.3 + 0.04*b, 0.3], hL:[0.16 - 0.04*c, -0.32 - 0.04*b, -0.2], eR:[-0.6,-1,0.6], eL:[-0.6,-1,-0.8], sR:0.02, sL:0.02, g:0.95,
+    hd:[0,-0.1], vy:-7, ay:0, fl:1 });
 }
 // climb: a ladder in the screen plane, the hero facing it from behind, turned a little to his right (turn: enough for the near
 // pauldron to show, little enough that both hands grip either side of the head - at a 3/4 turn the far hand hides behind it).
@@ -2219,38 +2225,44 @@ function climbPose(ph){
     habs:1, hR:[hx - 0.12*oR, C.hand[0] + C.s*yR, zc + C.hand[1]], hL:[hx - 0.12*oL, C.hand[0] + C.s*yL, zc - C.hand[1]],
     eR:[-0.3,-1,1], eL:[-0.3,-1,-1], sR:0.3*yR, sL:0.3*yL, g:0.45, wR:1 - oR, wL:1 - oL, hd:[0, 0.25], hands:1 });
 }
-// (The sprite camera sees the hero 3/4 from the front: +X is mostly toward the viewer, +Z (his right) toward screen left. Limbs that
-// must read in the silhouette go out sideways and up / down rather than straight forward.)
+// (The sprite camera, SIDE_YAW, sees the hero nearly in profile, turned a little toward the viewer: +X (forward) runs to screen right,
+// +Z (his right side) toward the viewer and a little to screen left; facing left, the camera at pi - SIDE_YAW sees his left side. A
+// limb reads by where it goes in the travel plane - forward / back, up / down; sideways (z) goes mostly into depth, and an arm thrown
+// out to the side and up reads as a hand raised beside the head. So the arms swing forward / back with little z, the hands stay at or
+// below the shoulders, fists loosely closed. Facing right the near limbs are his right ones (hR, fR), facing left his left ones.)
 // the ledge of the hang / ledge_up (body space: the corner x forward of the hips, its top y above the ground the hang is measured from -
 // high enough that the hanging feet clear the ground by ~0.35 m; grip: the hanging wrists under the top, the fists up to it)
 const LEDGE = { x:0.15, y:2.6, grip:0.14 };
 const CLIPS = {
-  // take-off (legs straight, up on the balls of the feet - the pointed toes end on the ground row; the far arm swings up toward the
-  // jump, the near one back) -> the near knee drives up, the far leg trails, the arms at full stretch -> both knees tucking, the arms
-  // opening out for the apex
+  // take-off (a diagonal push-off: the hips over the toes, the legs straight and slanting back, up on the balls of the feet - the
+  // pointed toes end on the ground row - the torso leaning into the jump; his left fist drives forward to chest height, the right
+  // one swings back) -> his right knee drives up, the left leg trails, the left fist forward, the right one back by the hip -> both
+  // knees coming up, the left fist drawing in, the right arm swinging forward
   jump_up: { fps:12, loop:false, hold:0.5, keys:[
-    pose({ p:[-0.01,0.095,0], pp:0.03, ln:0.06, fR:[-0.04,0.23,0.13], fL:[-0.08,0.26,-0.13], kR:[1,0,0.1], kL:[1,0,-0.1], tR:0.75, tL:0.7,
-      hR:[-0.2,-0.28,0.2], hL:[0.2,0.2,-0.14], eR:[-0.2,-1,0.6], eL:[-0.4,-1,-0.6], sR:0.0, sL:0.14, g:0.85, hd:[0,0.18], vy:2.5, ay:28 }),
-    pose({ p:[0,0.05,0], pp:0.02, ln:0.04, fR:[0.17,0.52,0.12], fL:[-0.14,0.2,-0.13], kR:[1,0.5,0.1], kL:[1,-0.3,-0.1], tR:0.4, tL:0.75,
-      hR:[-0.22,-0.2,0.24], hL:[0.18,0.27,-0.16], eR:[-0.2,-1,0.6], eL:[-0.4,-1,-0.6], sL:0.2, g:0.85, hd:[0,0.14], vy:5.2, ay:-9.8 }),
-    pose({ p:[0,0.06,0], pp:0.06, ln:0.08, fR:[0.13,0.5,0.14], fL:[0.0,0.4,-0.14], kR:[1,0.5,0.15], kL:[1,0.4,-0.12], tR:0.4, tL:0.5,
-      hR:[-0.14,-0.06,0.38], hL:[0.18,0.17,-0.32], eR:[-0.5,-1,0.3], eL:[-0.4,-1,-0.4], sR:0.04, sL:0.12, g:0.75, hd:[0,0.06], vy:4.2, ay:-9.8 })]},
-  // top of the arc: knees tucked up, arms spread for balance (near one out behind, far one out ahead), the coat weightless round the
-  // legs -> tipping over into the fall (vy already the fall's: the exporter gives the coat the arc's time to start lifting)
+    pose({ p:[0.02,0.06,0], pp:0.1, ln:0.2, fR:[-0.12,0.245,0.13], fL:[-0.15,0.26,-0.13], kR:[1,0,0.1], kL:[1,0,-0.1], tR:0.75, tL:0.7,
+      hR:[-0.3,-0.3,0.1], hL:[0.38,-0.12,-0.06], eR:[-1,0.2,0.3], eL:[0.2,-1,-0.3], sR:0.0, sL:0.06, g:1, hd:[0,0.1], vy:2.5, ay:28 }),
+    pose({ p:[0,0.05,0], pp:0.04, ln:0.1, fR:[0.16,0.5,0.12], fL:[-0.22,0.24,-0.12], kR:[1,0.5,0.1], kL:[1,-0.2,-0.1], tR:0.35, tL:0.7,
+      hR:[-0.28,-0.26,0.1], hL:[0.3,-0.13,-0.06], eR:[-1,0.3,0.3], eL:[-0.2,-1,-0.4], sL:0.06, g:1, hd:[0,0.1], vy:5.2, ay:-9.8 }),
+    pose({ p:[0,0.06,0], pp:0.08, ln:0.12, fR:[0.15,0.5,0.13], fL:[0.0,0.4,-0.13], kR:[1,0.5,0.12], kL:[1,0.4,-0.12], tR:0.4, tL:0.5,
+      hR:[0.08,-0.3,0.16], hL:[0.22,-0.18,-0.08], eR:[-0.6,-1,0.3], eL:[-0.6,-1,-0.3], sR:0.02, sL:0.04, g:1, hd:[0,0.08], vy:4.2, ay:-9.8 })]},
+  // top of the arc: a compact tuck - both knees up, both fists drawn in close in front of the chest (elbows bent and down, the
+  // forearms short), the head up looking ahead; the coat weightless round the legs -> tipping over into the fall, the legs starting
+  // to let down, the fists dropping a little (vy already the fall's: the exporter gives the coat the arc's time to start lifting)
   jump_apex: { fps:8, loop:false, hold:0.6, keys:[
-    pose({ p:[0,0.07,0], pp:0.1, ln:0.14, fR:[0.08,0.54,0.15], fL:[0.0,0.49,-0.15], kR:[1,0.6,0.15], kL:[1,0.6,-0.15], tR:0.35, tL:0.4,
-      hR:[-0.06,0.0,0.42], hL:[0.14,0.06,-0.4], eR:[-0.6,-1,0.2], eL:[-0.3,-1,-0.2], sR:0.08, sL:0.08, g:0.5, hd:[0,-0.08], vy:0.3, ay:-9.8 }),
-    pose({ p:[0,0.07,0], pp:0.06, ln:0.1, fR:[0.1,0.42,0.16], fL:[-0.06,0.38,-0.16], kR:[1,0.4,0.2], kL:[1,0.4,-0.2], tR:0.35, tL:0.45,
-      hR:[-0.05,0.05,0.42], hL:[0.12,0.1,-0.41], eR:[-0.6,-1,0.2], eL:[-0.3,-1,-0.2], sR:0.1, sL:0.1, g:0.4, hd:[0,-0.18], vy:-3.5, ay:-9.8 })]},
+    pose({ p:[0,0.08,0], pp:0.14, ln:0.16, fR:[0.08,0.6,0.15], fL:[0.0,0.55,-0.15], kR:[1,0.6,0.15], kL:[1,0.6,-0.15], tR:0.35, tL:0.4,
+      hR:[0.1,-0.28,0.05], hL:[0.13,-0.19,-0.06], eR:[-0.6,-1,0.3], eL:[-0.7,-1,-0.2], sR:0.02, sL:0.02, g:1, hd:[0,0.08], vy:0.3, ay:-9.8 }),
+    pose({ p:[0,0.07,0], pp:0.08, ln:0.1, fR:[0.12,0.44,0.15], fL:[-0.02,0.4,-0.15], kR:[1,0.4,0.18], kL:[1,0.3,-0.18], tR:0.35, tL:0.45,
+      hR:[0.03,-0.3,0.13], hL:[0.15,-0.25,-0.1], eR:[-0.6,-1,0.5], eL:[-0.7,-1,-0.4], sR:0.02, sL:0.02, g:1, hd:[0,-0.02], vy:-3.5, ay:-9.8 })]},
   fall: { fps:10, loop:true, n:3, fn:fallPose },
-  // impact (knees give, hips drop and pitch forward, arms forward for balance) -> deepest -> rising out of the crouch
+  // impact (feet flat, his right foot a little ahead; the knees start to give, the hips go back, the torso pitches forward, both fists
+  // forward for balance) -> deepest (hips low and back, torso over the knees) -> rising out of the crouch
   land: { fps:12, loop:false, hold:0.6, keys:[
-    pose({ p:[-0.03,-0.27,0], pp:0.22, ln:0.32, fR:[0.07,0.155,0.17], fL:[-0.07,0.155,-0.17], kR:[1,0,0.32], kL:[1,0,-0.32], oR:-0.3, oL:0.3,
-      hR:[0.24,-0.3,0.18], hL:[0.26,-0.32,-0.16], eR:[-1,-0.3,0.6], eL:[-1,-0.3,-0.6], g:0.7, hd:[0,-0.05], vy:0, ay:30 }),
-    pose({ p:[-0.04,-0.33,0], pp:0.28, ln:0.38, fR:[0.07,0.155,0.17], fL:[-0.07,0.155,-0.17], kR:[1,0,0.35], kL:[1,0,-0.35], oR:-0.3, oL:0.3,
-      hR:[0.2,-0.4,0.16], hL:[0.22,-0.4,-0.14], eR:[-1,-0.3,0.6], eL:[-1,-0.3,-0.6], g:0.7, hd:[0,-0.02], vy:0, ay:10 }),
-    pose({ p:[-0.02,-0.13,0], pp:0.12, ln:0.14, fR:[0.05,0.155,0.16], fL:[-0.05,0.155,-0.16], kR:[1,0,0.25], kL:[1,0,-0.25], oR:-0.26, oL:0.26,
-      hR:[0.12,-0.46,0.1], hL:[0.12,-0.46,-0.1], eR:[-1,-0.1,0.4], eL:[-1,-0.1,-0.4], g:0.6, hd:[0,0.04], vy:0, ay:0 })]},
+    pose({ p:[-0.06,-0.18,0], pp:0.24, ln:0.26, fR:[0.14,0.155,0.16], fL:[-0.1,0.155,-0.16], kR:[1,0,0.27], kL:[1,0,-0.27], oR:-0.25, oL:0.25,
+      hR:[0.3,-0.28,0.16], hL:[0.32,-0.24,-0.14], eR:[-1,-0.4,0.5], eL:[-1,-0.4,-0.5], g:1, hd:[0,0.05], vy:0, ay:30 }),
+    pose({ p:[-0.1,-0.33,0], pp:0.36, ln:0.38, fR:[0.14,0.155,0.16], fL:[-0.1,0.155,-0.16], kR:[1,0,0.32], kL:[1,0,-0.32], oR:-0.25, oL:0.25,
+      hR:[0.28,-0.36,0.15], hL:[0.3,-0.32,-0.13], eR:[-1,-0.4,0.5], eL:[-1,-0.4,-0.5], g:1, hd:[0,0.08], vy:0, ay:10 }),
+    pose({ p:[-0.04,-0.13,0], pp:0.14, ln:0.14, fR:[0.1,0.155,0.16], fL:[-0.07,0.155,-0.16], kR:[1,0,0.25], kL:[1,0,-0.25], oR:-0.24, oL:0.24,
+      hR:[0.14,-0.44,0.1], hL:[0.14,-0.44,-0.1], eR:[-1,-0.1,0.4], eL:[-1,-0.1,-0.4], g:0.9, hd:[0,0.06], vy:0, ay:0 })]},
   // rise: how far the body climbs per cycle (m) - a gripping hand slides down by C.s in grip of the cycle; the game moves the sprite up
   // at rise / dur m/s so the gripping hands stay planted on their rungs
   climb: { fps:8, loop:true, n:8, fn:climbPose, rise:CLIMB.s / CLIMB.grip },
