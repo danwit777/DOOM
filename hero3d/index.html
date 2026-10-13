@@ -32,6 +32,8 @@ button:disabled{opacity:.35;cursor:not-allowed}
 button[aria-pressed="true"]{background:var(--accent);color:#120d06;border-color:var(--accent)}
 button:focus-visible,input:focus-visible{outline:2px solid var(--accent-2);outline-offset:2px}
 kbd{font-family:var(--f-display);font-size:10px;color:var(--muted);margin-left:4px}
+.row.tight{gap:4px}
+.row.tight button{font-size:10px;padding:6px 6px;letter-spacing:0}
 .check{display:flex;align-items:center;gap:8px;font-size:14px}
 .pal{display:grid;grid-template-columns:repeat(9,1fr);gap:3px}
 .pal i{display:block;aspect-ratio:1;border:1px solid #000}
@@ -64,6 +66,19 @@ kbd{font-family:var(--f-display);font-size:10px;color:var(--muted);margin-left:4
       </div>
     </div>
     <div class="group">
+      <div class="label">Ruchy taktyczne (mocap)</div>
+      <div class="row tight" id="moves">
+        <button data-anim="alert" aria-pressed="false" disabled>Czujność</button>
+        <button data-anim="sneak" aria-pressed="false" disabled>Skradanie</button>
+        <button data-anim="lowrun" aria-pressed="false" disabled>Niski bieg</button>
+        <button data-anim="crouch" aria-pressed="false" disabled>Przysiad</button>
+        <button data-anim="crouchwalk" aria-pressed="false" disabled title="Chód w przysiadzie">W kucki</button>
+        <button data-seq="ladder" aria-pressed="false" disabled>Drabina</button>
+        <button data-seq="ledge" aria-pressed="false" disabled>Krawędź</button>
+        <button data-anim="roll" aria-pressed="false" disabled>Przewrót</button>
+      </div>
+    </div>
+    <div class="group">
       <div class="label">Wysokość postaci w pikselach</div>
       <div class="row" id="res">
         <button id="r-48" data-px="48" aria-pressed="false">48</button>
@@ -89,7 +104,7 @@ kbd{font-family:var(--f-display);font-size:10px;color:var(--muted);margin-left:4
     </div>
     <p class="note">Pipeline:
       <ol>
-        <li>siatka 3D ze szkieletem (Meshy), animacje chodu i biegu, pozy broni liczone przez IK na kościach,</li>
+        <li>siatka 3D ze szkieletem (Meshy), animacje chodu i biegu, ruchy taktyczne z biblioteki animacji Meshy (<code>anims.json</code>, źródła w CREDITS.md), pozy broni liczone przez IK na kościach,</li>
         <li>render do małego bufora bez antyaliasingu,</li>
         <li>kolor tekstury × pasmo światła, potem przyciągnięty do najbliższego koloru z palety sprite'a,</li>
         <li>czarny kontur i linie wewnętrzne z bufora głębi, czyszczenie pojedynczych pikseli, skalowanie co do piksela.</li>
@@ -1797,10 +1812,10 @@ let rt = null;
 const post = new T.ShaderMaterial({
   uniforms:{ tC:{value:null}, tD:{value:null}, px:{value:new T.Vector2(1,1)}, uOutline:{value:1}, uInner:{value:0.004}, uDesp:{value:1}, uOW:{value:1}, uEyeC:{value:new T.Color(PAL.eye)},
     uRimC:SH.uRimC, uRimK:SH.uRimK, bgTop:{value:new T.Color('#11181a')}, bgLow:{value:new T.Color('#0b0f10')}, floorC:{value:new T.Color('#1d211d')}, floorL:{value:new T.Color('#343027')},
-    groundY:{value:0}, shC:{value:new T.Vector2()}, shR:{value:new T.Vector2(1,1)}, uClear:{value:0} },
+    groundY:{value:0}, shC:{value:new T.Vector2()}, shR:{value:new T.Vector2(1,1)}, uClear:{value:0}, uLedge:{value:new T.Vector3()}, uLadder:{value:new T.Vector3()}, uRung:{value:0} },
   vertexShader:`varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.0,1.0); }`,
   fragmentShader:`uniform sampler2D tC; uniform sampler2D tD; uniform vec2 px; uniform float uOutline; uniform float uInner; uniform float uDesp; uniform float uOW; uniform vec3 uEyeC; uniform vec3 uRimC; uniform float uRimK;
-  uniform vec3 bgTop; uniform vec3 bgLow; uniform vec3 floorC; uniform vec3 floorL; uniform float groundY; uniform vec2 shC; uniform vec2 shR; uniform float uClear;
+  uniform vec3 bgTop; uniform vec3 bgLow; uniform vec3 floorC; uniform vec3 floorL; uniform float groundY; uniform vec2 shC; uniform vec2 shR; uniform float uClear; uniform vec3 uLedge; uniform vec3 uLadder; uniform float uRung;
   varying vec2 vUv;
   float D(vec2 o){ return texture2D(tD, vUv + o*px).r; }
   vec3 C(vec2 o){ return texture2D(tC, vUv + o*px).rgb; }
@@ -1842,10 +1857,17 @@ const post = new T.ShaderMaterial({
       if (uOutline > 0.5 && near) { gl_FragColor = vec4(0.0,0.0,0.0,1.0); return; }
       if (uClear > 0.5) { gl_FragColor = vec4(0.0); return; }
       vec2 f = gl_FragCoord.xy; vec3 c;
-      if (f.y < groundY) {
-        c = floorC; if (f.y > groundY - 1.0) c = floorL;
+      // uLedge (tactical moves): z 1 = a ledge whose corner is at (x, y) px, the platform to the right of it; z 2 = a ladder up to a
+      // landing (a floor slab x px thick across the frame) whose top is at y: rails at uLadder.x +- uLadder.y px, rungs every uLadder.z px
+      // (uRung px above the ground and on)
+      bool ld = (uLedge.z > 0.5 && uLedge.z < 1.5 && f.x >= uLedge.x && f.y < uLedge.y) || (uLedge.z > 1.5 && f.y < uLedge.y && f.y > uLedge.y - uLedge.x);
+      float lx = abs(f.x - uLadder.x);
+      bool lad = uLedge.z > 1.5 && f.y >= groundY && ((abs(lx - uLadder.y) < 0.75 && f.y < uLedge.y + 2.0*uLadder.z) || (lx < uLadder.y && f.y < uLedge.y && mod(f.y - groundY - uRung, uLadder.z) < 1.0));
+      if (f.y < groundY || ld) {
+        c = floorC; if (f.y > (ld ? uLedge.y : groundY) - 1.0) c = floorL;
         vec2 q = (f - shC) / shR; if (dot(q,q) < 1.0) c = vec3(0.04,0.05,0.045);
-      } else c = (f.y - groundY) < 6.0 ? bgLow : bgTop;
+      } else if (lad) c = floorL;
+      else c = (f.y - groundY) < 6.0 ? bgLow : bgTop;
       gl_FragColor = vec4(c,1.0); return;
     }
     vec3 col = C(vec2(0.0));
@@ -1904,7 +1926,15 @@ const S = { anim:'idle', weapon:'none', pxChar:96, yaw:SIDE_YAW, spin:false, out
   t:0, walk:0, run:0, aim:0, tp:0, shotT:9, dragging:false,
   // platformer clips: clip start (S.t), layer weight, current / cross-fade-from pose and switch time, the sprite view the climb faces
   // into (the exporter sets it with the camera yaw), the jump arc the coat feels (vertical speed / acceleration, flutter, its period)
-  t0:0, air:0, airPose:null, airFrom:null, airSw:0, view:SIDE_YAW, airV:0, airA:0, airF:0, airP:1 };
+  t0:0, air:0, airPose:null, airFrom:null, airSw:0, view:SIDE_YAW, airV:0, airA:0, airF:0, airP:1,
+  // tactical moves: the viewer sequence (ladder / ledge; it carries the hero's offset as a climb ends higher), the camera's follow
+  // height (follow: false = a fixed camera; manual mode has one too), the floor the shadow falls on (x, y), the backdrop (ledge 0 none, 1 a ledge
+  // with its corner at ledgeP, 2 a ladder up to a landing); the moves' travel feel for the coat (mvW / mvR: walk- / run-like weight,
+  // mvSpd m/s; mvD: how much less the coat follows the thighs, MOVES drape; mvT: how much the coat's back swing limit shrinks, MOVES tail;
+  // mvO / mvRig: MOVES open / rig; mvG: the moves' weight - the coat then takes its heading from the hips' lateral axis and lies on the floor at mvFl rather than
+  // hanging through it; queue: an anim asked for during a committed one-shot, MOVES commit)
+  seq:null, camY:0, follow:true, floor:new T.Vector2(), ledge:0, ledgeP:new T.Vector3(0, 2.6, 0), mvW:0, mvR:0, mvSpd:0, mvD:0, mvT:0,
+  mvG:0, mvFl:0, mvO:0, mvRig:0, mvGive:0, queue:null, replay:true };
 let W=160, H=120, scale=1;
 const CHAR_H = 1.95;
 function resize(){
@@ -2078,8 +2108,23 @@ function collarDrive(){
     setBoneWorldQ(B['collarL_'+s], ta.copy(h).multiply(qs).multiply(BIND.spine_03.w), 1);
   }
 }
+// IK.soft (update sets it while a tactical move has weight): a layer at weight w < 1 solves in full, then turns each bone from where it
+// was by w of the way (world-space slerp of the upper / lower bone). The base path blends only the target by w and puts the bend on
+// the pole at full strength down to the smallest weight, so a layer fading out under a move held the knees / elbows on its pole to
+// its last frame, then let go in one (a pop). The base anims (no move) keep that path exactly.
+const IK = { soft:false }, _ikA = new T.Quaternion(), _ikB = new T.Quaternion(), _ikC = new T.Quaternion(), _ikD = new T.Quaternion();
 function limbIK(up, lo, ha, a, b, targetW, poleW, w){
   if (w <= 0.001) return;
+  if (IK.soft && w < 1){
+    up.updateWorldMatrix(true, true); up.getWorldQuaternion(_ikA); lo.getWorldQuaternion(_ikB);
+    limbSolve(up, lo, ha, a, b, targetW, poleW, 1);
+    up.getWorldQuaternion(_ikC); lo.getWorldQuaternion(_ikD);
+    setBoneWorldQ(up, _ikA.slerp(_ikC, w), 1); setBoneWorldQ(lo, _ikB.slerp(_ikD, w), 1);
+    return;
+  }
+  limbSolve(up, lo, ha, a, b, targetW, poleW, w);
+}
+function limbSolve(up, lo, ha, a, b, targetW, poleW, w){
   up.updateWorldMatrix(true,false); const Sp=up.getWorldPosition(new T.Vector3());
   // blend the target from the current end position so w<1 eases in
   ha.updateWorldMatrix(true,false); const cur=ha.getWorldPosition(new T.Vector3());
@@ -2118,7 +2163,8 @@ const STANCE = {
 };
 // head direction per pose: [yaw (+ = to the character's left), pitch (+ = up)]
 const LOOK = { relaxed:[0,0.07], idle:[0.05,-0.05], rifle:[0.2,-0.04], pistol:[-1.35,0.2] };
-const _v=new T.Vector3(), _v2=new T.Vector3(), _qy=new T.Quaternion(), _qp=new T.Quaternion();
+const _v=new T.Vector3(), _v2=new T.Vector3(), _v3=new T.Vector3(), _qy=new T.Quaternion(), _qp=new T.Quaternion();
+const _lift=new T.Vector2(), _sOff=new T.Vector3();   // (update: the moves' offset, the standing layer's floor)
 
 // ---------- Platformer clips: jump_up, jump_apex, fall, land, climb (unarmed) ----------
 // Laid over the rest pose like the standing layer, in body space (+X forward, +Y up, +Z the character's right, origin on the ground
@@ -2175,6 +2221,9 @@ function climbPose(ph){
 }
 // (The sprite camera sees the hero 3/4 from the front: +X is mostly toward the viewer, +Z (his right) toward screen left. Limbs that
 // must read in the silhouette go out sideways and up / down rather than straight forward.)
+// the ledge of the hang / ledge_up (body space: the corner x forward of the hips, its top y above the ground the hang is measured from -
+// high enough that the hanging feet clear the ground by ~0.35 m; grip: the hanging wrists under the top, the fists up to it)
+const LEDGE = { x:0.15, y:2.6, grip:0.14 };
 const CLIPS = {
   // take-off (legs straight, up on the balls of the feet - the pointed toes end on the ground row; the far arm swings up toward the
   // jump, the near one back) -> the near knee drives up, the far leg trails, the arms at full stretch -> both knees tucking, the arms
@@ -2204,17 +2253,48 @@ const CLIPS = {
       hR:[0.12,-0.46,0.1], hL:[0.12,-0.46,-0.1], eR:[-1,-0.1,0.4], eL:[-1,-0.1,-0.4], g:0.6, hd:[0,0.04], vy:0, ay:0 })]},
   // rise: how far the body climbs per cycle (m) - a gripping hand slides down by C.s in grip of the cycle; the game moves the sprite up
   // at rise / dur m/s so the gripping hands stay planted on their rungs
-  climb: { fps:8, loop:true, n:8, fn:climbPose, rise:CLIMB.s / CLIMB.grip }
+  climb: { fps:8, loop:true, n:8, fn:climbPose, rise:CLIMB.s / CLIMB.grip },
+  // ledge_up: from the hang (the Meshy clip's pose as the page sets it against the wall: the shoulders behind the corner, the arms
+  // reaching up / forward to the top, the legs hanging) -> chin-up, the legs hanging straight -> the hands onto the top, pressing the
+  // body up, the trunk leaning out over the edge, the legs still hanging behind the wall -> the press at its top: the hips well above
+  // the top, still behind the wall, the trunk leaning far over the hands -> the near knee swung up over the edge onto the top (from that
+  // height its arc clears the corner), the far leg hanging -> crouched on the top -> standing on it. Below the top every joint stays
+  // behind the wall face (wall: the legs are also held off it, wallLegs). habs: the hands on the ledge. rise / travel: where he ends
+  // (the game moves its anchor by them: up onto the ledge, travel forward); the viewer camera follows. L the top, G the hanging
+  // wrists, C the corner; p is the hips' offset from their rest (1.056 m up).
+  ledge_up: { fps:4, loop:false, hold:1.0, spline:true, wall:true, rise:LEDGE.y, travel:0.55, keys:((L, G, C) => [
+    pose({ p:[-0.005,0.428,0], fR:[-0.04,0.60,0.16], fL:[-0.05,0.59,-0.10], kR:[1,0,0.1], kL:[1,0,-0.1], tR:0.5, tL:0.5, oR:-0.1, oL:0.1,
+      habs:1, hR:[C+0.07,G,0.155], hL:[C+0.07,G,-0.215], eR:[-1,-0.3,0.5], eL:[-1,-0.3,-0.5], sR:0.3, sL:0.3, g:1.1, hd:[0,0.2], hands:1 }),
+    pose({ p:[-0.037,0.864,0], pp:-0.05, ln:0.05, fR:[-0.1,1.08,0.15], fL:[-0.12,1.02,-0.12], kR:[1,0.1,0.1], kL:[1,0,-0.1], tR:0.5, tL:0.6, oR:-0.1, oL:0.1,
+      habs:1, hR:[C+0.07,G,0.16], hL:[C+0.07,G,-0.2], eR:[-0.5,-1,0.5], eL:[-0.5,-1,-0.5], sR:0.15, sL:0.15, g:1.1, hd:[0,0.3], hands:1 }),
+    pose({ p:[-0.117,L-1.306,0], pp:0.25, ln:0.35, fR:[-0.2,L-1.13,0.15], fL:[-0.18,L-1.1,-0.12], kR:[1,0,0.1], kL:[1,0,-0.1], tR:0.4, tL:0.4, oR:-0.1, oL:0.1,
+      habs:1, hR:[C+0.12,L+0.06,0.2], hL:[C+0.12,L+0.06,-0.2], eR:[-1,0.5,0.4], eL:[-1,0.5,-0.4], g:1.0, hd:[0,0.05], hands:1 }),
+    pose({ p:[-0.057,L-0.656,0], pp:0.6, ln:0.45, fR:[-0.2,L-0.42,0.15], fL:[-0.22,L-0.45,-0.12], kR:[1,0,0.1], kL:[1,0,-0.1], tR:0.4, tL:0.5, oR:-0.12, oL:0.1,
+      habs:1, hR:[C+0.17,L+0.06,0.24], hL:[C+0.17,L+0.06,-0.24], eR:[-1,0.3,0.5], eL:[-1,0.3,-0.5], g:0.9, hd:[0,-0.05], hands:1 }),
+    pose({ p:[0.053,L-0.606,0], pp:0.55, ln:0.4, fR:[-0.1,L+0.0,0.15], fL:[-0.25,L-0.1,-0.12], kR:[1,-0.3,0.12], kL:[1,0,-0.1], tR:0.3, tL:0.5, oR:-0.15, oL:0.1,
+      habs:1, hR:[C+0.2,L+0.06,0.26], hL:[C+0.2,L+0.06,-0.26], eR:[-1,0.2,0.5], eL:[-1,0.2,-0.5], g:0.9, hd:[0,0.0], hands:1 }),
+    pose({ p:[0.303,L-0.556,0], pp:0.35, ln:0.3, fR:[0.4,L+0.155,0.16], fL:[0.2,L+0.17,-0.14], kR:[1,0.3,0.15], kL:[1,0.3,-0.15], tR:0, tL:0.1, oR:-0.2, oL:0.2,
+      habs:1, hR:[0.62,L+0.36,0.4], hL:[0.56,L+0.36,-0.42], eR:[-0.5,-1,0.6], eL:[-0.5,-1,-0.6], g:0.8, hd:[0,0.05], hands:1 }),
+    pose({ p:[0.553,L-0.035,0], ln:0.05, fR:[0.55,L+0.155,0.15], fL:[0.55,L+0.155,-0.15], kR:[1,0,0.12], kL:[1,0,-0.12], oR:-0.22, oL:0.22,
+      habs:1, hR:[0.6,L+0.945,0.4], hL:[0.6,L+0.945,-0.4], eR:[-1,0,0.45], eL:[-1,0,-0.45], g:0.5, hd:[0,0.07], hands:1 })])(LEDGE.y, LEDGE.y - LEDGE.grip, LEDGE.x)}
 };
 for (const k in CLIPS){ const C = CLIPS[k]; if (C.keys) C.n = C.keys.length; C.dur = C.n / C.fps; }
 // the clip's pose at clip time tau. Keyed clips play once and hold their last key; the viewer replays them (hold, ease back to the first
 // key, play again) so the button keeps showing the motion - the sprite frames (tau = i / fps) are the keys themselves.
 function clipPose(C, tau){
   if (C.fn) return C.fn(((tau / C.dur) % 1 + 1) % 1);
-  const K = C.keys.length, span = (K - 1) / C.fps, back = 0.3, L = span + C.hold + back, u = tau % L;
+  // (a climb that ends higher - ledge_up - replays only in the viewer: HERO.setAnim holds its end)
+  const K = C.keys.length, span = (K - 1) / C.fps, back = 0.3, L = span + C.hold + back, u = C.rise && !S.replay ? Math.min(tau, span + C.hold) : tau % L;
   if (u >= span + C.hold) return lerpPose(C.keys[K-1], C.keys[0], smooth01((u - span - C.hold) / back));
   const c = Math.min(K - 1, u * C.fps), i = Math.floor(c);
-  return i >= K - 1 ? C.keys[K-1] : lerpPose(C.keys[i], C.keys[i+1], smooth01(c - i));
+  return i >= K - 1 ? C.keys[K-1] : C.spline ? splinePose(C.keys, i, c - i) : lerpPose(C.keys[i], C.keys[i+1], smooth01(c - i));
+}
+// Catmull-Rom through the keys (velocity carries through a key instead of stopping at it); the ends are clamped
+function splinePose(K, i, u){
+  const a = K[Math.max(0, i - 1)], b = K[i], c = K[i + 1], d = K[Math.min(K.length - 1, i + 2)], o = {}, u2 = u*u, u3 = u2*u;
+  const cr = (p0, p1, p2, p3) => 0.5*(2*p1 + (p2 - p0)*u + (2*p0 - 5*p1 + 4*p2 - p3)*u2 + (3*p1 - p0 - 3*p2 + p3)*u3);
+  for (const n in POSE0){ const x = b[n]; o[n] = Array.isArray(x) ? x.map((v, j) => cr(a[n][j], v, c[n][j], d[n][j])) : cr(a[n], x, c[n], d[n]); }
+  return o;
 }
 // pose the body (pelvis, spine, legs, feet) with weight w; the arms are posed after the head (airArms)
 function airBody(P, w){
@@ -2257,12 +2337,508 @@ function airArms(P, w, wy = w){   // wy: the body yaw's weight (airBody's), when
   }
 }
 
+// ---------- Tactical moves (MGS-style, unarmed): mocap clips baked onto this rig (anims.json, made by tools/retarget.cjs) ----------
+// Source: the Meshy animation library on the owner's account - Meshy rigged hero.glb's own mesh, so the clips sit on this rig 1:1
+// (CREDITS.md). They drive the bones through the mixer like the GLB's walk / run; while one plays, the standing layer (stance IK), the
+// relaxed hanging arms and the head look are off, and a light correction layer goes on top (moveBody / moveHead / moveArms). Per move:
+//   clip (in anims.json); rate (playback speed); loop, or a one-shot (it holds its last frame; the viewer's buttons replay it after
+//   'hold' s, cross-fading back to its start - S.replay, HERO.setAnim clears it; asked for again while it still shows, it cross-fades
+//   from where it is into its start the same way).
+//   Body: drop (m): the hips lowered, the legs re-solved onto the clip's own feet; back (rad): the whole spine turned back (+) or forward;
+//   flat 0..1: the upper back un-rounded - the chest pitched no further forward than the trunk leans (flatBack); lean (rad): the trunk
+//   leaned to that from the lower back; face 'in': back to the camera (the ladder stands in the backdrop plane, turned by MOVE_TURN);
+//   wall: the ledge hang held off the wall (wallHang); floor: it goes down onto the floor - the backpack (built here, not in the bake's
+//   mesh) is kept above it too (the coat lies on the floor under any move, the boots never go through it).
+//   Head: look (rad): the face's pitch held there, steady over the clip's bob (0 level, + up; moveHead); headUp (rad): a lift on top;
+//   breathe: a held pose breathes and looks slowly round.
+//   Arms: grip: finger curl (Meshy's rig has no fingers: 0.55 relaxed, 0.9 a loose fist, 1.15 the guard / holding on); guard 0..1: the
+//   fists come up in front of the chest, elbows by the ribs (an unarmed CQC guard, GUARD) instead of the clip's reaching / spread arms;
+//   tuck 0..1: the hands pulled that far in toward the shoulders (a sprint's arms pump bent); relax [t0, t1] (clip s): the arms let go
+//   and hang at the sides over that span (the ladder's top-out ends holding the rails wide).
+//   Coat: coat [walk, run]: how it feels the travel; drape 0..1: the panels follow the thighs that much less (a deep crouch's thigh
+//   swing would lift the back panel like a stiff cape); tail 0..1: the back swing limit scaled to that (the back panel stays nearer
+//   the floor over a trailing leg); open (m): a leg that far behind a front panel still leaves through the coat's opening instead of
+//   spreading the panel out sideways (the alert's wide stance); rig 0..1: as the hips turn over, the skirt is carried round with the
+//   legs, its hem gathered (the roll - hanging free it would fall over the chest and arms; COAT.rigInv / rigGather).
+//   One-shots: settle: { at:[t0, t1] clip s, guard, back, headUp } eased in over that span (the roll ends in a guard, head up); commit
+//   (s): setAnim(a) during the clip's first 'commit' s waits until then (the roll: until he has stood up - blending out of it upside
+//   down would swing the bones the short way round; setAnim(a, true) cuts at once); plant: the boots hold where they stood until the
+//   clip lifts them (movePlant).
+//   Viewer: follow: the camera follows the hips up; ledge: the ledge is drawn.
+// For the game: HERO.moves[name] = { dur (s, at rate), loop, fps, speed (m/s at rate: the in-place loop's ground speed along his
+// facing - a planted foot travels back at exactly this, straight, so moving the hero at it keeps the feet still on the ground),
+// screen (m/s: the same speed as the sprite shows it across the screen in the sprite view, yaw SIDE_YAW: speed x cos(yaw) - scroll the
+// sprite at it; at a pure profile, yaw 0, it is speed), rise (m: the ladder loop's climb per cycle; how much higher a one-shot ends),
+// rm (one-shots: forward travel from frame 0 per frame at fps, m - the hips stay put; it keeps a planted foot / hand still), travel
+// (m: rm's last), rungs (the ladder loop: { spacing, phase } m - its gripping hands hold rungs at phase + k spacing above the floor
+// it starts the loop from: draw the ladder's rungs there) }; the keyed ledge climb is HERO.CLIPS.ledge_up (rise, travel; its ledge corner is LEDGE.x forward of the hips). The
+// travel is along his facing: for the ladder (facing into the screen) it is depth - onto the rungs / the landing - which a side view
+// leaves out. A one-shot that ends higher or further on (ladder_on / ladder_off / ledge_up, the roll's travel): the game moves its
+// anchor by rise / travel when it ends and switches with a cut (setAnim(next, true)) - blended, the next anim would start from the
+// old anchor. HERO.setAnim plays one-shots once (no replay).
+// The page fetches anims.json next to itself: publish it with the page (and hero.json), or the moves stay off (a console warning).
+// (sneak, crouch and crouchwalk are one Meshy crouch walk: the sneak with the hips raised, shorter steps, the trunk and neck straighter -
+// the bake does those, tools/anims_spec.json - so the three read as three heights: a half-crouched walk, a low walk with the shortest
+// steps, a held deep crouch)
+const MOVES = {
+  alert:      { clip:'alert', loop:true, grip:0.9, guard:0.85, drop:0.04, flat:1, lean:0.12, look:-0.05, drape:0.8, tail:0.5, open:0.15 },
+  sneak:      { clip:'sneak', loop:true, rate:0.8, grip:1.15, guard:1, flat:1, look:-0.08, coat:[0.35, 0] },
+  lowrun:     { clip:'lowrun', loop:true, rate:0.85, grip:0.9, tuck:0.3, drop:0.11, flat:1, look:-0.12, coat:[0, 0.85] },
+  crouch:     { clip:'crouch', loop:true, grip:1.15, guard:1, back:0.15, drop:0.24, flat:1, look:-0.05, breathe:1, drape:0.5, tail:0.7 },
+  crouchwalk: { clip:'crouchwalk', loop:true, rate:0.65, grip:1.15, guard:1, back:0.15, drop:0.14, flat:1, look:-0.05, coat:[0.25, 0], drape:0.6, tail:0.6 },
+  ladder_on:  { clip:'ladder_on', hold:0.6, face:'in', grip:1.15, follow:1 },
+  ladder:     { clip:'ladder', loop:true, face:'in', grip:1.15, follow:1 },
+  ladder_off: { clip:'ladder_off', hold:0.6, face:'in', grip:1.15, follow:1, relax:[2.5, 3.3] },
+  hang:       { clip:'hang', loop:true, grip:1.15, breathe:0.6, follow:1, ledge:1, wall:{ at:-0.14, tilt:-0.03, tilt0:0.12, sway:0.35, legs:1, gap:0.07, reach:0.04, grips:{ l:-0.215, r:0.155 } } },
+  roll:       { clip:'roll', rate:1.2, plant:1, hold:0.5, grip:0.9, coat:[0, 0.5], rig:1, commit:1.15, floor:1, settle:{ at:[1.05, 1.5], guard:1, back:0.2, headUp:0.3 } }
+};
+// the ladder's turn away from a pure back view (rad, toward his right): enough to show the near pauldron, little enough that the far
+// hand still shows on its rail (the clip grips the rails at shoulder height, wider than the keyed climb's rungs)
+const MOVE_TURN = 0.15;
+// a switch to / from a tactical move eases in over this long (s; update)
+const MOVE_ONSET = 0.12;
+// the guard: wrist targets from the chest (spine_03, about at the shoulders' height; the clips raise / drop the shoulders themselves)
+// and elbow poles, in the bind's body space (+X forward, +Y up, +Z his right), turned with the chest: the rear (right) fist in front of
+// the right of the chest at the collarbone, the lead (left) one further out and up at the chin (the two read apart in the sprite's 3/4
+// view instead of one band across the chest), the elbows down by the ribs
+const GUARD = { r:[0.19,0.02,0.13], l:[0.3,0.1,-0.05], er:[-0.4,-1,0.1], el:[-0.4,-1,-0.1] };
+// viewer sequences (one button each): onto the ladder, 2.5 cycles up it, off at the top and a look round; the hang, the climb onto the
+// ledge and a look round on it. The game drives the same states itself (setAnim) with its own timing. (The ladder loop starts where
+// ladder_on ends - the left hand up - and ladder_off starts from the loop's half cycle: climb n + 0.5 cycles between them.)
+const SEQS = {
+  ladder: [ { a:'ladder_on' }, { a:'ladder', cycles:2.5 }, { a:'ladder_off' }, { a:'alert', t:1.2 } ],
+  ledge:  [ { a:'hang', cycles:2 }, { a:'ledge_up' }, { a:'alert', t:1.2 } ]
+};
+// the viewer ladder's rungs (m): every sp, the first y0 above the ground - where the ladder loop's hands grip them after the mount
+// (anims.json ladder.rungs, set by loadMoves)
+const RUNG = { sp:0.3, y0:0 };
+const MV = {};          // move -> { d, C (its anims.json entry), dur, acts:[action, its twin for the replay], k, t0, w, off, off0, climb, fade }
+const moves = {};       // HERO.moves (the game-facing numbers)
+function decodeMoves(A){
+  const i16 = s => { const b = atob(s), n = b.length >> 1, a = new Int16Array(n);
+    for (let i = 0; i < n; i++){ const v = b.charCodeAt(2*i) | (b.charCodeAt(2*i + 1) << 8); a[i] = v > 32767 ? v - 65536 : v; } return a; };
+  const out = {};
+  for (const name in A.clips){
+    const C = A.clips[name], n = C.n, nt = C.tracks.length, q = i16(C.q), p = i16(C.p);
+    // a loop gets its first frame again one frame after its last, so it wraps smoothly; a one-shot ends on its last frame
+    const m = C.loop ? n + 1 : n, times = new Float32Array(m); for (let i = 0; i < m; i++) times[i] = i / C.fps;
+    const tracks = C.tracks.map((j, t) => { const v = new Float32Array(m*4);
+      for (let i = 0; i < m; i++){ const f = i % n; for (let c = 0; c < 4; c++) v[i*4 + c] = q[(f*nt + t)*4 + c] / A.qs; }
+      return new T.QuaternionKeyframeTrack(A.bones[j] + '.quaternion', times, v); });
+    const pv = new Float32Array(m*3); for (let i = 0; i < m; i++) for (let c = 0; c < 3; c++) pv[i*3 + c] = p[(i % n)*3 + c] / A.ps;
+    tracks.push(new T.VectorKeyframeTrack('pelvis.position', times, pv));
+    const dur = (m - 1) / C.fps;
+    out[name] = { clip:new T.AnimationClip('mv_' + name, dur, tracks), C, dur };
+  }
+  return out;
+}
+async function loadMoves(){
+  const r = await fetch('anims.json'); if (!r.ok) throw new Error('anims.json: ' + r.status);
+  const D = decodeMoves(await r.json());
+  for (const m in MOVES){
+    const d = MOVES[m], e = D[d.clip]; if (!e) continue;
+    d.rate = d.rate || 1;
+    const acts = [mixer.clipAction(e.clip)]; if (!d.loop) acts.push(mixer.clipAction(e.clip.clone()));
+    for (const a of acts){ a.play(); a.setEffectiveWeight(0); }
+    MV[m] = { d, C:e.C, dur:e.dur, acts, k:0, t0:0, w:0, off:new T.Vector2(), off0:new T.Vector2(), climb:false, fade:false };
+    const sp = (e.C.speed || 0) * d.rate;
+    moves[m] = { dur:e.dur / d.rate, loop:!!d.loop, fps:e.C.fps * d.rate, speed:sp, screen:+(sp*Math.cos(SIDE_YAW)).toFixed(3), rise:e.C.rise || 0,
+      rm:e.C.rm, travel:d.loop ? 0 : e.C.rm[e.C.rm.length - 1] || 0, src:e.C.src };
+    if (e.C.rungs) moves[m].rungs = e.C.rungs;
+  }
+  const rg = MV.ladder && MV.ladder.C.rungs;
+  if (rg){ RUNG.sp = rg.spacing; RUNG.y0 = (((MV.ladder_on ? MV.ladder_on.C.rise || 0 : 0) + rg.phase) % rg.spacing + rg.spacing) % rg.spacing; }
+  // (a sequence's button only when every one of its steps is there)
+  document.querySelectorAll('#moves button').forEach(b => { const q = SEQS[b.dataset.seq];
+    b.disabled = !(MV[b.dataset.anim] || (q && q.every(st => MV[st.a] || CLIPS[st.a]))); });
+}
+// the move's travel speed now (m/s): a loop's ground speed, a one-shot's root motion (the coat feels it)
+function moveSpeed(v, t){
+  if (v.d.loop) return (v.C.speed || 0) * v.d.rate;
+  if (!v.d.coat) return 0;
+  const f = Math.min(v.C.n - 2, Math.max(0, Math.floor((t - v.t0) * v.d.rate * v.C.fps)));
+  return (v.C.rm[f + 1] - v.C.rm[f]) * v.C.fps * v.d.rate;
+}
+// clip times and action weights (deterministic, from the clock like the walk / run); sc scales the weights (update: under a clip)
+function moveTimes(t, sc){
+  for (const m in MV){
+    const v = MV[m], d = v.d;
+    if (!v.w){ for (const a of v.acts) a.setEffectiveWeight(0); continue; }
+    if (!d.loop && !S.seq && S.replay && S.anim === m && (t - v.t0)*d.rate > v.dur + (d.hold || 0.5)){ v.k = 1 - v.k; v.t0 = t; v.fade = true; v.tOld = v.dur; }
+    const cur = v.acts[v.k], el = Math.max(0, (t - v.t0)*d.rate);
+    if (d.loop){ cur.time = el % v.dur; cur.setEffectiveWeight(v.w*sc); continue; }
+    // one-shot: plays once and holds its last frame; a replay / re-entry cross-fades from the old run (the twin action, going on from
+    // tOld - the held end for a replay) into the new start
+    const oth = v.acts[1 - v.k], u = v.fade ? smooth01((t - v.t0) / 0.3) : 1; if (u >= 1) v.fade = false;
+    cur.time = Math.min(el, v.dur - 1e-4); cur.setEffectiveWeight(v.w*sc*u);
+    oth.time = Math.min(v.dur - 1e-4, (v.tOld ?? v.dur) + el); oth.setEffectiveWeight(v.w*sc*(1 - u));
+  }
+}
+// The mixer skips writing a property whose blended value equals last frame's (three r128 PropertyMixer.apply compares its two
+// accumulation slots). The bones are reset to the bind pose before every update, so a pose that holds still (the held crouch, a
+// one-shot's last frame) would be skipped and left at the bind. While a move plays, the slot the coming update compares against is
+// set to the bind value (the mixer's saved original state): a value is written whenever it differs from what the bone holds.
+// (three r128 internals: if a later three.js renames them, this warns once and does nothing - a held pose may then drop to the bind)
+function mixerForceWrite(){
+  const bs = mixer._bindings, prev = mixer._accuIndex;   // update() flips the index first, so this slot is the one it does not write
+  if (!Array.isArray(bs) || (prev !== 0 && prev !== 1) || (bs.length && (bs[0]._origIndex === undefined || !bs[0].buffer))){
+    if (!mixerForceWrite.warned){ mixerForceWrite.warned = true; console.warn('mixerForceWrite: three.js AnimationMixer internals changed; held move poses may reset to the bind'); }
+    return;
+  }
+  for (const pm of bs){ const st = pm.valueSize, b = pm.buffer, o = (prev + 1)*st, src = pm._origIndex*st; for (let i = 0; i < st; i++) b[o + i] = b[src + i]; }
+}
+const _mvq = new T.Quaternion(), _mvq2 = new T.Quaternion(), _mvv = new T.Vector3(), _mvLat = new T.Vector3(), _mvA = new T.Vector3(), _mvB = new T.Vector3(), _mvC = new T.Vector3();
+const _mvF = { l:new T.Vector3(), r:new T.Vector3() }, _mvFq = { l:new T.Quaternion(), r:new T.Quaternion() }, _mvM1 = new T.Matrix4();
+const _mvK = new T.Vector3(), _mvK2 = new T.Vector3();
+// the body's heading from the hips (the clip may turn him): his lateral axis for the spine / head corrections (a shared scratch vector)
+function bodyLat(){
+  B.pelvis.getWorldQuaternion(_mvq).multiply(_q3.copy(BIND.pelvis.w).invert());
+  const f = _mvv.set(1, 0, 0).applyQuaternion(_mvq);
+  return _mvLat.copy(RIGHT).applyAxisAngle(UP, Math.atan2(-f.z, f.x));
+}
+// the viewer offset (a sequence's climb ends higher / further on), the ladder's turn into the screen, the lowered hips, the straighter spine
+// a one-shot's settle (MOVES settle: { at:[t0, t1] clip s, guard, back, headUp }): how far into it the move is (0..1)
+// A replay / re-entry cross-fades from the old run for 0.3 s (moveTimes): a one-shot's settle / relax layer eases over with it instead
+// of snapping to the new start's.
+function replayU(v){ return v.fade ? smooth01((S.t - v.t0) / 0.3) : 1; }
+// a one-shot layer's value f(clip time), through a replay / re-entry cross-fade from the old run (tOld on, moveTimes)
+function oneShotW(v, f){ const el = (S.t - v.t0)*v.d.rate, u = replayU(v); return u >= 1 ? f(el) : lerp(f((v.tOld ?? v.dur) + el), f(el), u); }
+function settleW(v){ const st = v.d.settle; if (!st) return 0; return oneShotW(v, el => smooth01((el - st.at[0]) / (st.at[1] - st.at[0]))); }
+function moveBody(mg, lift, t){
+  if (lift.x || lift.y){ B.pelvis.position.z += lift.x; B.pelvis.position.y += lift.y; }   // (model space: +Z is his forward)
+  let yIn = 0, drop = 0, back = 0, br = 0, fl = 0, ln = 0, lnW = 0;
+  for (const m in MV){ const v = MV[m]; if (!v.w) continue; const d = v.d;
+    if (d.face === 'in') yIn += v.w; drop += v.w*(d.drop || 0); back += v.w*((d.back || 0) + (d.settle ? settleW(v)*(d.settle.back || 0) : 0));
+    br += v.w*(d.breathe || 0); fl += v.w*(d.flat || 0); if (d.lean !== undefined){ lnW += v.w; ln += v.w*d.lean; } }
+  model.updateMatrixWorld(true);
+  if (yIn > 1e-3) rotBoneWorld(B.pelvis, UP, (S.view + Math.PI/2 - MOVE_TURN)*yIn);
+  if (drop > 1e-3){
+    // lower the hips and re-solve each leg onto the clip's foot (position and orientation): deeper knees, same footfalls
+    const fw = _mvF, fq = _mvFq;
+    for (const s of ['l','r']){ B['foot_'+s].getWorldPosition(fw[s]); B['foot_'+s].getWorldQuaternion(fq[s]); }
+    B.pelvis.position.y -= drop; model.updateMatrixWorld(true);
+    const bfw = _mvK.crossVectors(UP, bodyLat());   // the body's forward (horizontal)
+    for (const s of ['l','r']){
+      const hip = B['thigh_'+s].getWorldPosition(_mvA), kd = B['calf_'+s].getWorldPosition(_mvB).sub(hip), kl = kd.length();
+      const ax = _mvC.copy(fw[s]).sub(hip).normalize(), pole = kd.addScaledVector(ax, -kd.dot(ax));
+      // a nearly straight clip leg (the low run's touchdown) leaves that direction to rounding: it can point back and out and flip the
+      // knee for a frame. Keep at least a tenth of the thigh's reach forward of the axis (a continuous floor, no switch)
+      const fp = _mvK2.copy(bfw).addScaledVector(ax, -bfw.dot(ax)), fl = fp.length();
+      if (fl > 1e-6){ fp.divideScalar(fl); const f = pole.dot(fp); if (f < 0.1*kl) pole.addScaledVector(fp, 0.1*kl - f); }
+      if (pole.lengthSq() < 1e-6) pole.set(1, 0, 0);
+      legIK(s, fw[s], pole.normalize(), 1, 0.999);
+      setBoneWorldQ(B['foot_'+s], fq[s], 1);
+    }
+  }
+  if (Math.abs(back) > 1e-3 || br > 1e-3){   // (back < 0: a lean forward)
+    const lat = bodyLat();
+    for (const n of ['spine_01','spine_02','spine_03']) rotBoneWorld(B[n], lat, back/3);
+    if (br > 1e-3) rotBoneWorld(B.spine_02, lat, Math.sin(t*2.1)*0.015*br);
+  }
+  if (fl > 1e-3) flatBack(Math.min(1, fl), lnW > 1e-3 ? ln/lnW : null, Math.min(1, lnW));
+  for (const m in MV){ const v = MV[m]; if (v.w && v.d.wall) wallHang(v.d.wall, v.w, lift); }
+}
+// The hang against the wall (MOVES wall: { at, tilt, tilt0, sway, legs, gap, reach, grips }): the clip hangs free, as from a bar - the
+// shoulders under the hands, the body swinging to and fro like a pendulum, the knees well forward - which would put the body inside
+// the ledge. Here the ledge's corner is fixed (LEDGE.x forward of the hips' rest, plus the moves' offset), the hands grip its top
+// 3 cm + 'reach' in from the edge, LEDGE.grip under it, 'grips' m to his right (+) / left; the trunk is turned about the shoulders to
+// hang at 'tilt' (rad, the hips forward of the shoulders +; 'sway' of the clip's swing about its mean tilt0 stays), the shoulders go to
+// 'at' m from the corner (behind it), the legs hang straighter (each ankle pulled 'legs' of the way toward under its hip), the hips come
+// up as far as the arms need to reach the grip, and the wrists bend so the fingers hook forward over the top instead of pointing up;
+// then no hip / spine / knee / ankle / ball joint below the top is left nearer than 'gap' to the wall face - all eased in with the
+// move's weight w.
+const _wG = { l:new T.Vector3(), r:new T.Vector3() }, _wQ = { l:new T.Quaternion(), r:new T.Quaternion() }, _wP = new T.Vector3(), _wS = new T.Vector3();
+function wallHang(W, w, lift){
+  model.updateMatrixWorld(true);
+  const lat = bodyLat(), fw = _mvA.crossVectors(UP, lat).normalize(), xC = LEDGE.x + lift.x, top = LEDGE.y + lift.y;
+  // (the grips: fixed on the ledge - LEDGE.grip under its top, 'grips' m to his right / left - so the hands hold still while the body
+  // hangs and sinks below them; the keyed climb, CLIPS.ledge_up, starts from the same grips)
+  for (const s of ['l','r']) _wG[s].copy(fw).multiplyScalar(xC + 0.03 + W.reach).addScaledVector(RIGHT, W.grips[s]).setY(top - LEDGE.grip);
+  const sho = v => B.upperarm_l.getWorldPosition(v).add(B.upperarm_r.getWorldPosition(_mvC)).multiplyScalar(0.5);
+  const shift = (dv) => { const pw = B.pelvis.getWorldPosition(_mvB).add(dv); B.pelvis.parent.worldToLocal(pw); B.pelvis.position.copy(pw); model.updateMatrixWorld(true); };
+  // 1) the trunk turned about the shoulders to hang at 'tilt'
+  sho(_wP); const pv = B.pelvis.getWorldPosition(_mvB).sub(_wP), phi = Math.atan2(pv.dot(fw), -pv.y);
+  rotBoneWorld(B.pelvis, lat, -(phi - W.tilt - (phi - W.tilt0)*W.sway)*w); model.updateMatrixWorld(true);
+  shift(_wS.copy(_wP).sub(sho(_mvv)));
+  // 2) the shoulders behind the corner
+  shift(_wS.copy(fw).multiplyScalar(-(_wP.dot(fw) - xC - W.at)*w));
+  // 3) the legs straighter, under the hips
+  for (const s of ['l','r']){
+    B['foot_'+s].getWorldQuaternion(_wQ[s]);
+    const hip = B['thigh_'+s].getWorldPosition(_mvB), ank = B['foot_'+s].getWorldPosition(_mvC);
+    const L = (LEN['th_'+s] + LEN['ca_'+s])*0.98, lx = _mvv.copy(ank).sub(hip).dot(lat);
+    const ideal = _v3.copy(hip).addScaledVector(UP, -Math.sqrt(Math.max(0, L*L - lx*lx))).addScaledVector(lat, lx).addScaledVector(fw, -0.03);
+    legIK(s, ank.lerp(ideal, W.legs), _v2.copy(fw).addScaledVector(UP, -0.3), w, 0.999);
+    setBoneWorldQ(B['foot_'+s], _wQ[s], 1);
+  }
+  // 4) up: as far as the arms need to reach the grips without going straight; then nothing below the top nearer the wall than gap
+  let up = 0;
+  for (const s of ['l','r']){ const dv = _mvC.copy(_wG[s]).sub(B['upperarm_'+s].getWorldPosition(_mvB)), hz = Math.hypot(dv.dot(fw), dv.dot(lat)), L = (LEN['up_'+s] + LEN['lo_'+s])*0.97;
+    up = Math.max(up, dv.y - Math.sqrt(Math.max(0, L*L - hz*hz))); }
+  if (up > 0) shift(_wS.copy(UP).multiplyScalar(up*w));
+  let mx = 0;
+  for (const n of ['pelvis','spine_01','spine_02','spine_03','calf_l','calf_r','foot_l','foot_r','ball_l','ball_r']){
+    const p = B[n].getWorldPosition(_mvB); if (p.y < top - 0.05) mx = Math.max(mx, p.dot(fw) - (xC - W.gap)); }
+  if (mx > 0) shift(_wS.copy(fw).multiplyScalar(-mx*w));
+  // 5) the arms onto the grips; the hands' fingers forward over the edge and down onto the top
+  for (const s of ['l','r']){
+    const sg = s === 'r' ? 1 : -1;
+    armIK(s, _wG[s], _mvC.copy(fw).multiplyScalar(-1).addScaledVector(lat, sg*0.5).addScaledVector(UP, -0.3), w);
+    const ha = B['hand_'+s], fi = B['middle_01_'+s]; ha.updateWorldMatrix(true, true);
+    const cur = fi.getWorldPosition(_mvB).sub(ha.getWorldPosition(_mvC)).normalize();
+    pointBone(ha, fi, cur.lerp(_mvv.copy(fw).addScaledVector(UP, 0.35).normalize(), 0.75*w));
+  }
+}
+// the back flat (MOVES flat 0..1): the chest (spine_03) pitched forward no further than the trunk leans (hips -> neck) plus FLAT_TOL -
+// the clips' crouches round the upper back into a stoop. spine_02 / spine_03 turn back by the difference (twice: turning them also
+// leans the trunk back a little). Pitch as the chest's forward axis against the bind's, the lean in the hips' heading. MOVES lean
+// (rad, forward +): first the trunk leaned to that from the lower back (spine_01), weight lw.
+const FLAT_TOL = 0.05;
+function trunkLean(fw){ const nk = B.neck_01.getWorldPosition(_mvC).sub(B.pelvis.getWorldPosition(_mvB)); return Math.atan2(nk.dot(fw), nk.y); }
+function flatBack(w, leanT, lw){
+  const lat = bodyLat(), fw = _mvA.crossVectors(UP, lat);
+  for (let it = 0; it < 3; it++){   // (alternating: turning the lower back for the lean pitches the chest by more than the trunk)
+    const lean = trunkLean(fw);
+    B.spine_03.getWorldQuaternion(_mvq2).multiply(_q3.copy(BIND.spine_03.w).invert());
+    const cp = Math.asin(Math.max(-1, Math.min(1, _mvv.set(1, 0, 0).applyQuaternion(_mvq2).y)));
+    const err = -cp - lean - FLAT_TOL;
+    if (err > 1e-4){ rotBoneWorld(B.spine_02, lat, err*0.45*w); rotBoneWorld(B.spine_03, lat, err*0.55*w); }
+    if (leanT !== null) rotBoneWorld(B.spine_01, lat, (trunkLean(fw) - leanT)*lw);
+  }
+}
+// head: up a little where the clip looks at the floor; a held crouch looks slowly round
+// look (MOVES look, rad): the face's pitch held at that (its forward axis against the bind's: 0 level, + up) - the head steadies on the
+// way ahead whatever the clip's trunk does (the crouches looked at the floor); neck 40 %, head 60 %, about the face's own level
+// lateral axis, at most LOOK_MAX
+const LOOK_MAX = 0.9;
+function moveHead(t){
+  let up = 0, br = 0, lk = 0, lw = 0;
+  for (const m in MV){ const v = MV[m], d = v.d; if (!v.w) continue;
+    up += v.w*((d.headUp || 0) + (d.settle ? settleW(v)*(d.settle.headUp || 0) : 0)); br += v.w*(d.breathe || 0);
+    if (d.look !== undefined){ lw += v.w; lk += v.w*d.look; } }
+  if (lw > 1e-3){
+    B.head.getWorldQuaternion(_mvq2).multiply(_q3.copy(BIND.head.w).invert());
+    const f = _mvv.set(1, 0, 0).applyQuaternion(_mvq2), p = Math.asin(Math.max(-1, Math.min(1, f.y)));
+    const ax = _mvA.set(0, 0, 1).applyAxisAngle(UP, Math.atan2(-f.z, f.x));
+    const a = Math.max(-LOOK_MAX, Math.min(LOOK_MAX, lk/lw - p))*Math.min(1, lw);
+    rotBoneWorld(B.neck_01, ax, a*0.4); rotBoneWorld(B.head, ax, a*0.6);
+  }
+  if (Math.abs(up) < 1e-3 && br < 1e-3) return;
+  const lat = bodyLat();
+  if (Math.abs(up) > 1e-3){ rotBoneWorld(B.neck_01, lat, up*0.4); rotBoneWorld(B.head, lat, up*0.6); }
+  if (br > 1e-3) rotBoneWorld(B.head, UP, 0.3*Math.sin(t*0.7)*br);
+}
+// arms: the guard (IK onto targets that turn with the chest), letting go at the end of a climb (relax), then the fingers (Meshy's rig
+// has none: our own curl on top)
+function moveArms(){
+  let g = 0, gr = 0, rl = 0, tk = 0, tkW = 0;
+  for (const m in MV){ const v = MV[m]; if (!v.w) continue; const d = v.d;
+    const r = d.relax ? oneShotW(v, el => smooth01((el - d.relax[0]) / (d.relax[1] - d.relax[0]))) : 0;
+    g += v.w*((d.guard || 0) + (d.settle ? settleW(v)*(d.settle.guard || 0) : 0)); rl += v.w*r; gr += v.w*lerp(d.grip || 0.55, 0.55, r);
+    if (d.tuck){ tk += v.w*d.tuck; tkW += v.w; } }
+  if (tkW > 1e-3){
+    // tuck: each hand pulled that far in toward its shoulder, the elbow bending in its own plane (a sprint's arms pump bent instead of
+    // reaching out straight); a straight arm bends back and down. Eased in with the moves' weight.
+    const bk = _mvv.set(-0.05, -0.02, 0).applyQuaternion(B.pelvis.getWorldQuaternion(_mvq).multiply(_q3.copy(BIND.pelvis.w).invert()));
+    for (const s of ['r','l']){
+      B['hand_'+s].updateWorldMatrix(true, false);
+      const sh = B['upperarm_'+s].getWorldPosition(_mvA), tg = B['hand_'+s].getWorldPosition(_mvB).sub(sh).multiplyScalar(1 - tk/tkW).add(sh);
+      armIK(s, tg, B['lowerarm_'+s].getWorldPosition(_mvC).sub(sh).add(bk), Math.min(1, tkW));
+    }
+  }
+  if (rl > 1e-3){
+    // the relaxed hang of the standing pose, turned with the hips' heading
+    B.pelvis.getWorldQuaternion(_mvq).multiply(_q3.copy(BIND.pelvis.w).invert());
+    const f = _mvv.set(1, 0, 0).applyQuaternion(_mvq), qh = _mvq2.setFromAxisAngle(UP, Math.atan2(-f.z, f.x));
+    for (const s of ['r','l']){ const sg = s === 'r' ? 1 : -1;
+      B['upperarm_'+s].updateWorldMatrix(true, false);
+      const tgt = B['upperarm_'+s].getWorldPosition(_mvA).add(_mvB.set(0.05, -0.56, sg*0.07).applyQuaternion(qh));
+      armIK(s, tgt, _mvC.set(-1, 0, sg*0.35).applyQuaternion(qh).normalize(), rl);
+    }
+  }
+  if (g > 1e-3){
+    if (!GUARD.bind){ GUARD.bind = {};   // the hands' bind frames (fingers, palm normal, their cross), inverted
+      for (const s of ['r','l']){ const d0 = BIND['middle_01_'+s].wp.clone().sub(BIND['hand_'+s].wp).normalize();
+        const p0 = new T.Vector3(s === 'r' ? 1 : -1, 0, 0).cross(d0); p0.addScaledVector(d0, -p0.dot(d0)).normalize();
+        GUARD.bind[s] = new T.Matrix4().makeBasis(d0, p0, new T.Vector3().crossVectors(d0, p0)).invert(); } }
+    B.spine_03.getWorldQuaternion(_mvq).multiply(_q3.copy(BIND.spine_03.w).invert());
+    for (const s of ['r','l']){
+      B.spine_03.updateWorldMatrix(true, false);
+      const G = GUARD[s], E = GUARD['e'+s];
+      const tgt = B.spine_03.getWorldPosition(_mvA).add(_mvB.set(G[0], G[1], G[2]).applyQuaternion(_mvq));
+      armIK(s, tgt, _mvC.set(E[0], E[1], E[2]).applyQuaternion(_mvq).normalize(), g);
+      // the guard hand: the wrist straight along the forearm, the palm turned down and a little in, knuckles forward (the clip's own
+      // forearm twist could leave it palm up - an open, offering hand). The bind frame: fingers down, palm toward the thigh (the curl's
+      // side). (The scan's fingers are skinned mostly to the hand, so the curl only half-closes them: palm down, that reads as a fist.)
+      const ha = B['hand_'+s], fa = _mvA.copy(ha.getWorldPosition(_mvA)).sub(B['lowerarm_'+s].getWorldPosition(_mvB)).normalize();
+      const pn = _mvB.set(0, 0, s === 'r' ? -0.4 : 0.4).applyQuaternion(_mvq).addScaledVector(UP, -1);
+      pn.addScaledVector(fa, -pn.dot(fa)).normalize();
+      _mvM1.makeBasis(fa, pn, _mvC.crossVectors(fa, pn));
+      setBoneWorldQ(ha, _mvq2.setFromRotationMatrix(_mvM1.multiply(GUARD.bind[s])).multiply(BIND['hand_'+s].w), g);
+    }
+  }
+  if (gr > 1e-3) for (const s of ['r','l']){
+    const ha = B['hand_'+s]; ha.getWorldQuaternion(_q2).multiply(_mvq2.copy(BIND['hand_'+s].w).invert());
+    const ax = _mvA.set(s==='r' ? 1 : -1, 0, 0).applyQuaternion(_q2).normalize();
+    for (const n of ['middle_01_','middle_02_','middle_03_']) rotBoneWorld(B[n+s], ax, gr);
+  }
+}
+// A one-shot that sets off from the ground (MOVES plant: the roll) keeps each boot where it stood when the move was picked (v.plant,
+// setAnim) - against the clip's root motion, which the game adds as it plays (rm) - until the clip lifts that foot off (it lets go
+// as the ankle rises 2..12 cm, or from 0.45 s of clip time on): the cross-fade from the standing pose would otherwise slide each planted
+// boot toward the clip's own footing, the two in opposite directions.
+function movePlant(){
+  for (const m in MV){ const v = MV[m]; if (!v.w || !v.plant) continue;
+    const el = Math.max(0, (S.t - v.t0)*v.d.rate), rm = v.C.rm, f = Math.min(rm.length - 1, el*v.C.fps), i = Math.min(rm.length - 2, Math.floor(f));
+    const r = rm[i] + (rm[i + 1] - rm[i])*Math.min(1, f - i);
+    let live = false;
+    for (const s of ['l','r']){ const P = v.plant[s]; if (!P || P.rel >= 1) continue;
+      const ft = B['foot_'+s]; ft.updateWorldMatrix(true, false); const cur = ft.getWorldPosition(_mvA);
+      P.rel = Math.max(P.rel, smooth01((cur.y - P.p.y - 0.02)/0.1), smooth01((el - 0.45)/0.15)); if (P.rel >= 1) continue;
+      live = true; ft.getWorldQuaternion(_mvFq[s]);
+      const hip = B['thigh_'+s].getWorldPosition(_mvB), tg = _mvC.copy(P.p).addScaledVector(FWD, -r);
+      const kd = B['calf_'+s].getWorldPosition(_v3).sub(hip), ax = _v2.copy(tg).sub(hip).normalize(), pole = kd.addScaledVector(ax, -kd.dot(ax));
+      if (pole.lengthSq() < 1e-6) pole.copy(FWD);
+      legIK(s, tg, pole.normalize(), 1 - P.rel, 0.999);
+      setBoneWorldQ(ft, _mvFq[s].slerp(P.q, 1 - P.rel), 1);   // (the boot also keeps its heading on the floor till it lifts)
+    }
+    if (!live) v.plant = null;
+  }
+}
+// Boots on the floor (tactical moves): blending a move with the standing pose (or with another move) can lower the hips faster than it
+// bends the knees and push a boot through the floor. After the legs are posed, each boot's sole (SOLE: points of the mesh's sole at
+// bind, in the foot / ball bones' frames) is lifted back onto the floor by its own leg: the hips stay, the foot keeps its orientation.
+const SOLE = { l:[], r:[] }, _sq = new T.Quaternion();
+function buildSole(){
+  let sm = null; model.traverse(o => { if (o.isSkinnedMesh && !sm) sm = o; }); if (!sm) return;
+  model.updateMatrixWorld(true);
+  const g = sm.geometry, n = g.attributes.position.count, SI = g.attributes.skinIndex, SW = g.attributes.skinWeight, bs = sm.skeleton.bones, v = new T.Vector3();
+  const pts = { l:[], r:[] };
+  for (let i = 0; i < n; i++){
+    let bw = 0, bi = 0; for (let k = 0; k < 4; k++){ const w = [SW.getX(i), SW.getY(i), SW.getZ(i), SW.getW(i)][k]; if (w > bw){ bw = w; bi = [SI.getX(i), SI.getY(i), SI.getZ(i), SI.getW(i)][k]; } }
+    const m = bs[bi].name.match(/^(foot|ball)_([lr])$/); if (!m || bw < 0.5) continue;
+    sm.boneTransform(i, v); v.applyMatrix4(sm.matrixWorld); pts[m[2]].push([B[bs[bi].name], v.clone()]);
+  }
+  for (const s of ['l','r']){
+    const P = pts[s]; if (!P.length) continue; const lo = Math.min(...P.map(e => e[1].y));
+    // the sole: what lies within 2.5 cm of the boot's lowest point, in its bone's bind frame
+    P.filter(e => e[1].y < lo + 0.025).forEach(e => SOLE[s].push([e[0], e[0].worldToLocal(e[1].clone())]));
+  }
+}
+// Rigid gear on the floor (MOVES floor: a one-shot that goes down onto it - the roll): the bake keeps the skinned mesh off the floor,
+// but the backpack is built here; where its lowest point would go under the floor (rolling over the back), the hips are raised by that.
+const PACKV = [];
+function buildPackV(){
+  const pk = B.spine_03 && B.spine_03.getObjectByName('backpack'); if (!pk) return;
+  const seen = new Set(), v = new T.Vector3();
+  pk.children.forEach(m => { if (!m.isMesh) return; const a = m.geometry.attributes.position;
+    for (let i = 0; i < a.count; i += 2){ v.fromBufferAttribute(a, i); const k = v.toArray().map(x => Math.round(x*200)).join(); if (!seen.has(k)){ seen.add(k); PACKV.push(v.clone()); } } });
+  PACKV.obj = pk;
+}
+function packLow(){
+  const pk = PACKV.obj; if (!pk) return Infinity; pk.updateWorldMatrix(true, false);
+  let lo = Infinity; for (const p of PACKV){ const y = _v.copy(p).applyMatrix4(pk.matrixWorld).y; if (y < lo) lo = y; }
+  return lo;
+}
+function soleGuard(fy){
+  for (const s of ['l','r']){
+    const ft = B['foot_'+s]; ft.updateWorldMatrix(true, true);
+    let lo = Infinity; for (const [b, pt] of SOLE[s]){ const y = _v.copy(pt).applyMatrix4(b.matrixWorld).y; if (y < lo) lo = y; }
+    const d = fy - lo; if (!(d > 0)) continue;
+    ft.getWorldQuaternion(_sq); const tg = ft.getWorldPosition(new T.Vector3()); tg.y += d;
+    const hip = B['thigh_'+s].getWorldPosition(new T.Vector3());
+    legIK(s, tg, B['calf_'+s].getWorldPosition(new T.Vector3()).sub(hip), 1, 0.9995);
+    setBoneWorldQ(ft, _sq, 1);
+  }
+}
+// A climb out of a hang (CLIPS wall: ledge_up) keeps the legs off the wall (the face at LEDGE.x, up to LEDGE.y): below the top an
+// ankle / ball forward of the face (less 'gap') is moved back onto it, and a knee forward of it swings out to the side about the
+// hip-ankle line (the smallest turn that clears it, at most a quarter turn) instead of poking into the wall - the knee comes up the
+// wall and over the edge. Near the top the limit eases forward (the gap is used up 5 cm under it, then it opens fast), so a knee or
+// foot going over the edge is let go gradually rather than all at once.
+const _kc = new T.Vector3(), _ku = new T.Vector3(), _kv = new T.Vector3(), _kd = new T.Vector3(), _kf = new T.Quaternion();
+function wallLegs(gap, w){
+  const top = LEDGE.y - 0.05, lo = top - 0.2, fw = FWD, lat = RIGHT;   // (a climb faces +X: the hero is not turned)
+  const lim = y => LEDGE.x - gap + (y < lo ? 0 : y < top ? gap*(y - lo)/(top - lo) : gap + (y - top)*4);
+  for (const s of ['l','r']){
+    const sg = s === 'r' ? 1 : -1, ft = B['foot_'+s]; ft.updateWorldMatrix(true, true);
+    const hip = B['thigh_'+s].getWorldPosition(new T.Vector3()), ank = ft.getWorldPosition(new T.Vector3()), kn = B['calf_'+s].getWorldPosition(new T.Vector3());
+    const ball = B['ball_'+s].getWorldPosition(new T.Vector3());
+    const back = Math.max(0, ank.x - lim(ank.y), ball.x - lim(ball.y))*w, xK = lim(kn.y);
+    if (back <= 0 && kn.x <= xK) continue;
+    ft.getWorldQuaternion(_kf);
+    ank.x -= back;
+    // the knee's circle about the hip-ankle line: centre c, radius h, from its current direction u toward v (out to the side)
+    const ax = _kd.subVectors(ank, hip), d = ax.length(); ax.divideScalar(d);
+    const a = LEN['th_'+s], b = LEN['ca_'+s], dd = Math.min(d, (a + b)*0.999), xa = (a*a - b*b + dd*dd)/(2*dd), h = Math.sqrt(Math.max(0, a*a - xa*xa));
+    const u = _ku.subVectors(kn, hip); u.addScaledVector(ax, -u.dot(ax)); if (u.lengthSq() < 1e-8) u.copy(fw); u.normalize();
+    const v = _kv.crossVectors(ax, u); if (v.dot(lat)*sg < 0) v.negate();
+    const c = _kc.copy(hip).addScaledVector(ax, xa), A = u.x, Bv = v.x, R = Math.hypot(A, Bv), r = (xK - c.x)/Math.max(1e-6, h);
+    let phi = 0;
+    if (c.x + h*A > xK && R > 1e-6) phi = r < -R ? Math.atan2(Bv, A) + Math.PI : Math.atan2(Bv, A) + Math.acos(r/R);
+    phi = Math.max(0, Math.min(Math.PI/2, phi))*w;   // (w: the clip's weight - it fades with it)
+    legIK(s, ank, u.multiplyScalar(Math.cos(phi)).addScaledVector(v, Math.sin(phi)), 1, 0.9995);
+    setBoneWorldQ(ft, _kf, 1);
+  }
+}
+// ---------- viewer sequences ----------
+function playSeq(name){
+  clockBack();
+  S.seq = { name, i:-1, t0:S.t, dur:0, off:new T.Vector2(), top:0 };
+  seqNext(true);
+}
+// where a sequence's climb ends (m above its start): the ladder's landing, drawn from the start
+function seqTop(name){
+  let y = 0; for (const st of SEQS[name]){ const v = MV[st.a], K = CLIPS[st.a];
+    if (v) y += (v.d.loop ? (v.C.rise || 0)*(st.cycles || 1) : (v.C.rise || 0)); else if (K) y += K.rise || 0; }
+  return y;
+}
+function seqNext(restart){
+  const sq = S.seq, Q = SEQS[sq.name];
+  let i = sq.i + 1, cut = !!restart;
+  if (i >= Q.length){ i = 0; cut = true; }
+  if (i === 0){ sq.off.set(0, 0); sq.top = seqTop(sq.name); }
+  else {   // the step that ended moves the offset on: a one-shot by its rise (and a keyed one by its travel), a climbing loop per cycle
+    const p = Q[sq.i], v = MV[p.a], K = CLIPS[p.a];
+    if (v) sq.off.y += (v.d.loop ? (v.C.rise || 0)*(p.cycles || 1) : (v.C.rise || 0));
+    else if (K){ sq.off.x += K.travel || 0; sq.off.y += K.rise || 0; }
+  }
+  sq.i = i; const st = Q[i], v = MV[st.a];
+  setAnim.seq = true; setAnim(st.a, cut); setAnim.seq = false;
+  if (v){ v.off.copy(sq.off); v.off0.copy(sq.off); v.climb = !!(v.d.loop && v.C.rise); }
+  sq.t0 = S.t;
+  const K = CLIPS[st.a];
+  sq.dur = st.t || (v ? v.dur / v.d.rate * (st.cycles || 1) : K ? (K.keys.length - 1) / K.fps + 0.15 : 1);
+  if (cut){ COAT.init = false; S.camY = 0; }
+}
+
+// The clock put back since the last update (S.t = 0 by a tool, before or after setAnim / playSeq): the tactical moves' clocks (and a
+// viewer sequence's, and the switch onset's) go back with it, so every move keeps how far into its clip it is - one picked after the
+// reset starts from its first frame, one fading out goes on from where it was. Run by update() and first thing in setAnim / playSeq, so
+// a clock taken from the new S.t is never shifted by the old one. Returns whether it moved them.
+function clockBack(){
+  if (S.tLast === undefined || S.t >= S.tLast - 1e-9) return false;
+  const back = S.tLast - S.t;
+  for (const m in MV) MV[m].t0 -= back;
+  if (S.seq) S.seq.t0 -= back;
+  if (S.tSw !== undefined) S.tSw -= back;
+  S.tLast = S.t;
+  return true;
+}
 function update(dt){
   if (!model) return;
-  S.t += dt; const t = S.t;
+  // a request held by a committed one-shot (S.queue) is made at once when the clock was put back: the tool asked for it
+  if (clockBack() && S.queue){ const q = S.queue; S.queue = null; setAnim(q, false, true); }
+  S.t += dt; const t = S.t; S.tLast = t;
+  if (S.seq && S.t - S.seq.t0 >= S.seq.dur) seqNext(false);
+  if (S.queue){ const v = MV[S.anim]; if (!v || !v.d.commit || (S.t - v.t0)*v.d.rate >= v.d.commit) setAnim(S.queue); }
   const armed = S.weapon !== 'none';
   const want = { walk: S.anim==='walk'?1:0, run: S.anim==='run'?1:0, aim:(armed && (S.anim==='aim'||S.anim==='fire'))?1:0, tp:S.anim==='tpose'?1:0 };
-  const k8 = 1-Math.exp(-dt*8), k12 = 1-Math.exp(-dt*12);
+  // a switch to or from a tactical move (S.tSw, setAnim) sets off gently: over its first MOVE_ONSET s every layer's fade rate grows
+  // from 0 (smoothstep) instead of the exponential fade taking its largest step on the first frame. Switches between the base anims
+  // keep the plain fade (onset 1).
+  const onset = S.tSw !== undefined ? smooth01((S.t - S.tSw) / MOVE_ONSET) : 1;
+  const k8 = 1-Math.exp(-dt*8*onset), k12 = 1-Math.exp(-dt*12*onset);
   S.walk=lerp(S.walk,want.walk,k8); S.run=lerp(S.run,want.run,k8); S.aim=lerp(S.aim,want.aim,k12); S.tp=lerp(S.tp,want.tp,k12);
   // platformer clip: its pose (cross-faded from the previous clip's for 0.1 s) and the layer weight
   const clip = CLIPS[S.anim];
@@ -2271,9 +2847,31 @@ function update(dt){
     if (S.t < S.t0) S.t0 = 0;                     // the clock was reset (S.t = 0 by a tool): the clip starts with it
     let P = clipPose(clip, S.t - S.t0);
     if (S.airFrom){ const f = S.t < S.airSw ? 1 : (S.t - S.airSw) / 0.1; if (f >= 1) S.airFrom = null; else P = lerpPose(S.airFrom, P, smooth01(f)); }
-    S.airPose = P; S.airP = clip.dur;
+    S.airPose = P; S.airP = clip.dur; S.airWall = !!clip.wall;
   }
   const air = S.airPose ? S.air*(1-S.tp) : 0, AP = S.airPose;
+  // tactical moves: the selected one eases in, the others out (a sequence's climbing step rises only while it is the current anim).
+  // cover: how much of the pose the moves and a platformer clip hold together. Under a clip the moves' mixer weights are scaled up to
+  // that (msc), so the pose under the clip layer does not sag toward the bind as a move hands over to a clip or back; the moves' offset
+  // (a sequence's climb) is held in full while they cover the pose and fades with them when a base anim (idle, walk...) takes over.
+  const kM = 1 - Math.exp(-dt*10*onset); let mg = 0; S.mvW = S.mvR = S.mvSpd = S.mvD = S.mvT = S.mvO = S.mvRig = S.mvGive = 0; const lift = _lift.set(0, 0);
+  for (const m in MV){ const v = MV[m]; v.w = lerp(v.w, S.anim === m ? 1 : 0, kM); if (v.w < 1e-3) v.w = 0;
+    // taking over from a platformer clip: the move grows at least as fast as the clip fades (air0: the clip's weight at the switch),
+    // so the two always cover the whole pose (no standing layer on the ground in between)
+    if (v.air0){ if (S.anim === m) v.w = Math.max(v.w, v.air0 - S.air); if (S.anim !== m || S.air < 1e-3) v.air0 = 0; }
+    if (!v.w) continue;
+    mg += v.w; const c = v.d.coat || [0, 0]; S.mvW += v.w*c[0]; S.mvR += v.w*c[1]; S.mvSpd += v.w*moveSpeed(v, t); S.mvD += v.w*(v.d.drape || 0);
+    S.mvT += v.w*(1 - (v.d.tail || 1)); S.mvO += v.w*(v.d.open || 0); S.mvRig += v.w*(v.d.rig || 0); S.mvGive += v.w*(v.d.give || 0);
+    if (v.climb && S.anim === m) v.off.y = v.off0.y + (v.C.rise || 0)*(t - v.t0)*v.d.rate / v.dur;
+    lift.addScaledVector(v.off, v.w); }
+  // (the fill under the clip comes and goes with the moves' first / last 40 %, so the pose under the clip changes over to the move -
+  // or back to the bind, under a clip that stays - over a few frames instead of all at once)
+  const cover = Math.min(1, mg + air*Math.min(1, (mg*2.5)**2)), msc = mg > 1e-3 ? cover / mg : 1;
+  if (mg > 1e-3) lift.multiplyScalar(Math.min(1, mg + air) / mg);   // (the offset in full while moves + clip cover the pose)
+  mg = Math.min(1, mg); const mo = 1 - mg;   // the hanging arms and the head look give way to a move
+  // the standing layer gives way to a move and a clip together: none of it while they cover the pose (its legs stand on the ground -
+  // under a climb's offset even a few % of it would pull the feet down)
+  const free = Math.max(0, 1 - air - mg);
   // the jump arc the clip stands for, as the coat feels it (0 for the other anims)
   S.airV = AP ? AP.vy*air : 0; S.airA = AP ? AP.ay*air : 0; S.airF = AP ? AP.fl*air : 0;
   const move = Math.min(1, S.walk+S.run);
@@ -2283,8 +2881,14 @@ function update(dt){
   for (const n in BIND){ const b=B[n]; b.position.copy(BIND[n].p); b.quaternion.copy(BIND[n].q); }
   ACT.walk.setEffectiveWeight(S.walk); ACT.run.setEffectiveWeight(S.run);
   ACT.walk.time = (t*1.0) % ACT.walk.getClip().duration; ACT.run.time = (t*1.0) % ACT.run.getClip().duration;
+  moveTimes(t, msc);
+  if (mg > 1e-3) mixerForceWrite();
   mixer.update(0);
   model.updateMatrixWorld(true);
+  if (mg > 1e-3) moveBody(mg, lift, t);
+  // (MOVES floor: the backpack kept above the floor, PACKV)
+  { let fw = 0; for (const m in MV) if (MV[m].w && MV[m].d.floor) fw += MV[m].w;
+    if (fw > 1e-3){ const d = lift.y + 0.008 - packLow(); if (d > 0){ B.pelvis.position.y += d*Math.min(1, fw); model.updateMatrixWorld(true); } } }
   // run: cap the knee bend so the rear heel stays under the coat hem instead of kicking up to hip height
   if (S.run > 0.01){
     for (const s of ['l','r']){
@@ -2296,8 +2900,14 @@ function update(dt){
   }
 
   // 2) standing pose (idle/aim): pelvis down + turned toward the camera side, legs by IK onto planted feet
-  const stand = (1-move)*(1-S.tp)*(1-air);
+  const stand = (1-move)*(1-S.tp)*free;
+  // fading IK layers blend their bones from where they were while a move is on, and until the layers that were fading when it ended
+  // (the standing pose / hanging arms, a platformer clip) have settled (limbIK)
+  const settled = x => x <= 0.001 || x >= 0.999;
+  if (mg > 1e-3) S.ikSoft = true; else if (settled(stand) && settled(air)) S.ikSoft = false;
+  IK.soft = !!S.ikSoft;
   const sA = armed ? STANCE.idle : STANCE.relaxed, sB = pistol ? STANCE.pistol : STANCE.aim, ka = S.aim;
+  const sOff = _sOff.set(lift.x, lift.y, 0);   // the floor it stands on: the moves' offset (a climb's top while one fades out)
   const st = k => lerp(sA[k], sB[k], ka);
   if (stand > 0.001){
     // unarmed: solve the pelvis drop so the legs end up almost straight with both feet planted
@@ -2306,7 +2916,7 @@ function update(dt){
     if (!armed){
       let need = 0;
       for (const s of ['l','r']){
-        const hip = B['thigh_'+s].getWorldPosition(new T.Vector3()), ft = sA[s==='r'?'footR':'footL'];
+        const hip = B['thigh_'+s].getWorldPosition(new T.Vector3()), ft = _v3.copy(sA[s==='r'?'footR':'footL']).add(sOff);
         const L = (LEN['th_'+s]+LEN['ca_'+s])*reach, h = Math.hypot(ft.x-hip.x, ft.z-hip.z);
         need = Math.max(need, hip.y - (ft.y + Math.sqrt(Math.max(0, L*L - h*h))));
       }
@@ -2318,7 +2928,7 @@ function update(dt){
     rotBoneWorld(B.pelvis, UP, st('hip')*stand);
     for (const s of ['l','r']){
       const S2 = s==='r' ? 'R' : 'L';
-      const ft = _v2.lerpVectors(sA['foot'+S2], sB['foot'+S2], ka);
+      const ft = _v2.lerpVectors(sA['foot'+S2], sB['foot'+S2], ka).add(sOff);
       const kn = new T.Vector3().lerpVectors(sA['knee'+S2], sB['knee'+S2], ka);
       legIK(s, ft, kn, stand, reach);
       // feet flat on the ground, toes turned out a little
@@ -2333,6 +2943,9 @@ function update(dt){
   }
   // 2b) platformer clips: pelvis, spine, legs (arms below, after the head)
   if (air > 0.001) airBody(AP, air);
+  if (air > 0.001 && S.airWall) wallLegs(0.04, air);   // (a climb out of a hang: the legs off the wall)
+  // (a move: no boot through the floor - the standing pose's own soles sit ~1 cm low; it lets go as the moves fade out)
+  if (mg > 1e-3){ movePlant(); soleGuard(lift.y - 0.004 - 0.05*Math.pow(1 - Math.min(1, mg*4), 2)); }
   // 3) T-pose: nothing more (rest pose)
 
   // head: look where the weapon points (level for the rifle, 3/4 toward the raised pistol)
@@ -2344,7 +2957,7 @@ function update(dt){
     let by = 0;
     if (air > 0.001){ ly = lerp(ly, AP.hd[0], air); lp = lerp(lp, AP.hd[1], air); by = AP.yaw*air; }
     _qy.setFromAxisAngle(UP, ly); _qp.setFromAxisAngle(RIGHT, lp); _qy.multiply(_qp);
-    const hw = (1-S.tp)*(1-move*0.6), qb = new T.Quaternion().setFromAxisAngle(UP, by);
+    const hw = (1-S.tp)*(1-move*0.6)*mo, qb = new T.Quaternion().setFromAxisAngle(UP, by);
     setBoneWorldQ(B.neck_01, qb.clone().multiply(_q.copy(_qy).slerp(new T.Quaternion(), 0.4)).multiply(BIND.neck_01.w), hw);
     setBoneWorldQ(B.head, qb.multiply(_qy).multiply(BIND.head.w), hw);
     // the neck carries a fixed share of the head's turn against the chest (whatever the clip, the stance's torso twist or the look
@@ -2353,6 +2966,7 @@ function update(dt){
     if (S.tp < 0.999) neckShare(RIG.neckShare);
     collarDrive();
   }
+  if (mg > 1e-3) moveHead(t);
 
   const sling = AP ? AP.hands*air : 0;   // a clip that needs both hands: the weapon is slung, its arms follow the clip
   if (armed){
@@ -2420,7 +3034,7 @@ function update(dt){
     for (const k in weapons) weapons[k].visible = false;
     flash.visible = false; S.shotT = 9;
     {
-      const hang = (1-move)*(1-S.tp)*(1-air);
+      const hang = (1-move)*(1-S.tp)*free;
       const toW = v => hero.localToWorld(v.clone()).sub(hero.getWorldPosition(new T.Vector3()));
       for (const side of ['r','l']){
         const sg = side==='r' ? 1 : -1;
@@ -2438,13 +3052,40 @@ function update(dt){
       }
     }
     if (air > 0.001) airArms(AP, air);
+    if (mg > 1e-3) moveArms();
   }
   // the coat collides with every arm; only a free arm (no weapon in that hand) is pushed back out of it
   COAT.free.r = !armed || sling > 0.5; COAT.free.l = !armed || sling > 0.5 || !!weapons[S.weapon].userData.freeHand;
+  S.mvG = mg; S.mvFl = lift.y;   // (the ground under a move: its offset - the top after a climb)
+  S.coatDamp = S.airWall ? 0.6*air : 0;
   coatStep(dt);
   // camera orbit
   if (S.spin && !S.dragging) S.yaw += dt*0.6;
-  cam.position.set(Math.sin(S.yaw)*6, S.cy, Math.cos(S.yaw)*6); cam.lookAt(0,S.cy,0);
+  // viewer: the camera follows a climb up (eased; S.follow = false, or a tool driving the page by hand (__manual), keeps it fixed - sprite
+  // exports need a fixed frame); the backdrop ledge / landing; the
+  // shadow on the floor under the feet, none while they are off it (hanging, on the ladder)
+  {
+    let fw = 0; for (const m in MV) if (MV[m].w) fw += MV[m].w*(MV[m].d.follow || 0);
+    if (S.anim === 'ledge_up') fw = Math.max(fw, air);
+    if (S.seq) fw = 1;
+    const pel = B.pelvis.getWorldPosition(new T.Vector3());
+    const cyT = S.follow && !window.__manual ? Math.max(0, pel.y - BIND.pelvis.wp.y)*Math.min(1, fw) : 0;
+    S.camY += (cyT - S.camY)*(dt > 0.2 ? 1 : 1 - Math.exp(-dt*2.5));
+    const sq = S.seq;
+    S.ledge = (sq && sq.name === 'ledge') || S.anim === 'hang' || S.anim === 'ledge_up' ? 1 : (sq && sq.name === 'ladder' ? 2 : 0);
+    // the ledge's corner (LEDGE.x: the hang grips there), drawn in the depth of the hanging hand further left on screen (camera right =
+    // (cos yaw, 0, -sin yaw)), so both hands rest on the top in any view
+    if (MV.hang && MV.hang.w > 0.5){
+      const hl = B.hand_l.getWorldPosition(new T.Vector3()), hr = B.hand_r.getWorldPosition(new T.Vector3()), sx = v => v.x*Math.cos(S.yaw) - v.z*Math.sin(S.yaw);
+      S.ledgeP.z = (sx(hl) < sx(hr) ? hl : hr).z;
+    }
+    S.ledgeP.x = LEDGE.x; S.ledgeP.y = LEDGE.y;
+    const fl = S.ledge === 2 ? sq.top : S.ledge === 1 ? LEDGE.y : 0;   // (the floor up there)
+    const low = Math.min(B.ball_l.getWorldPosition(_v).y, B.ball_r.getWorldPosition(_v2).y) - 0.037;
+    S.floor.set(mg > 1e-3 || sq || S.ledge ? pel.x : 0, fl && low > fl - 0.1 ? fl : 0);
+    S.shadow = fw > 0.01 ? (low - S.floor.y < 0.08 ? 1 : 0) : 1;
+  }
+  cam.position.set(Math.sin(S.yaw)*6, S.cy + S.camY, Math.cos(S.yaw)*6); cam.lookAt(0, S.cy + S.camY, 0);
   shirtSeams(dt);   // the shirt's vertical seams / outer belt loops drawn this frame (needs the final pose and camera)
   coatFolds();      // the coat's skirt as the view sees it this frame: where its folds have room (same)
 }
@@ -2638,9 +3279,16 @@ function coatFolds(){
 function render(clear){
   cam.updateMatrixWorld();
   post.uniforms.uOutline.value = S.outline?1:0; post.uniforms.uClear.value = clear?1:0;
-  const g0 = new T.Vector3(0,0,0).project(cam);
+  const g0 = new T.Vector3(0,0,0).project(cam), f0 = new T.Vector3(S.floor.x, S.floor.y, 0).project(cam);
   post.uniforms.groundY.value = Math.round((g0.y*0.5+0.5)*H);
-  post.uniforms.shC.value.set(Math.round((g0.x*0.5+0.5)*W), Math.round((g0.y*0.5+0.5)*H)-1);
+  if (S.shadow === 0) post.uniforms.shC.value.set(-9999, -9999);
+  else post.uniforms.shC.value.set(Math.round((f0.x*0.5+0.5)*W), Math.round((f0.y*0.5+0.5)*H)-1);
+  const lg = S.ledge === 2 ? new T.Vector3(0, S.seq ? S.seq.top : 0, 0).project(cam) : S.ledgeP.clone().project(cam);
+  post.uniforms.uLedge.value.set(S.ledge === 2 ? Math.round(0.35*S.ppu) : Math.round((lg.x*0.5+0.5)*W), Math.round((lg.y*0.5+0.5)*H), S.ledge);
+  // (the rails on the clip's grip lines: centred 5 cm to the screen right of the hips, 0.34 m either side)
+  // (the rungs where the climb's hands grip them - RUNG, from the ladder clip; one hand step apart)
+  post.uniforms.uLadder.value.set(Math.round((f0.x*0.5+0.5)*W + 0.05*S.ppu) + 0.5, Math.round(0.34*S.ppu), Math.max(3, RUNG.sp*S.ppu));
+  post.uniforms.uRung.value = RUNG.y0*S.ppu;
   post.uniforms.shR.value.set(Math.max(3,0.42*S.ppu), Math.max(1.5,0.05*S.ppu));
   post.uniforms.uInner.value = S.pxChar===0 ? 0.0012 : 0.0035;
   post.uniforms.uOW.value = Math.min(4, Math.max(1, Math.round((S.pxChar || H/1.55) / 240)));
@@ -2651,26 +3299,65 @@ function render(clear){
 let last = performance.now();
 function loop(now){
   const dt = Math.min(0.05,(now-last)/1000); last = now;
-  if (!window.__manual && model){ update(dt); render(false); }
+  // (the viewer's own clock starts when the page is ready - the tactical moves loaded - so a tool taking over then finds the pose and
+  // the coat as fresh as on a page without them)
+  if (!window.__manual && model && window.HERO_READY){ update(dt); render(false); }
   requestAnimationFrame(loop);
 }
 
 // ---------- UI ----------
 function press(container, attr, val){ container.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed', String(b.dataset[attr]===String(val)))); }
-const animsEl=document.getElementById('anims'), weapEl=document.getElementById('weapons'), resEl=document.getElementById('res');
+const animsEl=document.getElementById('anims'), weapEl=document.getElementById('weapons'), resEl=document.getElementById('res'), movesEl=document.getElementById('moves');
 // cut: switch at once - every layer weight snapped to the new anim (no ease-in / out), a platformer clip from its first key with no
 // cross-fade from the previous clip (the sprite exporter's hard switch; the coat still carries its motion over)
-function setAnim(a, cut){
+// Returns true when it switched, false when the request was queued (below).
+function setAnim(a, cut, force){
+  // a committed one-shot (MOVES commit: the roll, while the hips go over) finishes that part first: a request then waits in S.queue
+  // (HERO.S.queue; a later request replaces it) and update() makes it when the clip passes 'commit' s (blending out of an upside-down
+  // pose would swing the bones the short way round and pop). A cut always switches at once; so does a request when the clock was put
+  // back (force, update).
+  clockBack();
+  const cv = MV[S.anim];
+  S.queue = null;
+  if (!cut && !force && cv && cv.d.commit && a !== S.anim && cv.w > 0.5){
+    const el = (S.t - cv.t0)*cv.d.rate;
+    if (el >= 0 && el < cv.d.commit){ S.queue = a; return false; }
+  }
+  if (S.seq && !setAnim.seq){   // a pick by hand ends a viewer sequence: back on the ground at once (its climb offset cleared, the coat
+    S.seq = null;                // and the camera reset) rather than walking on in mid-air
+    for (const m in MV){ MV[m].off.set(0, 0); MV[m].off0.set(0, 0); MV[m].climb = false; }
+    COAT.init = false; S.camY = 0;
+  }
   if (CLIPS[a] && a !== S.anim){
     // between two platformer clips the pose cross-fades from where it is; from the other anims the layer weight eases in
     S.airFrom = (!cut && CLIPS[S.anim] && S.airPose) ? Object.assign({}, S.airPose) : null; S.airSw = S.t;
   }
   if (a !== S.anim || cut) S.t0 = S.t;
+  if (a !== S.anim) S.tSw = !cut && (MV[a] || MV[S.anim]) ? S.t : undefined;   // (update: a move's gentle onset)
+  const v = MV[a];
+  if (v && (a !== S.anim || cut)){
+    // taken up again while it still shows: a loop goes on from where it is; a one-shot cross-fades from where it is (its twin action
+    // goes on from there) into its start, like a replay
+    if (!cut && v.w > 1e-3 && v.d.loop){}
+    else if (!cut && v.w > 1e-3){ v.tOld = Math.min(v.dur, Math.max(0, (S.t - v.t0)*v.d.rate)); v.k = 1 - v.k; v.fade = true; v.t0 = S.t; }
+    else { v.t0 = S.t; v.k = 0; v.fade = false; }
+    v.air0 = !cut && CLIPS[S.anim] ? S.air : 0;
+    // (MOVES plant: set off from where the boots stand now - each one that is on the ground (its ball within 3 cm of the floor), out of
+    // a blend, not under a platformer clip or a climb's offset; movePlant)
+    v.plant = null;
+    if (v.d.plant && !cut && !v.d.loop && S.air < 0.01 && !setAnim.seq){ const pl = {}; let any = false;
+      for (const s of ['l','r']){ if (B['ball_'+s].getWorldPosition(_v).y > 0.037 + 0.03) continue; any = true;
+        pl[s] = { p:B['foot_'+s].getWorldPosition(new T.Vector3()), q:B['foot_'+s].getWorldQuaternion(new T.Quaternion()), rel:0 }; }
+      if (any) v.plant = pl; }
+    if (!setAnim.seq){ v.off.set(0, 0); v.off0.set(0, 0); v.climb = false; } }
   if (cut){
     S.walk = a==='walk' ? 1 : 0; S.run = a==='run' ? 1 : 0; S.tp = a==='tpose' ? 1 : 0; S.air = CLIPS[a] ? 1 : 0; S.airFrom = null;
     S.aim = (S.weapon!=='none' && (a==='aim' || a==='fire')) ? 1 : 0;
+    for (const m in MV) MV[m].w = m === a ? 1 : 0;
   }
   S.anim=a; press(animsEl,'anim',a);
+  movesEl.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(S.seq ? b.dataset.seq === S.seq.name : b.dataset.anim === a)));
+  return true;
 }
 // Weapons are parked for now (the owner's call): no buttons, no keys, the hero is unarmed. The rifle / pistol, the aim / fire layer
 // and their IK stay in the code (setWeapon from the console or HERO.setWeapon) so they can come back.
@@ -2680,7 +3367,8 @@ function setWeapon(w){
   for (const id of ['a-aim','a-fire']){ const el=document.getElementById(id); if (el) el.disabled = unarmed; }
   if (unarmed && (S.anim==='aim' || S.anim==='fire')) setAnim('idle');
 }
-animsEl.addEventListener('click',e=>{ const b=e.target.closest('button'); if(b) setAnim(b.dataset.anim); });
+animsEl.addEventListener('click',e=>{ const b=e.target.closest('button'); if(b){ S.replay = true; setAnim(b.dataset.anim); } });
+movesEl.addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b || b.disabled) return; S.replay = true; if (b.dataset.seq) playSeq(b.dataset.seq); else setAnim(b.dataset.anim); });
 resEl.addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; S.pxChar=+b.dataset.px; press(resEl,'px',S.pxChar); resize(); });
 document.getElementById('side').addEventListener('click',()=>{ S.yaw=SIDE_YAW; S.spin=false; document.getElementById('spin').setAttribute('aria-pressed','false'); updateHud(); });
 document.getElementById('spin').addEventListener('click',e=>{ S.spin=!S.spin; e.currentTarget.setAttribute('aria-pressed',String(S.spin)); });
@@ -2689,7 +3377,7 @@ document.getElementById('toon').addEventListener('change',e=>SH.uBands.value=e.t
 document.getElementById('palon').addEventListener('change',e=>SH.uPalOn.value=e.target.checked?1:0);
 window.addEventListener('keydown',e=>{
   if (e.target.tagName==='INPUT') return;
-  const m={ '1':'idle','2':'walk','5':'tpose','6':'run','7':'jump_up','8':'jump_apex','9':'fall','0':'land','w':'climb','W':'climb' }[e.key]; if (m) setAnim(m);
+  const m={ '1':'idle','2':'walk','5':'tpose','6':'run','7':'jump_up','8':'jump_apex','9':'fall','0':'land','w':'climb','W':'climb' }[e.key]; if (m){ S.replay = true; setAnim(m); }
 });
 let dragX=0;
 stage.addEventListener('pointerdown',e=>{ S.dragging=true; dragX=e.clientX; stage.setPointerCapture(e.pointerId); });
@@ -3533,6 +4221,10 @@ const COAT = { chains:[], init:false,
   // arm starts from
   arm:{ r:0.01, deep:0.16, near:0.05, top:0.09, give:0.15, ease:10, fric:14, wMax:6, keep:0.97 },
   free:{ l:true, r:true },
+  floorPad:0.03,   // (the floor clamp under a tactical move, floorCoat: the panels' bones stay this far above it - the cloth's thickness)
+  // (MOVES rig, coatStep: as the hips turn over - from rigInv[0] to rigInv[1] of the way to upside down, 0 upright, 1 head down - the
+  // skirt is carried round with the legs, its length gathered by rigGather at most, each panel's outward flare taken in to rigFlare)
+  rigInv:[0.12, 0.5], rigGather:0.3, rigFlare:0.3,
   aa:0 };   // the platformer clip's jump acceleration as the coat feels it (smoothed like the hips', coatStep)
 function buildCoat(){
   let sm = null; model.traverse(o=>{ if (o.isSkinnedMesh && !sm) sm = o; });
@@ -3720,7 +4412,7 @@ function buildCoat(){
     COAT.arm.rFore[s] = ds.length ? ds[Math.floor(ds.length*0.8)] : 0.04;
   }
 }
-const _cq = new T.Quaternion(), _cv = new T.Vector3(), _cv2 = new T.Vector3(), _cv3 = new T.Vector3();
+const _cq = new T.Quaternion(), _cq2 = new T.Quaternion(), _cv = new T.Vector3(), _cv2 = new T.Vector3(), _cv3 = new T.Vector3();
 // unit direction of a segment from its fore-aft (a) / sideways (b) swing, in the hips' yaw frame (+x forward, +z the character's right)
 const coatDir = (a, b, out) => out.set(Math.sin(a), -Math.cos(a)*Math.cos(b), -Math.cos(a)*Math.sin(b));
 // the chains' current joints (yaw frame) from their swing angles
@@ -3877,6 +4569,24 @@ function armDepth(pts){
   }
   return bk >= 0 ? [best, pts[bk].q, new T.Vector3(D[bo], D[bo+1], D[bo+2])] : null;
 }
+// coatStep's floor (5): per chain from its root, each segment's drop limited to the room above the floor (S.mvFl + COAT.floorPad)
+function floorCoat(roots, toY, p, dv){
+  const fy = S.mvFl + COAT.floorPad - (1 - Math.min(1, S.mvG))*0.5;   // (it sinks away as the moves fade: no snap when they end)
+  COAT.chains.forEach((ch, c) => {
+    p[0].copy(roots[c]); toY(p[0]);
+    for (let k = 0; k < 3; k++){
+      coatDir(ch.a[k], ch.b[k], dv);
+      const room = Math.max(0, p[k].y - fy) / ch.len[k];
+      if (-dv.y > room){   // cos a cos b > room: swing a out to cos a = room / cos b
+        const sg = Math.abs(ch.a[k]) > 0.05 ? Math.sign(ch.a[k]) : -1;
+        ch.a[k] = sg*Math.acos(Math.min(1, room / Math.max(1e-3, Math.cos(ch.b[k]))));
+        if (ch.va[k]*sg < 0) ch.va[k] = 0;
+        coatDir(ch.a[k], ch.b[k], dv);
+      }
+      p[k+1].copy(p[k]).addScaledVector(dv, ch.len[k]);
+    }
+  });
+}
 function coatStep(dt){
   if (!COAT.chains.length) return;
   if (window.HERO && !window.HERO.coat) window.HERO.coat = COAT;
@@ -3885,7 +4595,12 @@ function coatStep(dt){
   const pelQ = pel.getWorldQuaternion(new T.Quaternion());
   // the coat hangs: it turns with the hips' yaw, their pitch / roll do not tilt it
   const qd = pelQ.clone().multiply(_cq.copy(BIND.pelvis.w).invert());
-  const f = _cv.set(1, 0, 0).applyQuaternion(qd), qy = new T.Quaternion().setFromAxisAngle(UP, Math.atan2(-f.z, f.x)), qyi = qy.clone().invert();
+  const f = _cv.set(1, 0, 0).applyQuaternion(qd); let hdg = Math.atan2(-f.z, f.x);
+  // a tactical move: the heading from the hips' lateral axis instead (it stays level through a roll, where the forward axis passes
+  // through the vertical and its heading would flip the coat round in one frame); blended by the moves' weight, so the base anims
+  // keep the forward axis exactly
+  if (S.mvG > 1e-3){ const r = _cv.set(0, 0, 1).applyQuaternion(qd); let d = Math.atan2(r.x, r.z) - hdg; d -= 2*Math.PI*Math.round(d/(2*Math.PI)); hdg += d*Math.min(1, S.mvG); }
+  const qy = new T.Quaternion().setFromAxisAngle(UP, hdg), qyi = qy.clone().invert();
   const live = 1 - S.tp, move = Math.min(1, S.walk + S.run), armed = S.weapon !== 'none';
   const stand = (1 - move) * live;
   const toY = v => v.applyQuaternion(qyi);       // world -> yaw frame (about the world origin; only differences are used)
@@ -3900,26 +4615,32 @@ function coatStep(dt){
     if (a.length() > 30) a.setLength(30);
     COAT.pa.lerp(a, 1 - Math.exp(-dt*25)); COAT.pv.copy(v); COAT.pp.copy(pw);
   }
-  const accY = toY(COAT.pa.clone()).multiplyScalar(live);
+  // (a climb out of a hang - CLIPS wall - heaves the hips up and forward hard: the coat feels 60 % less of it, so the skirt does not
+  // flare out behind him like a cape as he comes over the edge)
+  const accY = toY(COAT.pa.clone()).multiplyScalar(live*(1 - (S.coatDamp || 0)));
   // the jump arc a platformer clip stands for (the hero stays in place): its vertical acceleration adds to the hips' (smoothed the same
   // way), so the coat weighs more on take-off and landing and floats in free flight
   COAT.aa += (S.airA - COAT.aa) * (dt > 0.2 ? 1 : 1 - Math.exp(-dt*25));
   accY.y += COAT.aa * live;
   // the clips run in place: the travel speed they stand for still starts / stops the coat (it lags when setting off, swings on when stopping)
-  const spd = S.walk*COAT.speed[0] + S.run*COAT.speed[1];
+  const spd = S.walk*COAT.speed[0] + S.run*COAT.speed[1] + S.mvSpd;
   if (COAT.spd !== undefined && dt > 1e-5 && dt <= 0.2) accY.x += Math.max(-12, Math.min(12, (spd - COAT.spd)/dt)) * COAT.speedK * live;
   COAT.spd = spd;
   const geff = Math.min(1.7, Math.max(0.4, 1 + COAT.geffK*accY.y/9.8));
   // thigh swing (yaw frame) per side, relative to the bind
   const thA = {}; for (const s of ['l','r']){ const d = toY(B['calf_'+s].getWorldPosition(new T.Vector3()).sub(B['thigh_'+s].getWorldPosition(new T.Vector3())).normalize());
     const a = Math.asin(Math.max(-1, Math.min(1, d.x))), b = Math.atan2(-d.z, -d.y); thA[s] = [a - COAT.th0[s][0], b - COAT.th0[s][1]]; }
-  const fm = Math.max(0, 1 - (1-COAT.followMove[0])*S.walk - (1-COAT.followMove[1])*S.run) * live;
-  const dragBase = (S.walk*COAT.drag[0] + S.run*COAT.drag[1]) * live;
+  const cw = S.walk + S.mvW, cr = S.run + S.mvR;   // walk- / run-like travel (the tactical moves count by their coat weights)
+  // (a crouched move's drape: the panels follow its deep thigh swing less - the legs still push them out - so the back panel hangs
+  // over the trailing leg instead of riding up on it like a stiff cape)
+  const fm = Math.max(0, 1 - (1-COAT.followMove[0])*cw - (1-COAT.followMove[1])*cr) * live * (1 - Math.min(1, S.mvD));
+  const dragBase = (cw*COAT.drag[0] + cr*COAT.drag[1]) * live;
   // vertical air flow of the jump arc: falling, the air under the skirt lifts every panel out from the hips (the hem most: a bell);
   // rising, it presses them in along the legs (as far as the inward limit lets them)
   const vf = S.airV * live, AIR = COAT.air;
   const flare = vf < 0 ? AIR.up * (1 - Math.exp(vf / AIR.v)) : -AIR.down * (1 - Math.exp(-vf / AIR.v));
   const lift = AIR.lift * Math.max(0, flare) / AIR.up;   // a billowing coat may swing further out than the walk / run limits allow
+  const tailK = 1 - Math.min(0.5, S.mvT);   // a crouched move's tail: the back swing limit scaled down (MOVES tail)
   // targets per chain / segment
   const tgt = COAT.chains.map(ch => {
     const i = ch.i, fl = COAT.follow[i]*fm, ta = [], tb = [];
@@ -3953,7 +4674,7 @@ function coatStep(dt){
         const pen = (sp.r - hit.d) * live; if (pen <= 0) continue;
         for (const [ch, w, k, L] of hit.parts){
           if (k < 0 || w < 0.02) continue;
-          const al = Math.min(COAT.arm.give, pen * w / Math.max(0.06, L)), da = -hit.n.x*al, db = hit.n.z*al, nd = need[ch.idx];
+          const al = Math.min(COAT.arm.give + S.mvGive, pen * w / Math.max(0.06, L)), da = -hit.n.x*al, db = hit.n.z*al, nd = need[ch.idx];
           for (let j = 0; j < 3; j++){ const wj = j <= k ? 1 : COAT.carry;
             if (Math.abs(da*wj) > Math.abs(nd[0][j])) nd[0][j] = da*wj; if (Math.abs(db*wj) > Math.abs(nd[1][j])) nd[1][j] = db*wj; }
         }
@@ -3993,7 +4714,7 @@ function coatStep(dt){
     });
     // 2) limits: swing caps (the tail never goes horizontal), outward / inward, bend between segments
     COAT.chains.forEach(ch => { for (let k = 0; k < 3; k++){
-      const lo = -COAT.back[k] - lift, hi = COAT.fwd[k] + lift;
+      const lo = -COAT.back[k]*tailK - lift, hi = COAT.fwd[k] + lift;
       if (ch.a[k] < lo){ ch.a[k] = lo; if (ch.va[k] < 0) ch.va[k] *= -0.1; }
       if (ch.a[k] > hi){ ch.a[k] = hi; if (ch.va[k] > 0) ch.va[k] *= -0.1; }
       let o = (ch.b[k] - ch.b0[k]) * ch.so;
@@ -4035,7 +4756,7 @@ function coatStep(dt){
         caps.forEach(([A2, B2], m) => {
           e.subVectors(B2, A2); const t = Math.min(1, Math.max(0, v.subVectors(p[j], A2).dot(e)/e.lengthSq()));
           cp.copy(A2).addScaledVector(e, t); v.subVectors(p[j], cp);
-          const R = ch.rad[j][m], tn = v.dot(ch.td); if (Math.abs(tn) >= R || -v.x > COAT.open[ch.i]) return;   // (a leg ahead of a front panel leaves through the opening)
+          const R = ch.rad[j][m], tn = v.dot(ch.td); if (Math.abs(tn) >= R || -v.x > COAT.open[ch.i] - S.mvO) return;   // (a leg ahead of a front panel leaves through the opening)
           const sN = v.dot(ch.rd), smin = Math.sqrt(R*R - tn*tn);
           if (sN < smin && sN > -0.35) need = Math.max(need, smin - sN);
         });
@@ -4048,12 +4769,36 @@ function coatStep(dt){
           ch.a[k] += da*w; ch.b[k] += db*w;
           if (ch.va[k]*da < 0) ch.va[k] *= 0.3; if (ch.vb[k]*db < 0) ch.vb[k] *= 0.3;
         }
-        for (let k = 0; k < 3; k++){ ch.a[k] = Math.max(-COAT.back[k] - lift, Math.min(COAT.fwd[k] + lift, ch.a[k])); p[k+1].copy(p[k]).addScaledVector(coatDir(ch.a[k], ch.b[k], dv), ch.len[k]); }
+        for (let k = 0; k < 3; k++){ ch.a[k] = Math.max(-COAT.back[k]*tailK - lift, Math.min(COAT.fwd[k] + lift, ch.a[k])); p[k+1].copy(p[k]).addScaledVector(coatDir(ch.a[k], ch.b[k], dv), ch.len[k]); }
       }
     });
+    // 5) a tactical move (the roll): no panel through the floor - a segment that would reach below it swings out (past the swing caps)
+    // until its end rests on it, along the way it already swings (back if it hangs straight): the cloth lies on the floor
+    if (S.mvG > 1e-3) floorCoat(roots, toY, p, dv);
   }
-  // pose the bones along the chains (the T-pose blends exactly to the bind shape)
+  // pose the bones along the chains (the T-pose blends exactly to the bind shape). A tumbling move (MOVES rig: the roll): as the hips
+  // turn over (COAT.rigInv), the skirt is carried round with the legs (below), its length gathered by up to rigGather - so it wraps
+  // the legs through the roll instead of hanging from the upside-down hips (over the chest and arms) or standing off them; it hangs
+  // free again as he comes upright.
+  // Under any move no segment ends below the floor: it is tipped up toward the level along its own heading (the cloth lies on it).
   const pelQi = pelQ.clone().invert();
+  const rg = Math.min(1, S.mvRig), lat = _cv2.set(0, 0, 1).applyQuaternion(qy);
+  let wr = 0; const RT = COAT.rt || (COAT.rt = { l:[new T.Quaternion(), new T.Quaternion()], r:[new T.Quaternion(), new T.Quaternion()] });
+  if (rg > 1e-4){
+    const inv = (1 - _cv.set(0, 1, 0).applyQuaternion(qd).y)/2;
+    wr = rg*smooth01((inv - COAT.rigInv[0]) / (COAT.rigInv[1] - COAT.rigInv[0]));
+    // (each side's panels: turned with the hips, then swung forward about their lateral axis as far as that thigh has swung from the
+    // bind - in the hips' own side view, so no twist or spread of the thigh carries over and splays the panels out; the hem segment
+    // goes halfway on toward the shin's direction, folding back round a bent knee)
+    if (wr > 1e-4){ const qdi = _cq2.copy(qd).invert(), al = d => Math.atan2(d.x, -d.y), wrap = x => x - 2*Math.PI*Math.round(x/(2*Math.PI));
+      for (const s of ['l','r']){
+        const hp = B['thigh_'+s].getWorldPosition(new T.Vector3()), kp = B['calf_'+s].getWorldPosition(new T.Vector3()), fp = B['foot_'+s].getWorldPosition(new T.Vector3());
+        const a0 = al(BIND['calf_'+s].wp.clone().sub(BIND['thigh_'+s].wp)), aT = al(kp.clone().sub(hp).applyQuaternion(qdi)), aC = aT + wrap(al(fp.sub(kp).applyQuaternion(qdi)) - aT);
+        RT[s][0].setFromAxisAngle(_cv.set(0, 0, 1), wrap(aT - a0)).premultiply(qd);
+        RT[s][1].setFromAxisAngle(_cv.set(0, 0, 1), wrap(lerp(aT, aC, 0.5) - a0)).premultiply(qd);
+      } }
+  }
+  const fyP = S.mvG > 1e-3 ? S.mvFl + COAT.floorPad - (1 - Math.min(1, S.mvG))*0.5 : -Infinity, dd = new T.Vector3(), rad = new T.Vector3();
   COAT.chains.forEach((ch, c) => {
     const pos = roots[c].clone();
     for (let k = 0; k < 3; k++){
@@ -4061,10 +4806,20 @@ function coatStep(dt){
       const a = lerp(ch.a[k], ch.a0[k], S.tp), bb = lerp(ch.b[k], ch.b0[k], S.tp);
       const d = coatDir(a, bb, new T.Vector3()).applyQuaternion(qy), r0 = coatDir(ch.a0[k], ch.b0[k], new T.Vector3()).applyQuaternion(qy);
       _cq.setFromUnitVectors(r0, d).multiply(qy);
+      if (wr > 1e-4){   // (wrapped: each panel's own outward flare taken in to rigFlare - the skirt closes round the legs like a tube)
+        const r0b = coatDir(ch.a0[k], ch.b0[k], dd), rf = coatDir(ch.a0[k], ch.b0[k]*COAT.rigFlare, rad);
+        _cq.slerp(_q3.setFromUnitVectors(r0b, rf).premultiply(RT[ch.leg][k < 2 ? 0 : 1]), wr); coatDir(ch.a0[k], ch.b0[k], d).applyQuaternion(_cq); }
+      const room = (pos.y - fyP) / ch.len[k];
+      if (-d.y > room){   // (tipped up to end on the floor: along its heading - near the vertical, out from the hips - at the drop it has room for)
+        const rm = Math.max(0, Math.min(1, room)); dd.set(d.x, 0, d.z); const hl = dd.length();
+        if (hl < 0.2){ rad.copy(roots[c]).sub(pw); rad.y = 0; if (rad.lengthSq() < 1e-8) rad.copy(lat).cross(UP); dd.addScaledVector(rad.normalize(), 0.2 - hl); }
+        dd.normalize().multiplyScalar(Math.sqrt(1 - rm*rm)).setY(-rm);
+        _cq.premultiply(_q3.setFromUnitVectors(d, dd)); d.copy(dd);
+      }
       b.quaternion.copy(pelQi).multiply(_cq);
       b.position.copy(pel.worldToLocal(pos.clone()));
       b.updateMatrixWorld(true);
-      pos.addScaledVector(d, ch.len[k]);
+      pos.addScaledVector(d, ch.len[k]*(1 - COAT.rigGather*wr));
     }
   });
   if (arms.length) coatRefresh(pw);
@@ -4644,13 +5399,21 @@ loadModel(gltf => {
   for (const s of ['l','r']){ LEN['up_'+s] = wp('upperarm_'+s).distanceTo(wp('lowerarm_'+s)); LEN['lo_'+s] = wp('lowerarm_'+s).distanceTo(wp('hand_'+s));
     LEN['th_'+s] = wp('thigh_'+s).distanceTo(wp('calf_'+s)); LEN['ca_'+s] = wp('calf_'+s).distanceTo(wp('foot_'+s)); }
   mixer = new T.AnimationMixer(model);
-  for (const c of gltf.animations){ const a = mixer.clipAction(c); a.play(); a.setEffectiveWeight(0); ACT[c.name.toLowerCase().startsWith('run')?'run':'walk'] = a; }
+  // the GLB's clips by name: the first Walking* is the walk, the first Running* the run; any other clip keeps its own name (it used
+  // to land in ACT.walk, replacing the walk with whatever came last)
+  for (const c of gltf.animations){ const a = mixer.clipAction(c); a.play(); a.setEffectiveWeight(0);
+    const nm = c.name.toLowerCase(), k = /^walk/.test(nm) ? 'walk' : /^run/.test(nm) ? 'run' : nm; ACT[ACT[k] ? nm : k] = a; }
   buildGear();
   buildCoat();
+  buildSole();
+  buildPackV();
   updateHud();
-  window.HERO = { T, hero, model, B, S, SH, LIGHT, PAL, RAMP, CLS, post, weapons, flash, update, render, setAnim, setWeapon, setSize, CLIPS,
-    frame(w,h,px){ S.pxChar=px; setSize(w,h,1); } };
-  window.HERO_READY = true;
+  window.HERO_READY = false;   // tools wait for the tactical moves too
+  // (HERO.setAnim: the game / tools - a tactical one-shot or the ledge climb plays once and holds its end; the viewer's buttons replay.
+  // It returns false when the request waits for a committed one-shot to pass its commit point - in HERO.S.queue, made by update())
+  window.HERO = { T, hero, model, B, S, SH, LIGHT, PAL, RAMP, CLS, post, weapons, flash, update, render, setAnim(a, cut){ S.replay = false; return setAnim(a, cut); }, setWeapon, setSize, CLIPS,
+    MOVES, moves, MV, SEQS, LEDGE, GUARD, playSeq, frame(w,h,px){ S.pxChar=px; setSize(w,h,1); } };
+  loadMoves().catch(e => console.warn('ruchy taktyczne niedostępne:', e)).finally(() => { window.HERO_READY = true; });
 }, err => { hud.textContent = 'Nie udało się wczytać modelu: ' + (err && err.message || err); });
 })();
 </script>

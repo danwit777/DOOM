@@ -1,0 +1,238 @@
+{
+  "target": "../hero.glb",
+  "out": "../anims.json",
+  "fps": 30,
+  "clips": [
+    {
+      "name": "alert",
+      "src": "${MESHY_DIR}/batch1.glb",
+      "clip": "Alert",
+      "map": "meshy",
+      "yaw": -12,
+      "loop": true,
+      "source": "meshy",
+      "still": true,
+      "legs": {
+        "pin": true,
+        "narrow": 0.8
+      },
+      "note": "feet pinned flat (the clip shuffles the left foot during its look-round), the stance 20% narrower"
+    },
+    {
+      "name": "crouchwalk",
+      "src": "${MESHY_DIR}/batch1.glb",
+      "clip": "Cautious_Crouch_Walk_Forward_inplace",
+      "map": "meshy",
+      "yaw": -35,
+      "loop": true,
+      "source": "meshy",
+      "legs": {
+        "straight": true,
+        "center": true,
+        "lock": true,
+        "plant": true,
+        "posture": {
+          "pitch": 10,
+          "neck": 30
+        },
+        "swingLift": 0.03,
+        "stride": 0.68
+      },
+      "note": "steps 32% shorter than the source (the slowest, quietest gait: shorter steps than the sneak)"
+    },
+    {
+      "name": "sneak",
+      "src": "${MESHY_DIR}/batch1.glb",
+      "clip": "Cautious_Crouch_Walk_Forward_inplace",
+      "map": "meshy",
+      "yaw": -35,
+      "loop": true,
+      "legs": {
+        "straight": true,
+        "center": true,
+        "lock": true,
+        "plant": true,
+        "lift": 0.1,
+        "posture": {
+          "pitch": 18,
+          "neck": 35
+        },
+        "stride": 0.75,
+        "swingLift": 0.03
+      },
+      "source": "meshy",
+      "note": "the crouch walk with the hips raised and shorter steps: a half-crouched tactical walk (Sneaky_Walk read as a cartoon tiptoe)"
+    },
+    {
+      "name": "crouch",
+      "holdOf": {
+        "clip": "crouchwalk",
+        "frame": 20,
+        "n": 2
+      },
+      "legs": {
+        "plant": true
+      },
+      "source": "meshy"
+    },
+    {
+      "name": "lowrun",
+      "src": "${MESHY_DIR}/batch1.glb",
+      "clip": "Lean_Forward_Sprint_inplace",
+      "map": "meshy",
+      "yaw": 0,
+      "loop": true,
+      "source": "meshy",
+      "legs": {
+        "lock": true,
+        "plant": true,
+        "lockRamp": 1,
+        "plantRamp": 3
+      },
+      "armDamp": 0.35
+    },
+    {
+      "name": "ladder_on",
+      "src": "${MESHY_DIR}/batch2.glb",
+      "clip": "Ladder_Mount_Start",
+      "map": "meshy",
+      "yaw": 0,
+      "source": "meshy",
+      "faceLock": true,
+      "faceKeep": 0.5,
+      "from": 0.25
+    },
+    {
+      "name": "ladder",
+      "src": "${MESHY_DIR}/batch3.glb",
+      "clip": "Ladder_Climb_Loop",
+      "map": "meshy",
+      "yaw": 0,
+      "loop": true,
+      "riseLoop": true,
+      "source": "meshy",
+      "phase": 0.5,
+      "note": "starts half a cycle in, where ladder_on ends; ladder_off follows a whole number of cycles + 0.5 (phase 0 of the source loop); the gripping hands held on rungs one hand step (rise / 2) apart",
+      "handLock": {}
+    },
+    {
+      "name": "ladder_off",
+      "src": "${MESHY_DIR}/batch3.glb",
+      "clip": "Ladder_Climb_Finish",
+      "map": "meshy",
+      "yaw": 0,
+      "to": 3.4,
+      "source": "meshy"
+    },
+    {
+      "name": "hang",
+      "src": "${MESHY_DIR}/batch3.glb",
+      "clip": "Grab_Wall_Midair_Idle",
+      "map": "meshy",
+      "yaw": 0,
+      "from": 1.7,
+      "to": 1.9667,
+      "pingpong": {
+        "half": 1.0
+      },
+      "hands": 2.46,
+      "source": "meshy",
+      "keepRoot": true,
+      "note": "hands: LEDGE.y - LEDGE.grip in index.html; the last, nearly settled 0.27 s of the clip (the body sinks 5 cm as the arms straighten), slowed to 1 s each way and eased at both turns"
+    },
+    {
+      "name": "roll",
+      "src": "${MESHY_DIR}/batch4.glb",
+      "clip": "Roll_Dodge",
+      "map": "meshy",
+      "yaw": 0,
+      "source": "meshy",
+      "faceLock": true,
+      "from": 0.33,
+      "rmFeet": true,
+      "edits": [
+        {
+          "bone": "upperarm_r",
+          "axis": [
+            1,
+            0,
+            0
+          ],
+          "deg": -50,
+          "from": 0.5,
+          "to": 0.92,
+          "ramp": 0.12
+        },
+        {
+          "bone": "upperarm_l",
+          "axis": [
+            1,
+            0,
+            0
+          ],
+          "deg": -20,
+          "from": 0.2,
+          "to": 0.3,
+          "ramp": 0.1
+        },
+        {
+          "bone": "thigh_l",
+          "axis": [
+            1,
+            0,
+            0
+          ],
+          "deg": -20,
+          "from": 0.6,
+          "to": 0.8,
+          "ramp": 0.15
+        },
+        {
+          "bone": "thigh_r",
+          "axis": [
+            1,
+            0,
+            0
+          ],
+          "deg": -25,
+          "from": 0.6,
+          "to": 0.8,
+          "ramp": 0.15
+        },
+        {
+          "bone": "calf_l",
+          "axis": [
+            1,
+            0,
+            0
+          ],
+          "deg": 40,
+          "from": 0.58,
+          "to": 0.78,
+          "ramp": 0.15
+        },
+        {
+          "bone": "calf_r",
+          "axis": [
+            1,
+            0,
+            0
+          ],
+          "deg": 65,
+          "from": 0.6,
+          "to": 0.82,
+          "ramp": 0.15
+        }
+      ],
+      "legs": {
+        "lock": true
+      },
+      "floor": 0.008,
+      "flatFeet": [
+        1.0,
+        0.2
+      ],
+      "note": "the knees tucked toward the chest while he goes over (0.45-0.97 s), the arms swung out of the coat"
+    }
+  ]
+}
