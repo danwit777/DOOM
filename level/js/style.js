@@ -138,8 +138,27 @@ const RAMP = {
   dsteel: ['#16121a', '#221b21', '#2f2529', '#3d3031', '#4d3c39', '#5f4b43'],
   // signal: warning lamps of chimneys, headframes, the Gauturm beacon and the airship: [halo ring, lamp, hot pixel = also the warm
   // white of the searchlight beams]
-  signal: ['#8a1e16', '#ff4030', '#ffe9b0']
+  signal: ['#8a1e16', '#ff4030', '#ffe9b0'],
   // ---- end atmos ----
+  // ---- headframes track (art/bg.js: the lattice headframes of the parallax layers) ----
+  // One family with the owner's model headframe on the playfield (art/models.js: red lead gone to rust, rust[0..5], its sheaves,
+  // bearing blocks and cage guides steel-teal), seen through more smog the farther back it stands: the hues kept (violet shadows,
+  // amber lights), the saturation and the span cut, the values drawn toward the dusk steps round it, so no layer's headframe
+  // outshines the nearer one or the playfield. Steps [dark, brace, body, lit, rim]: the rust's dark = the shadowed chords and the
+  // girts' and deck's undersides, brace = the X-bracing, lacing, railing and mast, body = girts, chords and deck, lit = the lit
+  // chords and the deck's top, rim = the gussets' lit pixel; the steel's dark = the wire ropes and the rims' shadowed arcs, brace =
+  // the inner ring, body = spokes, hub and bearing block, lit / rim = the rims' lit arcs. mrust / msteel: the mid layer (0.6), a
+  // step under the model's (lit and rim under rust[3] / rust[4]; its sheaves darker than its steel's), the body a notch under the
+  // sky[3] band the towers' waists stand in (at that band's value girts and legs would melt into it) and the brace step dark, so
+  // the lattice keeps a read on every sunset band it crosses; mfrust / mfsteel: the midfar (0.32), about at dusk[1..5]'s values,
+  // the rust only a warm cast on them, the steel a little cooler and greyer than that rust (~10 degrees toward violet, saturation
+  // ~0.35: what is left of the teal in the orange haze), so the farthest wheels sink into the haze behind the nearer lattices
+  // instead of showing through them.
+  mrust:   ['#2e191c', '#3e2124', '#5c3326', '#864e31', '#a2663f'],
+  msteel:  ['#221f26', '#2a2a2f', '#363b3c', '#444a49', '#56605c'],
+  mfrust:  ['#382228', '#4c2c2a', '#62382c', '#7a4830', '#905836'],
+  mfsteel: ['#37242c', '#482e31', '#593c3a', '#6c4c47', '#78574e']
+  // ---- end headframes ----
 };
 
 // ---------- random / noise ----------

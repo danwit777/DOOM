@@ -25,16 +25,50 @@
 // px under the frame's top with the street no lower than 85 % of the frame, the view held into the cage descent; and a taller one,
 // props.headframe() stubbed to the 64 px design's 438 px box: the view lifts to y 82, the top 8 px in, the street ~83 % down), the
 // owner's models wired (the atlas loaded, the hunts and the story props drawn from it, none of those props near a spot he stands
-// at), NO SOFTLOCK (the hero is rested on every standable cell and driven by walk / run / jump / hop / ladder / drop macros through
-// the real key handler: every spot he can reach from the start must still lead to the cage win or to a death), jump height / reach
-// at walk and run, a walking jump clears the A trench, a full-speed run jump with coyote time can NOT clear the E shaft; the hero
-// sheet: every state plays its own clip, facing left draws the left set rendered from the 3D model (pauldron on his left shoulder,
-// lit from the upper left - not a mirror), the air clips of a jump follow the vertical speed (rise -> top -> fall, in order) while
-// walking off an edge goes straight to fall (and stepping off a hunt stays in the walk cycle), a turnaround on the ground never
-// flashes idle, land plays only straight out of the air (no late squash after walking on), the climb's frames advance with the
-// distance climbed (dy), its hands sit on the ladder's axis and both facings draw it at the same place (measured on the drawn
-// pixels, not from the sheet's lx); ladders (walk off at the foot after climbing down, no hop over the top), the A steps stay in
-// the ground cycle, the rider keeps a constant pixel offset on the bucket / cart, the movers' front parts (the cage's bars, the
+// at), NO SOFTLOCK (the hero is rested on every standable cell and driven by walk / run / jump / hop / ladder / drop macros and the
+// moves - crouch walk, low run and a jump from it, sneak, rolls walking, running, low-running and from a crouch, a jump the moment a
+// roll lets him - through the real key handler: every spot he can reach from the start must still lead to the cage win or to a
+// death), jump height / reach at walk and run, a walking jump clears the A trench, a full-speed run jump with coyote time can NOT
+// clear the E shaft; THE MOVES (engine.js CONTROLS), both facings, through the key handler: Down crouches through crouch_in, Left /
+// Right walk crouched at P.CROUCH and with Shift low-run at P.LOWRUN, C sneaks at P.SNEAK (no auto-run in any of them however long
+// it is held), still with C he is on guard (alert, the arms up through alert_in and down through alert_out), letting go stands him
+// up through crouch_out (a crouch let go half way reverses at the mirrored frame); STANCES: every switch between the ground stances
+// (idle, walk, run, the other way, crouch, crouch walk, low run, sneak, guard: each pair, from each held and half way into it)
+// changes his drawn height by <= P.POP, the crouch ways play on the spot - Down and a direction together crouch him first, then he
+// crouch-walks; both let go crouch-walking he stops and stands up; Down let go with the direction held he stands up, then walks
+// (also moving faster than the crouch walk) - and walking, Down takes him down through the low run; the gaits' frames follow the
+// ground speed exactly (px per sheet frame shown = the clip's speed / fps); X from standing rolls him the clip's whole travel,
+// every frame shown, then he stays on guard P.ALERT s; from idle, a walk, a run, the low run, a sneak, a crouch walk and a crouch
+// the roll starts at the frame of its set-off matching his pose (none drawn taller, no standing frame on the move, deeper the
+// faster he goes; from a planted pose the boots stay put), keeps his speed until its dive and travels the clip's whole root motion;
+// with keys held through it (a direction, Shift, Down, C) it hands over only once the get-up has him up to that pose (the
+// silhouette's height within P.POP, the boots within 8 px); it is committed (the other way and a jump do nothing) until its commit
+// point, then the other way held ends it at the get-up, a jump pressed just before it fires at it, and X pressed just before a
+// landing rolls him as he lands; X pressed again past it near a wall chains a roll where that has room, else the roll goes on
+// (never a pop from the get-up, never a one-step blip between rolls); a turn-around roll at a full run goes on the way he runs
+// (from standing it turns him); a jump from a crouch is a full standing jump; a roll off a ledge (slow and in the dive) tumbles on
+// in the air to its last frame before the fall (at most the run's speed, no jump however Space is mashed), into a wall (both
+// facings) or the level's end it stops short of it with no frame drawn over it, never moves back, stays stopped and plays out, from
+// point blank and from where it would go less than P.ROLL_ROOM of its travel X does nothing (no room), down a 1-tile step it stays
+// a roll, the win entered mid-roll plays it out through the ride; THE ROLL NEVER BACKS HIM: rolled from every standable cell, both
+// facings, from standing, a walk, a run, the low run and a crouch, no step moves him against his facing (but the belt's push), on
+// the ground no frame overlaps a wall ahead, nothing passes the level's ends, every roll ends; crouch-walking onto a ladder top
+// climbs down; crouched under the belt's tail he walks into post 116, stands up, and a jump from there stops his hair under the
+// belt; crouched in the moving bucket he rides it at one pixel offset; on a catwalk Down alone crouches and Down + a jump drops
+// through (a fall at once, crouched again on landing with Down held), on the belt Down + a jump is a plain jump; NO MOVE CLEARS THE
+// E SHAFT (27 tries: the low run, crouch walk, sneak and run with a jump 0..4 steps past the lip, the low run let go into a jump,
+// rolls off and into the lip, walking and running rolls into a jump buffered into their commit point at the lip, a roll chained
+// there); the touch pad plays them (▼, ▼ + ▶, BIEG + ▼ + ▶, SKRAD + ▶, ↻; ▼ + ⤒ and one thumb sliding from ▼ onto ⤒ drop through
+// the catwalk; a thumb sliding from ⤒ onto ↻ does not roll nor picks up ▼ on its way) on every phone, the pad two rows a group in
+// portrait, one in landscape; the hero sheet: every state plays its own clip (the 8 platformer ones and the 10 moves; the planted
+// moves stand every frame on the ground line, the roll every frame but its dive's, the switches between the stances, the crouch,
+// the guard and the roll move the boots <= 3.5 px), facing left draws the left set rendered from the 3D model (pauldron on his left
+// shoulder, lit from the upper left - not a mirror), the air clips of a jump follow the vertical speed (rise -> top -> fall, in
+// order) while walking off an edge goes straight to fall (and stepping off a hunt stays in the walk cycle), a turnaround on the
+// ground never flashes idle, land plays only straight out of the air (no late squash after walking on), the climb's frames advance
+// with the distance climbed (dy), its hands sit on the ladder's axis and both facings draw it at the same place (measured on the
+// drawn pixels, not from the sheet's lx); ladders (walk off at the foot after climbing down, no hop over the top), the A steps stay
+// in the ground cycle, the rider keeps a constant pixel offset on the bucket / cart, the movers' front parts (the cage's bars, the
 // bucket's near wall) are drawn under him outside the mover and over him straddling it or inside, a jump in place in the moving
 // bucket lands back in it (platform carry) and the hair stops under its yoke, a jump under the belt stops under the belt, a respawn
 // puts the camera on the hero at once, the win needs the cage going DOWN; the VALUE rule (hero vs background contrast at every beat
@@ -46,15 +80,17 @@
 // 1920 x 950 shows the street on play, the full-screen button shows the stage alone, phones in portrait AND landscape show canvas +
 // touch pad together and the pad drives the hero, a 390 px portrait phone fits its column (x1 would draw the hero 32 CSS px tall)
 // while the landscape one keeps a crisp x2 and a 412 px one at dpr 2.625 its crisp x1 (the fit would be < 8 % wider), a thumb
-// slides from one pad button to the next, a 320 px phone keeps both pad groups on one row, keys are not captured once the stage is
-// scrolled away, a click on a layer checkbox or the grid button leaves the keys to the game, Space on a checkbox reached with Tab
-// toggles it instead of jumping: how high Space made him rise is recorded in the page, from the keydown on).
+// slides from one pad button to the next, a 320 px phone keeps both pad groups side by side, keys are not captured once the stage
+// is scrolled away, a click on a layer checkbox or the grid button leaves the keys to the game, Space on a checkbox reached with
+// Tab toggles it instead of jumping: how high Space made him rise is recorded in the page, from the keydown on).
 // Real-time checks (the rAF loop, trusted keys, touch, page scrolling) wait for a number of the game's fixed steps
 // (LVL.debug.state().frame) or poll for the condition they test (the scroll position, a button's rect), never for wall-clock time,
 // so a loaded machine that renders few frames a second still gives the hero the same time to move and the page time to scroll.
 // Writes to outDir: beat_<A..E>_1x.png (canvas pixels) and beat_<..>_2x.png (the page's own 2x integer display at 1920 x 1080),
-// route.png (the whole playfield with the bot's path), contrast.json, layout_*.png, playtest.json (log + measurements). Exit code 1
-// on any failed assertion.
+// moves_<beat>_<move>_<R|L>_1x / _2x.png (the moves in the level, both facings), seq_<name>_<R|L>.png (the roll's, the guard's and
+// the crouch's ways in and out played in the level: crops of every 2nd step, x2, labelled with the frame, his facing and x),
+// strip_<move>.png (each move's frames from the sheet, both facings, x3), route.png (the whole playfield with the bot's path),
+// contrast.json, layout_*.png, playtest.json (log + measurements). Exit code 1 on any failed assertion.
 import fs from 'fs'; import path from 'path'; import { fileURLToPath } from 'url';
 const here = path.dirname(fileURLToPath(import.meta.url)), levelDir = path.resolve(here, '..');
 const out = path.resolve(process.argv[2] || 'playtest-out'); fs.mkdirSync(out, { recursive: true });
@@ -73,6 +109,8 @@ await page.waitForFunction(LOADED, null, { timeout: 60000 });
 // the level's units, for the thresholds below: K (native px per draft px), TS (tile), the frame
 const { K, TS, VW, VH, LH } = await page.evaluate(() => ({ K: LVL.style.K, TS: LVL.map.TS, VW: LVL.style.VW, VH: LVL.style.VH, LH: LVL.map.LH }));
 const fails = [], report = { checks: {}, snaps: [], log: [] };
+// the hero sheet's clips: the platformer ones and the tactical moves (engine.js CONTROLS)
+const BASE = ['idle', 'walk', 'run', 'jump_up', 'jump_apex', 'fall', 'land', 'climb'], MOVES = ['crouch_in', 'crouch', 'crouch_out', 'crouchwalk', 'sneak', 'lowrun', 'roll', 'alert', 'alert_in', 'alert_out'];
 const check = (name, ok, info) => { report.checks[name] = { ok: !!ok, info }; console.log((ok ? 'PASS ' : 'FAIL ') + name + (info !== undefined ? '  ' + JSON.stringify(info) : '')); if (!ok) fails.push(name); };
 // waitSteps(pg, n): resolves once the live loop has run n more fixed steps (60 per game second), whatever the wall clock says
 // (gives up after 60 s of no progress, so a stalled page fails its check instead of hanging the run)
@@ -86,8 +124,11 @@ const waitSteps = (pg, n) => pg.evaluate(n => new Promise(res => { const f0 = LV
 // and the two carts. From a node the hero is placed (two spots in the cell, or straddling its edges when neither stays; on a
 // ladder's axis; on a cart's middle) and each macro is played through the key handler (keydown / keyup on window); then the keys
 // are let go and the run ends where he rests again: an edge. Macros, both ways: walk 10 / 40 steps, run, jump after 0 / 16 steps
-// of walking held 22 / 6 steps (full / short), run-jump, hop, leap off a ladder; in place: jump, Up, Down, a tap of Down (catwalk
-// drop), wait (the belt's carry). A placement that does not stay put (a ladder top, a ladder foot) is an edge to where it settles.
+// of walking held 22 / 6 steps (full / short), run-jump, hop, leap off a ladder, and the moves: crouch walk, low run, a jump from
+// it, sneak, a roll walking, running and low-running (it keeps his speed) and the direction held through it, a jump the moment a
+// roll lets him; in place: jump, Up, Down (the crouch; a ladder top: down it), Down + a tap of jump (catwalk drop), a roll, a roll
+// from the crouch, wait (the belt's carry). A placement that does not stay put (a ladder top, a ladder foot) is an edge to where it
+// settles.
 // The movers are parked so the graph is static (bucket mid-chasm, the cage at the bottom: the shaft is a pit, the shunting cart at
 // its start) and their rides are added as edges that the route bot and the probes play for real: either loading station <->
 // bucket (it docks at both); the shaft edges, both sides <-> cage (it rests flush with them at the top: step in, walk across)
@@ -113,7 +154,9 @@ const installReach = () => {
   // in the air: let go of jump after h steps, keep the held direction until the feet land (or 150 steps)
   const air = h => { for (let i = 0; i < 150 && !ended(); i++){ if (i === h) up('Space'); E.update(); if (i > 2 && (pl.ground || pl.climb)) break; } };
   const settle = () => { for (let i = 0; i < 240 && !ended(); i++){ if ((pl.ground && Math.abs(pl.vx) < 1) || (pl.climb && pl.vy === 0)) return; E.update(); } };
-  const K = { L: 'ArrowLeft', R: 'ArrowRight', U: 'ArrowUp', Dn: 'ArrowDown', J: 'Space', S: 'ShiftLeft' };
+  const K = { L: 'ArrowLeft', R: 'ArrowRight', U: 'ArrowUp', Dn: 'ArrowDown', J: 'Space', S: 'ShiftLeft', C: 'KeyC', X: 'KeyX' };
+  // (roll on until its commit point lets him act: a jump then fires at once)
+  const toCommit = () => { const c = D.roll().commit; for (let i = 0; i < 120 && pl.rollT !== null && pl.rollT < c && !ended(); i++) E.update(); };
   const macros = [];
   for (const d of ['L', 'R']){
     for (const k of [10, 40]) macros.push([d + 'walk' + k, () => { down(K[d]); run(k); }]);
@@ -122,9 +165,17 @@ const installReach = () => {
     macros.push([d + 'runjump', () => { down(K.S); down(K[d]); run(40); down(K.J); air(22); }]);
     macros.push([d + 'hop', () => { down(K[d]); down(K.J); run(3); up(K.J); air(0); }]);
     macros.push([d + 'ladderleap', () => { down(K.U); run(30); up(K.U); down(K[d]); tap(K.J); air(22); }]);
+    // the moves: crouch walk, low run (and a jump from it), sneak, a roll walking, running and low-running (the direction held through
+    // it), a jump the moment a roll lets him
+    macros.push([d + 'crouchwalk', () => { down(K.Dn); down(K[d]); run(60); }], [d + 'lowrun', () => { down(K.S); down(K.Dn); down(K[d]); run(50); }],
+      [d + 'lowrunjump', () => { down(K.S); down(K.Dn); down(K[d]); run(40); down(K.J); air(22); }], [d + 'sneak', () => { down(K.C); down(K[d]); run(60); }],
+      [d + 'roll', () => { down(K[d]); tap(K.X); run(80); }], [d + 'runroll', () => { down(K.S); down(K[d]); run(40); tap(K.X); run(80); }],
+      [d + 'lowrunroll', () => { down(K.S); down(K.Dn); down(K[d]); run(30); tap(K.X); run(80); }],
+      [d + 'rolljump', () => { down(K[d]); tap(K.X); toCommit(); down(K.J); air(22); }]);
   }
   macros.push(['jumpUp', () => { down(K.J); run(22); up(K.J); run(40); }], ['up', () => { down(K.U); run(200); }], ['down', () => { down(K.Dn); run(200); }],
-    ['downTap', () => { tap(K.Dn); run(4); up(K.Dn); run(60); }], ['wait', () => run(120)]);
+    ['dropThrough', () => { down(K.Dn); run(4); tap(K.J); run(4); up(K.J); up(K.Dn); run(60); }], ['roll', () => { tap(K.X); run(90); }],
+    ['crouchroll', () => { down(K.Dn); run(20); tap(K.X); run(90); }], ['wait', () => run(120)]);
   const bucket = mv.find(m => m.kind === 'bucket'), cage = mv.find(m => m.kind === 'cage'), cart2 = mv.find(m => m.id === 'cart2');
   const park = () => { for (const m of mv){ m.dx = m.dy = 0; m.waitT = 1e9; } bucket.x = 45 * TS; cage.y = cage.max; cart2.x = cart2.min; };
   const reset = () => { D.spawn(4); park(); upAll(); d0 = E.stats.deaths; w0 = E.stats.wins; };
@@ -293,7 +344,7 @@ check('HEADROOM: 3 free tiles over every standable surface', headroom.length ===
 await page.evaluate(() => {
   const D = LVL.debug, M = LVL.map, TS = M.TS, K = LVL.style.K, VW = LVL.style.VW, VH = LVL.style.VH, P = LVL.engine.P; D.manual = true;
   const held = new Set();
-  const offFrame = window.__offFrame = r => r.y < 0 || r.x < 0 || r.x + r.w > VW;     // his drawn frame's box past the frame's top or sides
+  const offFrame = window.__offFrame = r => r.y < 0 || r.x < 0 || r.x + r.w > VW;     // his drawn pixels' box past the frame's top or sides
   const key = (code, down) => dispatchEvent(new KeyboardEvent(down ? 'keydown' : 'keyup', { code, key: code, bubbles: true, cancelable: true }));
   const B = window.__bot = {
     seen: {}, path: [], jumpT: 0, hop: false, frames: 0, camOut: [], cyRange: {}, descent: [], hf: LVL.art.props.headframe(),
@@ -307,8 +358,8 @@ await page.evaluate(() => {
       const s = D.tick(1); B.frames++;
       const k = s.anim + ' > ' + s.clip + (s.safety ? ' (safety net)' : ''); B.seen[k] = (B.seen[k] || 0) + 1;
       // the camera's guarantee, every step he is alive in the level: his drawn frame inside the frame, his feet over its bottom
-      if (s.sprite && !s.winT && !s.deathT && s.y + P.H <= M.LH && (offFrame(s.sprite) || s.screen[1] > VH) && B.camOut.length < 20)
-        B.camOut.push({ frame: B.frames, x: Math.round(s.x), feet: Math.round(s.y + P.H), cx: s.cx, cy: s.cy, box: s.sprite, feetY: s.screen[1] });
+      if (s.drawn && !s.winT && !s.deathT && s.y + P.H <= M.LH && (offFrame(s.drawn) || s.screen[1] > VH) && B.camOut.length < 20)
+        B.camOut.push({ frame: B.frames, x: Math.round(s.x), feet: Math.round(s.y + P.H), cx: s.cx, cy: s.cy, box: s.drawn, feetY: s.screen[1] });
       // the camera's range per beat (and in E: E_hf with his centre over the headframe's base, off the cage) and, riding the cage
       // down, [feet, cy] per step
       if (s.playing && !s.winT && !s.deathT){ const seg = M.SEGS.filter(q => s.x / TS >= q[0]).pop()[1], ks = [seg], c = s.x + P.W / 2;
@@ -383,10 +434,10 @@ await page.evaluate(() => {
   })();
 });
 
-const snap = async name => {
+const snap = async (name, stem = 'beat_' + name) => {
   const d = await page.evaluate(() => { LVL.engine.render(); return document.getElementById('cv').toDataURL(); });
-  fs.writeFileSync(`${out}/beat_${name}_1x.png`, Buffer.from(d.split(',')[1], 'base64'));
-  await page.locator('#cv').screenshot({ path: `${out}/beat_${name}_2x.png` });
+  fs.writeFileSync(`${out}/${stem}_1x.png`, Buffer.from(d.split(',')[1], 'base64'));
+  await page.locator('#cv').screenshot({ path: `${out}/${stem}_2x.png` });
   report.snaps.push(name);
 };
 let routeErr = null;
@@ -465,10 +516,16 @@ const probe = await page.evaluate(() => {
   D.spawn(2); D.place(cx(65), 8 * TS); B.tick(); B.down('ArrowDown'); let st = D.state(), climbed = false;
   for (let i = 0; i < 300 && !(st.ground && st.y + P.H === CST); i++){ st = B.tick(); if (st.climb) climbed = true; } B.upAll();
   res.ladderDownFromTop = { climbed, reachedStreet: st.ground && st.y + P.H === CST };
-  D.spawn(2); D.place(cx(79), 8 * TS); B.tick(); B.down('ArrowDown'); for (let i = 0; i < 90; i++) st = B.tick(); B.upAll();
-  res.catwalkDropThrough = { feet: st.y + P.H, ground: st.ground };
-  D.spawn(3); D.place(cx(110), 7 * TS); B.tick(); B.down('ArrowDown'); for (let i = 0; i < 30; i++) st = B.tick(); B.upAll();
-  res.beltNoDrop = { feet: st.y + P.H, ground: st.ground };
+  // the catwalk: Down alone crouches on it (it stays under him), Down + a jump drops through it to the street - a fall at once (no
+  // step grace: no crouch frames in the air) - and, Down still held, he lands crouched at once (no standing step first)
+  D.spawn(2); D.place(cx(79), 8 * TS); B.tick(); B.down('ArrowDown'); for (let i = 0; i < 90; i++) st = B.tick();
+  const onCatwalk = { feet: st.y + P.H, ground: st.ground, crouch: st.crouch, anim: st.anim }; B.jump(4); let rose = 0; const air = [], landing = [];
+  for (let i = 0; i < 90; i++){ st = B.tick(); rose = Math.max(rose, 8 * TS - (st.y + P.H)); if (!st.ground) air.push(st.anim); else if (landing.length < 3 && air.length) landing.push(st.anim); } B.upAll();
+  res.catwalkDropThrough = { downAlone: onCatwalk, feet: st.y + P.H, ground: st.ground, rosePx: rose, airAnims: [...new Set(air)], firstGroundAnims: landing };
+  // the belt is not drop-through: Down + a jump on it is a plain jump (he rises and comes back down onto the belt, never below it)
+  D.spawn(3); D.place(cx(110), 7 * TS); B.tick(); B.down('ArrowDown'); for (let i = 0; i < 30; i++) st = B.tick(); B.jump(40);
+  let lowFeet = 0, highFeet = 1e9; for (let i = 0; i < 90; i++){ st = B.tick(); lowFeet = Math.max(lowFeet, st.y + P.H); highFeet = Math.min(highFeet, st.y + P.H); } B.upAll();
+  res.beltNoDrop = { feet: st.y + P.H, ground: st.ground, lowestFeet: lowFeet, highestFeet: highFeet, beltTop: 7 * TS };
   D.spawn(2); D.place(cx(65), CST); B.tick(); B.down('ArrowUp'); for (let i = 0; i < 40; i++) st = B.tick(); const midLadder = st.climb;
   B.up('ArrowUp'); B.down('ArrowLeft'); B.jump(20); let left = false; for (let i = 0; i < 60; i++){ st = B.tick(); if (!st.climb && st.vy < 0) left = true; } B.upAll();
   res.ladderLeap = { wasClimbing: midLadder, leapt: left, x: Math.round(st.x) };
@@ -715,14 +772,14 @@ const probe = await page.evaluate(() => {
     } finally { props.headframe = own; } }
   // fuzz: random key states from every checkpoint (fixed seed); the hitbox must never overlap a solid tile, nothing may go NaN
   { let seed = 12345; const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
-    const codes = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space', 'ShiftLeft'], f = { frames: 0, overlap: 0, nan: 0, camOut: 0, groundPanPx: 0, anims: {} }, on = {};
+    const codes = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space', 'ShiftLeft', 'KeyC', 'KeyX'], f = { frames: 0, overlap: 0, nan: 0, camOut: 0, groundPanPx: 0, anims: {} }, on = {};
     for (let cp = 0; cp < M.CHECK.length; cp++){ D.spawn(cp); let q = null;
       for (let i = 0; i < 4000; i++){ if (rnd() < 0.08){ const c = codes[(rnd() * codes.length) | 0]; on[c] = !on[c]; on[c] ? B.down(c) : B.up(c); }
         const s = B.tick(); f.frames++; if (!isFinite(s.x) || !isFinite(s.y)) f.nan++; f.anims[s.anim] = (f.anims[s.anim] || 0) + 1;
         if (q && __sameFloor(q, s)) f.groundPanPx = Math.max(f.groundPanPx, Math.abs(s.screen[1] - q.screen[1])); q = s;
         if (s.winT === 0 && s.deathT === 0){ const c0 = Math.floor(s.x / TS), c1 = Math.floor((s.x + P.W - 0.01) / TS), r0 = Math.floor(s.y / TS), r1 = Math.floor((s.y + P.H - 0.01) / TS);
           for (let c = c0; c <= c1; c++) for (let r = r0; r <= r1; r++) if (M.isSolid(c, r)){ f.overlap++; c = c1 + 1; break; }
-          if (s.sprite && s.y + P.H <= M.LH && (__offFrame(s.sprite) || s.screen[1] > VH)) f.camOut++; } }
+          if (s.drawn && s.y + P.H <= M.LH && (__offFrame(s.drawn) || s.screen[1] > VH)) f.camOut++; } }
       B.upAll(); for (const c of codes) on[c] = false; }
     res.fuzz = f; }
   // ... and after a death (fall into the B chasm -> respawn at checkpoint 1)
@@ -794,16 +851,16 @@ const probe = await page.evaluate(() => {
       for (let i = 0; i < d.length; i += 4) if (d[i] === 12 && d[i + 1] === 10 && d[i + 2] === 12){ n++; const y = (i >> 2) / VW | 0; y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
       if (n) gaps.push({ cx, cy, n, rows: [y0, y1] }); }
     D.setPlay(true); res.gaps = gaps; }
-  // the level's two ends (P.END): walking, running, a jump and a run-jump into either end, from 4 tiles off it (one jump on the
-  // way, one pressed against the end: the jump apex's outstretched hand is his widest frame) keep his drawn frame's box inside
-  // the frame: per run [its leftmost x, its rightmost x + w] and where he stopped
+  // the level's two ends (P.END): walking, running, a jump, a run-jump and a roll into either end, from 4 tiles off it (one jump /
+  // roll on the way, one pressed against the end: the jump apex's outstretched hand and the roll's dive are his widest frames) keep
+  // what is drawn of him (the frame's opaque box) inside the frame: per run [its leftmost x, its rightmost x + w] and where he stopped
   { const out = {};
-    for (const [side, cp, c, key] of [['L', 0, 4, 'ArrowLeft'], ['R', 4, M.MW - 5, 'ArrowRight']]) for (const how of ['walk', 'run', 'jump', 'runJump']){
+    for (const [side, cp, c, key] of [['L', 0, 4, 'ArrowLeft'], ['R', 4, M.MW - 5, 'ArrowRight']]) for (const how of ['walk', 'run', 'jump', 'runJump', 'roll']){
       D.spawn(cp); D.place(cx(c), M.standRow(c) * TS); D.snap(); for (let i = 0; i < 30; i++) B.tick();
       if (how.startsWith('run')) B.down('ShiftLeft'); B.down(key);
       let lo = 1e9, hi = -1e9, s = D.state();
-      for (let i = 0; i < 150; i++){ if (how.includes('ump') && (i === 6 || i === 90)) B.jump(40); s = B.tick();
-        if (s.sprite && !s.deathT){ lo = Math.min(lo, s.sprite.x); hi = Math.max(hi, s.sprite.x + s.sprite.w); } }
+      for (let i = 0; i < 150; i++){ if (i === 6 || i === 90){ if (how.includes('ump')) B.jump(40); else if (how === 'roll'){ B.up('KeyX'); B.down('KeyX'); } } s = B.tick();
+        if (s.drawn && !s.deathT){ lo = Math.min(lo, s.drawn.x); hi = Math.max(hi, s.drawn.x + s.drawn.w); } }
       B.upAll(); for (let i = 0; i < 40; i++) B.tick();
       out[side + '_' + how] = { box: [lo, hi], stopX: +s.x.toFixed(1) }; }
     res.ends = { END: P.END, W: P.W, LW: M.LW, runs: out }; }
@@ -826,10 +883,408 @@ const probe = await page.evaluate(() => {
   return res;
 });
 report.probe = probe;
+// ---------- the moves (engine.js CONTROLS): fresh runs through the key handler, on the E street unless said ----------
+const moves = report.moves = await page.evaluate(() => {
+  const D = LVL.debug, B = __bot, M = LVL.map, TS = M.TS, P = LVL.engine.P, gy = M.GROUND * TS, feet = s => s.y + P.H, E = LVL.engine;
+  const cx = c => c * TS + (TS - P.W) / 2, ticks = n => { let s = D.state(); for (let i = 0; i < n; i++) s = B.tick(); return s; };
+  const R = D.roll(), res = { roll: { fps: R.fps, n: R.n, travel: R.tx[R.n - 1], tx0: R.tx[0], commit: R.commit, dur: R.dur, dive: R.dive, mean: +((R.tx[R.n - 1] - R.tx[0]) / R.dur).toFixed(1) },
+    speeds: { CROUCH: P.CROUCH, SNEAK: P.SNEAK, LOWRUN: P.LOWRUN, RUN: P.RUN, JUMP_H: P.JUMP_H, POP: P.POP } };
+  // the frame drawn in a state, its silhouette's height over the anchor (sheet "opaque"), and the boots (the lowest 8 opaque rows'
+  // centroid) in world px across
+  const sheetPx = (() => { const im = LVL.sheet.img, c = document.createElement('canvas'); c.width = im.width; c.height = im.height;
+    const g = c.getContext('2d'); g.drawImage(im, 0, 0); return g.getImageData(0, 0, c.width, c.height); })();
+  const frame = s => LVL.sheet.sets[s.set === 'left' ? -1 : 1][s.clip].frames[s.fi], up = s => { const f = frame(s); return f.ay - f.opaque[1]; };
+  const boots = s => { const f = frame(s), a = (x, y) => sheetPx.data[((f.y + y) * sheetPx.width + f.x + x) * 4 + 3], lo = f.opaque[3] - 1; let sx = 0, n = 0;
+    for (let y = lo - 7; y <= lo; y++) for (let x = 0; x < f.w; x++) if (a(x, y)){ sx += x + 0.5; n++; } return s.sprite.x + s.cx + sx / n; };
+  // stand him at column c (feet on row) facing face, the camera on him, keys up
+  const at = (cp, c, row, face) => { B.upAll(); D.spawn(cp); D.place(cx(c), row * TS); E.player.face = face; D.snap(); return ticks(20); };
+  // the anim sequence (each change once) over n steps; f(i, s) presses keys before step i (s: the state before it)
+  const seqOf = (n, f = () => {}) => { const seq = []; let s = D.state(); for (let i = 0; i < n; i++){ f(i, s); s = B.tick(); if (seq[seq.length - 1] !== s.anim) seq.push(s.anim); } return { seq, s }; };
+  // a gait held steady (keys down, 40 steps to settle - a crouch way first, on the spot -, then n): its speed, the sets drawn and
+  // how far he moves per sheet frame shown (af: the clip's frame clock) against the clip's own speed / fps - equal: the planted
+  // foot stays put
+  const gait = (keys, n) => { keys.forEach(k => B.down(k)); const a = ticks(40), sets = new Set(), anims = new Set(); let s;
+    for (let i = 0; i < n; i++){ s = B.tick(); sets.add(s.set); anims.add(s.anim + '>' + s.clip); }
+    const clip = LVL.sheet.sets[s.face < 0 ? -1 : 1][s.anim];
+    return { anims: [...anims], sets: [...sets], vx: +Math.abs(s.vx).toFixed(2), pxPerFrame: +Math.abs((s.x - a.x) / (s.af - a.af)).toFixed(3),
+      sheetPxPerFrame: clip && clip.speed ? +(clip.speed / clip.fps).toFixed(3) : null }; };
+  const tap = k => { B.up(k); B.down(k); };
+  for (const [side, face, key, c, c0] of [['right', 1, 'ArrowRight', 133, 132], ['left', -1, 'ArrowLeft', 142, 143]]){
+    const o = res[side] = {}, back = face > 0 ? 'ArrowLeft' : 'ArrowRight';
+    // the crouch: in (crouch_in -> crouch), the crouch walk held 2.5 s (the auto-run never turns it into the low run), stop, out
+    at(4, c, 11, face); o.crouchIn = seqOf(40, i => { if (!i) B.down('ArrowDown'); }).seq; o.crouched = D.state().crouch;
+    o.crouchwalk = gait([key], 120);
+    o.crouchStop = seqOf(40, i => { if (!i) B.up(key); }).seq; o.crouchOut = seqOf(40, i => { if (!i) B.up('ArrowDown'); }).seq; o.stoodUp = !D.state().crouch;
+    // half way into the crouch and straight back up: crouch_out enters at the mirrored frame (no jump back to its start)
+    at(4, c, 11, face); B.down('ArrowDown'); ticks(5); const half = D.state(); B.up('ArrowDown'); const rev = B.tick();
+    o.reverse = { from: half.anim + '#' + half.fi, to: rev.anim + '#' + rev.fi, n: LVL.sheet.anims.crouch_in.frames.length };
+    // the low run: crouched + Shift
+    at(4, c, 11, face); B.down('ArrowDown'); o.lowrun = gait(['ShiftLeft', key], 90);
+    // the sneak held 2.5 s (no auto-run), then still (alert), then the key up (idle)
+    at(4, c, 11, face); o.sneak = gait(['KeyC', key], 120);
+    o.sneakStop = seqOf(30, i => { if (!i) B.up(key); }).seq; o.sneakOff = seqOf(30, i => { if (!i) B.up('KeyC'); }).seq;
+    // the roll from standing: from its first frame, its whole travel, every frame shown, then on guard (alert) P.ALERT s, then back
+    // to idle through alert_out
+    { at(4, c, 11, face); const x0 = D.state().x; let alert = 0, fis = [];
+      const r = seqOf(260, (i, s) => { if (!i) tap('KeyX'); if (i === 2) B.up('KeyX'); if (s.anim === 'roll' && fis[fis.length - 1] !== s.fi) fis.push(s.fi); if (s.anim === 'alert') alert++; });
+      o.roll = { seq: r.seq, dx: +((r.s.x - x0) * face).toFixed(2), alertSteps: alert, frames: fis.length, first: fis[0], lastFrame: fis[fis.length - 1], set: r.s.set }; }
+    // into a roll from every stance and gait (the keys let go at the press: it plays out), on the street from col c0: the pose he
+    // was drawn in, the roll's first frame and every one drawn before the dive (their heights: the first is the tallest), how far
+    // the boots move at the switch (planted in the set-off: they stay where his were), his speed until the dive, and how far the
+    // roll took him (the clip's whole travel: from its first frame on, and the root motion of the frames skipped, at once)
+    o.entries = {};
+    for (const [name, keys, n] of [['idle', [], 20], ['walk', [key], 20], ['run', ['ShiftLeft', key], 50], ['lowrun', ['ArrowDown', 'ShiftLeft', key], 50], ['sneak', ['KeyC', key], 40],
+      ['crouchwalk', ['ArrowDown', key], 40], ['crouch', ['ArrowDown'], 40]]){
+      at(4, c0, 11, face); keys.forEach(k => B.down(k)); const s0 = ticks(n); B.upAll(); tap('KeyX'); let s = B.tick(); B.up('KeyX');
+      const k0 = s.rollK, tall = [], vs = [], dBoots = +((boots(s) - boots(s0)) * face).toFixed(1);
+      while (s.rollT !== null && s.fi < R.dive){ tall.push(up(s)); vs.push(Math.abs(s.vx)); s = B.tick(); }
+      while (s.rollT !== null) s = B.tick();
+      o.entries[name] = { from: s0.anim + '#' + s0.fi, pose: up(s0), v0: Math.round(Math.abs(s0.vx)), k0, firstUp: tall[0], maxUp: Math.max(...tall), minVx: Math.round(Math.min(...vs)),
+        dBoots, dx: +((s.x - s0.x) * face).toFixed(2), tx: +(R.tx[R.n - 1] - R.tx[0]).toFixed(2) }; }
+    // out of a roll with keys held from the press on (the common case: the direction kept down through it): the switch from the
+    // roll to what they lead to - the frames on either side, how much the drawn silhouette's height and the boots move there
+    o.exits = {};
+    for (const [name, keys] of [['walk', [key]], ['run', ['ShiftLeft', key]], ['crouchwalk', ['ArrowDown', key]], ['crouch', ['ArrowDown']], ['sneak', ['KeyC', key]], ['alert', ['KeyC']]]){
+      at(4, c, 11, face); tap('KeyX'); let s = B.tick(), q = s; B.up('KeyX'); keys.forEach(k => B.down(k));
+      while (s.rollT !== null){ q = s; s = B.tick(); }
+      o.exits[name] = { from: q.clip + '#' + q.fi, to: s.clip + '#' + s.fi, dUp: up(s) - up(q), dBoots: +(boots(s) - boots(q)).toFixed(1), pastCommit: q.rollT >= R.commit };
+      B.upAll(); }
+    // the commit: mid-roll the other way and a jump do nothing (he rolls on, no jump); past it the other way held ends it - once the
+    // get-up has him up to the walk's height (at the commit point itself he is still curled) -, he turns and walks back
+    { at(4, c, 11, face); const x0 = D.state().x; let jumped = false, endAt = null, last = null, s = D.state(), q = s; tap('KeyX');
+      for (let i = 0; i < 120; i++){ if (i === 1) B.up('KeyX'); if (i === 18){ B.down(back); B.jump(4); } q = s; s = B.tick(); if (s.vy < -50) jumped = true;
+        if (endAt === null && s.rollT === null){ endAt = i; last = { fi: q.fi, up: up(q), rollT: +q.rollT.toFixed(3) }; } }
+      B.upAll(); o.commit = { endedAtStep: endAt, lastRollFrame: last, commitFrame: Math.floor(R.commit * R.fps), walkUp: up({ set: side, clip: 'walk', fi: 0 }), jumped, faceAfter: s.face,
+        walkedBack: (s.x - x0) * face < R.tx[R.n - 1] - 1 && s.vx * face < 0 }; }
+    // a jump pressed in the roll's last BUFFER s before its commit point fires right at it (the jump buffer); the roll key pressed 3
+    // steps before he lands from a jump rolls him the step after he lands (its own buffer)
+    { at(4, c, 11, face); tap('KeyX'); let s = B.tick(); B.up('KeyX'); while (s.rollT !== null && s.rollT + 4 / 60 < R.commit) s = B.tick();
+      B.jump(10); let after = null; for (let i = 0; i < 20; i++){ s = B.tick(); if (s.vy < -50){ after = i + 1; break; } } B.upAll(); o.commitJump = { stepsAfterPress: after }; }
+    { at(4, c, 11, face); B.jump(40); let L = 0; for (; L < 90; L++){ const s = B.tick(); if (L > 3 && s.ground) break; } B.upAll(); ticks(30);
+      B.jump(40); let rolled = null; for (let i = 0; i < 90; i++){ if (i === L - 3) tap('KeyX'); if (i === L - 2) B.up('KeyX'); const s = B.tick(); if (rolled === null && s.rollT !== null) rolled = { step: i, ground: s.ground }; }
+      B.upAll(); o.rollBuffer = { landStep: L, rolled }; }
+    // the guard's way in and out: C standing still brings the arms up through alert_in, letting go lowers them through alert_out
+    at(4, c, 11, face); o.alertWays = seqOf(70, i => { if (i === 2) B.down('KeyC'); if (i === 35) B.up('KeyC'); }).seq;
+    // a jump from a crouch is a standing jump: full height, standing in the air, crouched again on landing with Down still held
+    { at(4, c, 11, face); B.down('ArrowDown'); ticks(30); B.jump(40); let apex = 0, airCrouch = 0, s;
+      for (let i = 0; i < 90; i++){ s = B.tick(); apex = Math.max(apex, gy - feet(s)); if (!s.ground && s.crouch) airCrouch++; if (i > 3 && s.ground) break; }
+      s = ticks(5); B.upAll(); o.crouchJump = { apex: +apex.toFixed(1), airCrouch, landedCrouched: s.crouch }; }
+  }
+  // rolled off a ledge (roof 2's right edge, col 94): from standing a tile off it (he leaves it in the tumble's slow phase) and 50 px
+  // off it (in the dive, its root motion at its fastest): the roll tumbles on in the air, at most at the run's speed, no jump out of
+  // it however Space is mashed in the air, and - this drop being shorter than the rest of the roll - he lands rolling; rolled into the
+  // E shaft late in the roll (the cage parked at the bottom: a pit), it tumbles on to its last frame before the fall clip takes over
+  // (Space mashed only high in the air: a press in the last 0.12 s before landing is a buffered jump on landing, as ever)
+  res.rollOffLedge = {};
+  const cg = E.movers.find(m => m.kind === 'cage'), saved = { y: cg.y, dir: cg.dir, waitT: cg.waitT };
+  for (const [k, cp, x, row] of [['slow', 2, cx(92), 6], ['fast', 2, 94 * TS - 50, 6], ['pit', 4, 144 * TS - 112, 11]]){
+    B.upAll(); D.spawn(cp); if (k === 'pit') Object.assign(cg, { y: cg.max, dir: -1, waitT: 99 }); D.place(x, row * TS); E.player.face = 1; D.snap(); ticks(20);
+    const d0 = D.state().stats.deaths, m = { maxVx: 0, jumped: false, lastRoll: null, fallAfter: null, leftAt: null, air: [] }; tap('KeyX');
+    const r = seqOf(k === 'pit' ? 140 : 220, (i, st) => { if (i === 1) B.up('KeyX'); if (i > 1 && !st.ground && feet(st) < (row + 3) * TS){ B.up('Space'); B.down('Space'); } else B.up('Space');
+      if (!st.ground && !st.deathT){ m.maxVx = Math.max(m.maxVx, Math.abs(st.vx)); if (m.leftAt === null && st.rollT !== null) m.leftAt = st.fi; if (m.air[m.air.length - 1] !== st.anim) m.air.push(st.anim); }
+      if (st.vy < -50) m.jumped = true; if (st.anim === 'roll') m.lastRoll = st.fi; if (st.anim === 'fall' && m.fallAfter === null) m.fallAfter = m.lastRoll; });
+    res.rollOffLedge[k] = { seq: r.seq, airAnims: m.air, leftAtFrame: m.leftAt, maxAirVx: Math.round(m.maxVx), jumped: m.jumped, fallAfterRollFrame: m.fallAfter, landed: r.s.ground, feet: feet(r.s),
+      died: r.s.stats.deaths > d0 || r.s.deathT > 0 }; }
+  Object.assign(cg, saved); B.upAll();
+  // the win entered mid-roll (X on the cage as it goes down, just before the win): the roll plays out on the spot through the ride
+  // - its frames on to its last, then the guard; no frame held, no walk in place
+  { const cg = E.movers.find(m => m.kind === 'cage'), w = res.winRoll = { anims: [], lastRoll: null, maxHold: 0, winSteps: 0 }; B.upAll(); D.spawn(4);
+    for (let i = 0; i < 3000 && !(cg.dir > 0 && cg.waitT <= 0 && cg.y > M.LH - 40); i++) B.tick();
+    D.place(cg.x + 20, cg.y); E.player.on = cg; E.player.face = 1; B.tick(); tap('KeyX'); B.tick(); B.up('KeyX'); let hold = 0, last = '';
+    for (let i = 0; i < 300; i++){ const s = B.tick(); if (!s.winT) continue; w.winSteps++; const t = s.anim + '#' + s.fi; hold = t === last ? hold + 1 : 1; last = t;
+      if (s.anim === 'roll'){ w.maxHold = Math.max(w.maxHold, hold); w.lastRoll = s.fi; } if (w.anims[w.anims.length - 1] !== s.anim) w.anims.push(s.anim); }
+    B.upAll(); }
+  // rolled into a wall (the D steel block, col 126, from 3 tiles off it; facing left from the other side) and into the level's end:
+  // the body stops short of it by its frames' reach (the end: P.END's hitbox limit first), so no frame drawn overlaps it (the opaque
+  // box's leading edge, world px), never moves back (the farthest step against his facing), stays stopped (no creep on after the
+  // stop) and the clip plays to its end; from point blank (a tile off the block: its frames would overlap it) and from 2 tiles off
+  // it (its body would go less than P.ROLL_ROOM of its travel before they reach it: a tumble on the spot) X does nothing
+  { const lead = s => { const f = frame(s); return s.face > 0 ? s.sprite.x + s.cx + f.opaque[2] : s.sprite.x + s.cx + f.opaque[0]; };
+    const into = (cp, c, face) => { at(cp, c, 11, face); const fis = new Set(), x0 = D.state().x; let far = face > 0 ? -1e9 : 1e9, back = 0, stopX = null, creep = 0, prev = x0; tap('KeyX');
+      const r = seqOf(100, (i, st) => { if (i === 1) B.up('KeyX'); if (st.anim === 'roll'){ fis.add(st.fi); far = face > 0 ? Math.max(far, lead(st)) : Math.min(far, lead(st)); }
+        back = Math.max(back, (prev - st.x) * face); prev = st.x; if (st.rollStop && stopX === null) stopX = st.x; if (stopX !== null && st.rollT !== null) creep = Math.max(creep, Math.abs(st.x - stopX)); });
+      return { x: +r.s.x.toFixed(2), moved: +((r.s.x - x0) * face).toFixed(2), farthestLead: far, framesShown: fis.size, lastFrame: fis.size ? Math.max(...fis) : null, seq: r.seq,
+        maxBack: +back.toFixed(2), stopped: stopX !== null, creepAfterStop: +creep.toFixed(2) }; };
+    res.rollWall = { right: { ...into(3, 123, 1), wallAt: 126 * TS }, left: { ...into(3, 129, -1), wallAt: 127 * TS }, end: { ...into(4, M.MW - 3, 1), wallAt: M.LW } };
+    res.rollRefused = { right: into(3, 125, 1), left: into(3, 127, -1), shortRight: into(3, 124, 1), shortLeft: into(3, 128, -1) }; }
+  // rolled down a 1-tile step (the A heap): still a roll all the way (the step grace), no fall
+  { at(0, 8, 9, 1); tap('KeyX'); const r = seqOf(100, i => { if (i === 1) B.up('KeyX'); }); res.rollStep = { seq: r.seq, feet: feet(r.s), ground: r.s.ground }; }
+  // crouch-walking onto ladder 65's top from roof 1 climbs down it (Down at a ladder's top climbs, crouched or not)
+  { at(2, 67, 8, -1); B.down('ArrowDown'); B.down('ArrowLeft'); let climbed = false, s; for (let i = 0; i < 400; i++){ s = B.tick(); if (s.climb) climbed = true; if (climbed && s.ground && feet(s) === 12 * TS) break; }
+    B.upAll(); res.ladderTopCrouch = { climbed, feet: feet(s), ground: s.ground }; }
+  // under low things: crouched under the belt's open tail (col 118) walking into post 116, standing up there, a jump from that
+  // crouch (the hair stops under the belt); crouched in the moving bucket (still riding it, one pixel offset), standing up in it
+  { at(3, 118, 11, -1); B.down('ArrowDown'); B.down('ArrowLeft'); let s = ticks(150); const post = { x: +s.x.toFixed(2), postAt: 117 * TS, crouch: s.crouch };
+    B.up('ArrowLeft'); ticks(10); B.jump(40); let minY = 1e9; for (let i = 0; i < 60; i++){ s = B.tick(); minY = Math.min(minY, s.y); } B.upAll(); s = ticks(40);
+    res.underBelt = { ...post, jumpTopY: +minY.toFixed(2), hairLimit: 8 * TS + P.HEAD, stoodFeet: feet(s), stood: !s.crouch && s.ground }; }
+  { const bk = E.movers.find(m => m.id === 'bucket'); B.upAll(); D.spawn(1); for (let i = 0; i < 1500; i++){ B.tick(); if (bk.x <= 41 * TS + 0.01 && bk.waitT > 0.6) break; }
+    D.place(39 * TS + 4, 9 * TS); B.tick(); B.down('ArrowRight'); let s; for (let i = 0; i < 200; i++){ s = B.tick(); if (s.x > 41 * TS + 21){ B.up('ArrowRight'); break; } }
+    s = ticks(20); B.down('ArrowDown'); const rel = {}; let off = 0;
+    for (let i = 0; i < 240; i++){ s = B.tick(); if (s.on !== 'bucket' || !s.crouch) off++; else if (bk.dx){ const d = s.screen[0] - (Math.round(bk.x) - s.cx); rel[d] = (rel[d] || 0) + 1; } }
+    B.up('ArrowDown'); s = ticks(30); res.bucketCrouch = { offOrStanding: off, rel, stoodOn: s.on, crouch: s.crouch }; }
+  // STANCES (engine.js): every switch between the ground stances, both facings, through the key handler on the open E street (from
+  // col 133 facing right, 136 facing left: no run of 110 steps either way reaches the shaft; the steel block at col 126 only stops
+  // him): from each stance held 50 steps (or 3: on its way in) to each other one (the keys changed in one step), then 60 steps;
+  // at every anim switch on the ground (not the roll, a ladder or the air) the drawn silhouette's height changes by at most
+  // P.POP, and while a crouch way plays he stays put (on the spot). Kept for the report: the sequences of the four the judges
+  // played - Down and a direction together from standing, both let go crouch-walking, Down let go crouch-walking with the direction
+  // held, Down pressed walking - and how far he moved during the crouch ways
+  { const ST = { idle: [], walk: ['DIR'], run: ['ShiftLeft', 'DIR'], back: ['BACK'], crouch: ['ArrowDown'], crouchwalk: ['ArrowDown', 'DIR'], crouchback: ['ArrowDown', 'BACK'],
+      lowrun: ['ArrowDown', 'ShiftLeft', 'DIR'], sneak: ['KeyC', 'DIR'], alert: ['KeyC'] };
+    const out = res.stances = { runs: 0, switches: 0, worst: null, pops: [], wayMoved: 0, deaths: 0, seqs: {} }, AIR = new Set(['roll', 'climb', 'jump_up', 'jump_apex', 'fall']);
+    for (const [side, face, c] of [['right', 1, 133], ['left', -1, 136]]) for (const a in ST) for (const b in ST) for (const hold of [50, 3]){ if (a === b) continue;
+      const k = q => q === 'DIR' ? (face > 0 ? 'ArrowRight' : 'ArrowLeft') : q === 'BACK' ? (face > 0 ? 'ArrowLeft' : 'ArrowRight') : q;
+      at(4, c, 11, face); const d0 = D.state().stats.deaths; ST[a].forEach(q => B.down(k(q))); let q = ticks(hold); const seq = [q.anim];
+      ST[a].filter(x => !ST[b].includes(x)).forEach(x => B.up(k(x))); ST[b].forEach(x => B.down(k(x))); out.runs++;
+      for (let i = 0; i < 60; i++){ const s = B.tick();
+        if ((s.anim === 'crouch_in' || s.anim === 'crouch_out') && s.ground) out.wayMoved = Math.max(out.wayMoved, Math.abs(s.x - q.x));
+        if (s.anim !== q.anim){ seq.push(s.anim); if (s.ground && q.ground && !AIR.has(s.anim) && !AIR.has(q.anim)){ out.switches++; const d = { side, from: a, to: b, hold, step: i, sw: q.anim + '#' + q.fi + '>' + s.anim + '#' + s.fi, dUp: up(s) - up(q) };
+          if (!out.worst || Math.abs(d.dUp) > Math.abs(out.worst.dUp)) out.worst = d; if (Math.abs(d.dUp) > P.POP) out.pops.push(d); } }
+        q = s; }
+      out.deaths += D.state().stats.deaths - d0; B.upAll(); if (hold === 50 && side === 'right' && ['idle>crouchwalk', 'crouchwalk>idle', 'crouchwalk>walk', 'walk>crouchwalk'].includes(a + '>' + b)) out.seqs[a + '>' + b] = seq.join(','); } }
+  // the crouch ways on the spot, both facings: Down and a direction pressed together from standing crouch him first (crouch_in, not a
+  // pixel moved), then he crouch-walks; both let go crouch-walking, he stops at once and stands up (crouch_out) on the spot; Down let
+  // go with the direction held, he stands up on the spot, then walks
+  for (const [side, face, key] of [['right', 1, 'ArrowRight'], ['left', -1, 'ArrowLeft']]){ const o = res[side];
+    const watch = (n, f) => { let s = D.state(); const x0 = s.x, seq = [s.anim]; let moved = 0;
+      for (let i = 0; i < n; i++){ f(i); s = B.tick(); if (s.anim !== seq[seq.length - 1]) seq.push(s.anim); if (seq.length <= 2 && s.anim.startsWith('crouch_')) moved = Math.max(moved, Math.abs(s.x - x0)); }
+      return { seq: seq.join(','), movedInWay: +moved.toFixed(2), vx: Math.round(Math.abs(s.vx)) }; };
+    at(4, 133, 11, face); o.downDir = watch(60, i => { if (!i){ B.down('ArrowDown'); B.down(key); } });
+    o.cwStop = watch(40, i => { if (!i){ B.up('ArrowDown'); B.up(key); } });
+    at(4, 133, 11, face); B.down('ArrowDown'); B.down(key); ticks(50); o.cwUp = watch(60, i => { if (!i) B.up('ArrowDown'); }); B.upAll();
+    // ... and so when he moves faster than the crouch walk as Down is let go (up to P.SNEAK: a roll handed over to the crouch walk the
+    // other way, a low run turned round): crouch_out first, no step of the upright gait from the crouch
+    at(4, 133, 11, face); B.down('ArrowDown'); B.down(key); ticks(50); E.player.vx = face * (P.MOVE_V + P.SNEAK) / 2;
+    o.cwUpFast = watch(60, i => { if (!i) B.up('ArrowDown'); }); B.upAll(); }
+  // X pressed again past the commit point near a wall (the D steel block's two faces, rolled at from 100..200 px off them standing,
+  // walking and running, nothing held through it, the other way, his own way or Down, the second press 1..12 steps past the commit
+  // point): a new roll where it has room, else the roll goes on (the press waits in its buffer) - so at every switch out of a roll on
+  // the ground his drawn height changes by <= P.POP (a new roll: it is drawn no taller than the get-up was), and no other anim shows
+  // for a single step between two rolls
+  { const out = res.rollKey = { tries: 0, chained: 0, goesOn: 0, switches: 0, pops: [], worst: null, blips: [] };
+    for (const [wx, f] of [[126 * TS - P.W, 1], [127 * TS, -1]]) for (const gait of ['idle', 'walk', 'run']) for (const hold of [null, 'BACK', 'DIR', 'ArrowDown'])
+      for (let d = 100; d <= 200; d += 4) for (const late of [1, 4, 8, 12]){
+        const K = f > 0 ? 'ArrowRight' : 'ArrowLeft', A = f > 0 ? 'ArrowLeft' : 'ArrowRight';
+        B.upAll(); D.spawn(3); D.place(wx - f * (d + (gait === 'idle' ? 0 : gait === 'walk' ? 60 : 140)), 11 * TS); E.player.face = f; D.snap(); B.tick();
+        if (gait !== 'idle') B.down(K); if (gait === 'run') B.down('ShiftLeft');
+        for (let k = 0; k < 60 && f * (wx - E.player.x) > d; k++) B.tick();
+        tap('KeyX'); let s = B.tick(); B.upAll(); if (hold) B.down(hold === 'BACK' ? A : hold === 'DIR' ? K : hold);
+        if (s.rollT === null) continue;
+        for (let k = 0; k < 200 && s.rollT !== null && s.rollT < R.commit + late / 60; k++) s = B.tick();
+        if (s.rollT === null) continue;
+        out.tries++; tap('KeyX'); let q = s, chained = false; const seq = [];
+        for (let k = 0; k < 160; k++){ s = B.tick(); if (!k) B.up('KeyX'); const again = s.anim === 'roll' && q.anim === 'roll' && s.rollT < q.rollT;
+          if (s.ground && q.ground && q.anim === 'roll' && (s.anim !== 'roll' || again)){ const dUp = up(s) - up(q); out.switches++; if (again) chained = true;
+            const d1 = { wx, f, gait, hold, d, late, sw: q.anim + '#' + q.fi + '>' + s.anim + '#' + s.fi, dUp };
+            if (!out.worst || Math.abs(dUp) > Math.abs(out.worst.dUp)) out.worst = d1; if ((again ? dUp : Math.abs(dUp)) > P.POP && out.pops.length < 8) out.pops.push(d1); }
+          seq.push(again ? 'roll*' : s.anim); q = s; if (k > 40 && s.rollT === null) break; }
+        if (/roll\*?,(?!roll)[a-z_]+,roll/.test(seq.join(',')) && out.blips.length < 8) out.blips.push({ wx, f, gait, hold, d, late });
+        if (chained) out.chained++; else out.goesOn++; }
+    B.upAll(); }
+  // THE ROLL NEVER BACKS HIM: rolled toward every edge and wall of the level - from every standable cell, both facings, from standing,
+  // a walk, a run, the low run and a crouch (keys let go at the press: it plays out) - no step moves him against his facing (but the
+  // belt's push, standing on it facing left, and a mover's whole-pixel snap as he lands on it), on the ground no frame drawn overlaps
+  // a wall ahead in his rows (its opaque box's leading edge; also where a wall down by the floor he dropped onto stopped him in the
+  // air - counted, airStops - and he landed by it), nothing drawn passes the level's ends, no NaN, the hitbox never in a solid tile,
+  // every roll ends; those that left the ground (off a ledge) and those a wall stopped are counted
+  { const E2 = LVL.engine, pl = E2.player, W = LVL.sheet, SOL = (c, r) => M.isSolid(c, r) || M.tile(c, r) === 'T', BELT = P.BELT * E2.DT;
+    const inSolid = () => { for (let c = Math.floor(pl.x / TS); c <= Math.floor((pl.x + P.W - 0.001) / TS); c++) for (let r = Math.floor(pl.y / TS); r <= Math.floor((pl.y + P.H - 0.001) / TS); r++) if (M.isSolid(c, r)) return true; return false; };
+    const box = () => { const f = W.sets[pl.face < 0 ? -1 : 1].roll.frames[pl.fi], x = Math.round(pl.x + P.W / 2) - f.ax; return [x + f.opaque[0], x + f.opaque[2]]; };
+    const overlapAhead = () => { const [l, r] = box(), f = pl.face, r0 = Math.floor(pl.y / TS), r1 = Math.floor((pl.y + P.H - 0.001) / TS), front = f > 0 ? pl.x + P.W : pl.x;
+      for (let c = Math.floor((front - f * 0.001) / TS) + f; f > 0 ? c * TS < r : (c + 1) * TS > l; c += f) for (let rr = r0; rr <= r1; rr++) if (SOL(c, rr)) return c + ':' + rr; return null; };
+    const sw = res.rollSweep = { rolls: 0, refused: 0, offLedge: 0, wallStops: 0, airStops: 0, steps: 0, maxBack: 0, worstBack: null, overlaps: [], outside: [], nan: 0, inSolid: 0, unfinished: [] };
+    const cells = [], parked = E2.movers.map(m => ({ x: m.x, y: m.y, dir: m.dir, waitT: m.waitT }));
+    // (the belt's posts are none: its slab lies on them, a hitbox stood there would be in it)
+    for (let c = 0; c < M.MW; c++) for (let r = 1; r < M.MH; r++) if ((M.isSolid(c, r) || M.isOneWay(c, r)) && !SOL(c, r - 1) && !SOL(c, r - 2)) cells.push([c, r]);
+    for (const [c, r] of cells) for (const face of [1, -1]) for (const [name, keys, n] of [['idle', [], 2], ['walk', ['DIR'], 10], ['run', ['ShiftLeft', 'DIR'], 14], ['lowrun', ['ArrowDown', 'ShiftLeft', 'DIR'], 30], ['crouch', ['ArrowDown'], 24]]){
+      B.upAll(); D.spawn(c < 50 ? 1 : c < 95 ? 2 : c < 127 ? 3 : 4); for (const m of E2.movers){ m.waitT = 1e9; m.dx = m.dy = 0; } D.place(c * TS + (TS - P.W) / 2, r * TS); pl.face = face;
+      if (E2.movers.some(m => pl.x + P.W > m.x && pl.x < m.x + m.w && Math.abs(m.y - r * TS) < TS)) continue;
+      E2.update(); if (!pl.ground) continue;
+      const d0 = E2.stats.deaths; keys.forEach(k => B.down(k === 'DIR' ? (face > 0 ? 'ArrowRight' : 'ArrowLeft') : k)); for (let i = 0; i < n && pl.ground; i++) E2.update();
+      if (!pl.ground || E2.stats.deaths !== d0) continue;
+      B.upAll(); B.down('KeyX'); E2.update(); B.up('KeyX'); if (pl.rollT === null){ sw.refused++; continue; }
+      sw.rolls++; const f = pl.face; let air = false, stop = false, airStop = false, prevX = pl.x, prevBelt = false, k = 0;
+      for (; k < 140 && pl.rollT !== null && E2.stats.deaths === d0; k++){
+        const belt = pl.ground && !pl.on && [Math.floor(pl.x / TS), Math.floor((pl.x + P.W - 0.001) / TS)].some(cc => M.tile(cc, Math.round((pl.y + P.H) / TS)) === 'T'), on = pl.on;
+        E2.update(); sw.steps++; if (pl.rollT === null) break;
+        if (!Number.isFinite(pl.x) || !Number.isFinite(pl.y)) sw.nan++; if (inSolid()) sw.inSolid++;
+        const back = (prevX - pl.x) * f - (prevBelt || belt ? BELT : 0); if (!on && !pl.on && back > sw.maxBack){ sw.maxBack = back; sw.worstBack = { c, r, face, name, step: k, x: +pl.x.toFixed(1), ground: pl.ground }; }
+        prevX = pl.x; prevBelt = belt; if (!pl.ground) air = true; if (pl.rollStop && !stop && !pl.ground) airStop = true; if (pl.rollStop) stop = true;
+        if (pl.ground && !pl.on){ const o = overlapAhead(); if (o && sw.overlaps.length < 10) sw.overlaps.push({ c, r, face, name, step: k, wall: o, fi: pl.fi }); }
+        const [l, rr] = box(); if ((l < 0 || rr > M.LW) && sw.outside.length < 10) sw.outside.push({ c, r, face, name, step: k, box: [l, rr] }); }
+      if (pl.rollT !== null && E2.stats.deaths === d0) sw.unfinished.push({ c, r, face, name });
+      if (air) sw.offLedge++; if (stop) sw.wallStops++; if (airStop) sw.airStops++; }
+    B.upAll(); E2.movers.forEach((m, i) => Object.assign(m, parked[i])); }
+  // a turn-around roll: X with the other direction held at a full run goes on the way he runs (no reversal in one step: his speed
+  // never flips sign during it); from standing still it turns him
+  for (const [side, face, key, back, c] of [['right', 1, 'ArrowRight', 'ArrowLeft', 130], ['left', -1, 'ArrowLeft', 'ArrowRight', 141]]){
+    at(4, c, 11, face); B.down('ShiftLeft'); B.down(key); let s = ticks(50); const v0 = s.vx; B.upAll(); B.down(back); tap('KeyX'); s = B.tick(); B.up('KeyX'); const f0 = s.face;
+    let minV = s.vx * face; for (s = B.tick(); s.rollT !== null; s = B.tick()) minV = Math.min(minV, s.vx * face); B.upAll();
+    at(4, c, 11, face); B.down(back); tap('KeyX'); const t = B.tick(); B.upAll(); ticks(90);
+    res[side].turnRoll = { runV: Math.round(v0 * face), faceAtRun: f0, minVAlongRun: Math.round(minV), faceStanding: t.face, rolledStanding: t.rollT !== null }; }
+  // NO MOVE CLEARS THE E SHAFT (cols 144-148, the cage parked at the bottom: a pit): from the street, the low run / crouch walk /
+  // sneak / run with a jump 0..4 steps after the feet leave the lip (coyote time), the low run let go into a run jump at the lip, a
+  // roll off the lip with Space mashed, a run and a low run rolled into at the lip (the roll keeps their speed), a walking and a
+  // running roll timed to reach its commit point at the lip with a jump buffered into it, a roll chained into a second one there:
+  // every try falls in, his leading edge reaching the far side (149 * TS) at most below its top (its wall)
+  { const cg = E.movers.find(m => m.kind === 'cage'), saved = { y: cg.y, dir: cg.dir, waitT: cg.waitT }, lip = 144 * TS, out = {};
+    // (miss: how far under the far side's top his feet were when he reached its wall, if he did)
+    const shaft = (name, c, f) => { Object.assign(cg, { y: cg.max, dir: -1, waitT: 99 }); at(4, c, 11, 1); const d0 = D.state().stats.deaths, m = {}; let best = 0, miss = null, s = D.state();
+      for (let i = 0; i < 700; i++){ f(i, s, m); s = B.tick(); if (s.x > lip - P.W) best = Math.max(best, s.x + P.W);
+        if (miss === null && s.x + P.W >= 149 * TS - 0.5) miss = Math.round(feet(s) - gy); if (s.deathT > 0 || s.stats.deaths > d0) break; }
+      B.upAll(); out[name] = { farthestRightEdge: Math.round(best), miss, died: D.state().stats.deaths > d0 || D.state().deathT > 0 }; };
+    for (const [g, c, hold] of [['lowrun', 136, ['ArrowDown', 'ShiftLeft']], ['crouchwalk', 141, ['ArrowDown']], ['sneak', 141, ['KeyC']], ['run', 136, ['ShiftLeft']]])
+      for (let k = 0; k <= 4; k++) shaft(g + 'Jump' + k, c, (i, s, m) => { if (!i){ hold.forEach(h => B.down(h)); B.down('ArrowRight'); } if (m.left === undefined && i > 2 && !s.ground) m.left = i; if (m.left !== undefined && i === m.left + k) B.jump(40); });
+    shaft('lowrunLetGoJump', 136, (i, s) => { if (!i){ ['ArrowDown', 'ShiftLeft', 'ArrowRight'].forEach(h => B.down(h)); } if (s.x + P.W > lip - 8 && s.ground){ B.up('ArrowDown'); B.jump(40); } });
+    shaft('rollOffLip', 136, (i, s, m) => { if (!i){ B.down('ShiftLeft'); B.down('ArrowRight'); } if (!m.r && s.x + P.W > lip - 40){ tap('KeyX'); m.r = i; } if (m.r && i > m.r){ B.up('Space'); B.down('Space'); } });
+    shaft('runRollAtLip', 136, (i, s, m) => { if (!i){ B.down('ShiftLeft'); B.down('ArrowRight'); } if (!m.r && s.x + P.W > lip - 2){ tap('KeyX'); m.r = i; } });
+    shaft('lowrunRollAtLip', 136, (i, s, m) => { if (!i) ['ArrowDown', 'ShiftLeft', 'ArrowRight'].forEach(h => B.down(h)); if (!m.r && s.x + P.W > lip - 2){ tap('KeyX'); m.r = i; } });
+    // (from whatever frame of its set-off a roll starts, the body goes the clip's root motion from its frame 0 on: its travel to the
+    // commit point)
+    const reach = R.tx[Math.min(R.n - 1, Math.ceil(R.commit * R.fps))] - R.tx[0];
+    for (const [name, hold] of [['rollThenJump', ['ArrowRight']], ['runRollThenJump', ['ShiftLeft', 'ArrowRight']]])
+      shaft(name, 136, (i, s, m) => { if (!i) hold.forEach(h => B.down(h)); if (!m.r && s.x + P.W > lip - reach){ tap('KeyX'); m.r = i; }
+        if (m.r && !m.j && s.rollT !== null && s.rollT + 4 / 60 >= R.commit){ B.jump(40); m.j = 1; } });
+    shaft('rollChain', 136, (i, s, m) => { if (!i) B.down('ArrowRight'); if (!m.r && s.x + P.W > lip - reach){ tap('KeyX'); m.r = i; }
+      if (m.r && !m.j && s.rollT !== null && s.rollT >= R.commit){ tap('KeyX'); m.j = 1; } });
+    Object.assign(cg, saved); res.shaft = { farSide: 149 * TS, tries: out }; }
+  return res;
+});
+console.log('  moves', JSON.stringify(moves));
+// the moves on screen: in the level at 1x (canvas pixels) and 2x (the page's own x2 display), both facings, at a spot of each beat
+// (moves_<beat>_<move>_<R|L>_*.png: [beat, move, checkpoint, column facing right / left, feet row, keys held - DIR the facing's
+// arrow -, steps]; D's clear of the foreground winch, cols 110-122); each move's frames as a strip from the sheet (strip_<move>.png,
+// x3: both facings, each frame on its anchor, the ground line amber, on the street's dusk); and the roll's and the guard's ways in
+// and out, played in the level (seq_<name>_<R|L>.png: every 2nd step a crop of the canvas around him, shown x2, labelled with the
+// step, the frame drawn, his facing (-> / <-) and the hitbox's x in the level, so a stop at a wall or a stand on the spot reads as one)
+for (const [beat, move, cp, cR, cL, row, hold, n] of [['A', 'crouch', 0, 3, 4, 8, ['ArrowDown'], 40], ['B', 'lowrun', 1, 52, 60, 11, ['ArrowDown', 'ShiftLeft', 'DIR'], 30],
+  ['C', 'sneak', 2, 69, 75, 8, ['KeyC', 'DIR'], 40], ['D', 'crouchwalk', 3, 127, 130, 11, ['ArrowDown', 'DIR'], 50], ['E', 'roll', 4, 136, 141, 11, ['KeyX'], 33],
+  ['E', 'alert', 4, 140, 141, 11, ['KeyC'], 40]]) for (const [face, tag] of [[1, 'R'], [-1, 'L']]){
+  const st = await page.evaluate(([cp, c, row, hold, n, face]) => { const D = LVL.debug, B = __bot, TS = LVL.map.TS, P = LVL.engine.P;
+    B.upAll(); D.spawn(cp); D.place(c * TS + (TS - P.W) / 2, row * TS); LVL.engine.player.face = face; D.snap(); for (let i = 0; i < 30; i++) B.tick();
+    for (const k of hold) B.down(k === 'DIR' ? (face > 0 ? 'ArrowRight' : 'ArrowLeft') : k);
+    let s; for (let i = 0; i < n; i++) s = B.tick(); B.upAll(); return s.anim + '#' + s.fi + ' ' + s.set; }, [cp, face > 0 ? cR : cL, row, hold, n, face]);
+  await snap(`${beat} ${move} ${tag}: ${st}`, `moves_${beat}_${move}_${tag}`); }
+// [name, checkpoint, column facing right / left, feet row, steps, presses: [step, 'down' | 'up', key - DIR the facing's arrow, BACK
+// the other one -]]
+for (const [name, cp, cR, cL, row, n, script] of [
+  ['runRoll', 4, 132, 143, 11, 96, [[0, 'down', 'ShiftLeft'], [0, 'down', 'DIR'], [30, 'down', 'KeyX'], [31, 'up', 'KeyX']]],
+  ['lowrunRoll', 4, 132, 143, 11, 96, [[0, 'down', 'ArrowDown'], [0, 'down', 'ShiftLeft'], [0, 'down', 'DIR'], [30, 'down', 'KeyX'], [31, 'up', 'KeyX']]],
+  ['crouchRoll', 4, 133, 142, 11, 96, [[0, 'down', 'ArrowDown'], [24, 'down', 'KeyX'], [25, 'up', 'KeyX']]],
+  ['sneakRoll', 4, 133, 142, 11, 104, [[0, 'down', 'KeyC'], [0, 'down', 'DIR'], [24, 'down', 'KeyX'], [25, 'up', 'KeyX']]],
+  ['ledgeRoll', 2, 92, null, 6, 110, [[4, 'down', 'KeyX'], [5, 'up', 'KeyX']]],
+  ['wallRoll', 3, 123, 129, 11, 96, [[4, 'down', 'KeyX'], [5, 'up', 'KeyX']]],
+  ['pointBlank', 3, 125, 127, 11, 24, [[4, 'down', 'KeyX'], [5, 'up', 'KeyX']]],
+  ['turnRoll', 4, 130, 141, 11, 120, [[0, 'down', 'ShiftLeft'], [0, 'down', 'DIR'], [40, 'up', 'ShiftLeft'], [40, 'up', 'DIR'], [40, 'down', 'BACK'], [40, 'down', 'KeyX'], [41, 'up', 'KeyX'], [42, 'up', 'BACK']]],
+  ['downDir', 4, 133, 142, 11, 64, [[4, 'down', 'ArrowDown'], [4, 'down', 'DIR']]],
+  ['cwStop', 4, 133, 142, 11, 72, [[0, 'down', 'ArrowDown'], [0, 'down', 'DIR'], [40, 'up', 'ArrowDown'], [40, 'up', 'DIR']]],
+  ['cwUp', 4, 132, 143, 11, 96, [[0, 'down', 'ArrowDown'], [0, 'down', 'DIR'], [40, 'up', 'ArrowDown']]],
+  ['walkDown', 4, 131, 143, 11, 56, [[0, 'down', 'DIR'], [30, 'down', 'ArrowDown']]],
+  ['alert', 4, 136, 139, 11, 64, [[4, 'down', 'KeyC'], [36, 'up', 'KeyC']]]]) for (const [face, tag] of [[1, 'R'], [-1, 'L']]){
+  const c = face > 0 ? cR : cL; if (c === null) continue;
+  const d = await page.evaluate(([cp, c, row, n, script, face]) => { const D = LVL.debug, B = __bot, TS = LVL.map.TS, P = LVL.engine.P, cv = document.getElementById('cv');
+    B.upAll(); D.spawn(cp); D.place(c * TS + (TS - P.W) / 2, row * TS); LVL.engine.player.face = face; D.snap(); for (let i = 0; i < 30; i++) B.tick();
+    const CW = 150, CH = 124, COLS = 8, crops = [];
+    for (let i = 0; i < n; i++){ for (const [k, how, key] of script) if (k === i) B[how](key === 'DIR' ? (face > 0 ? 'ArrowRight' : 'ArrowLeft') : key === 'BACK' ? (face > 0 ? 'ArrowLeft' : 'ArrowRight') : key);
+      const s = B.tick(); if (i % 2) continue; LVL.engine.render(); const t = document.createElement('canvas'); t.width = CW; t.height = CH;
+      t.getContext('2d').drawImage(cv, s.screen[0] - CW / 2, s.screen[1] - CH + 14, CW, CH, 0, 0, CW, CH); crops.push([t, `${i} ${s.anim}#${s.fi} ${s.face > 0 ? '->' : '<-'} x${Math.round(s.x)}`]); }
+    B.upAll(); const g = document.createElement('canvas'); g.width = COLS * CW * 2; g.height = Math.ceil(crops.length / COLS) * CH * 2; const x = g.getContext('2d');
+    x.imageSmoothingEnabled = false; x.fillStyle = '#0c0a0c'; x.fillRect(0, 0, g.width, g.height); x.font = '14px monospace';
+    crops.forEach(([t, label], j) => { const X = (j % COLS) * CW * 2, Y = Math.floor(j / COLS) * CH * 2; x.drawImage(t, X, Y, CW * 2, CH * 2);
+      x.fillStyle = 'rgba(12,8,10,.75)'; x.fillRect(X, Y, x.measureText(label).width + 8, 18); x.fillStyle = '#ffb84a'; x.fillText(label, X + 4, Y + 14);
+      x.fillStyle = '#3a2d2e'; x.fillRect(X + CW * 2 - 1, Y, 1, CH * 2); x.fillRect(X, Y + CH * 2 - 1, CW * 2, 1); });
+    return g.toDataURL(); }, [cp, c, row, n, script, face]);
+  fs.writeFileSync(`${out}/seq_${name}_${tag}.png`, Buffer.from(d.split(',')[1], 'base64')); }
+for (const move of MOVES){
+  const d = await page.evaluate(move => { const S = LVL.sheet, rows = [S.sets[1][move], S.sets[-1][move]], G = 6, k = 3;
+    const l = Math.max(...rows.flatMap(r => r.frames.map(f => f.ax))), r = Math.max(...rows.flatMap(r => r.frames.map(f => f.w - f.ax)));
+    const up = Math.max(...rows.flatMap(r => r.frames.map(f => f.ay))) + 4, dn = Math.max(...rows.flatMap(r => r.frames.map(f => f.h - f.ay))) + 4;
+    const W = G + Math.max(...rows.map(c => c.frames.length)) * (l + r + G), H = rows.length * (up + dn);
+    const c = document.createElement('canvas'); c.width = W * k; c.height = H * k; const g = c.getContext('2d'); g.imageSmoothingEnabled = false; g.scale(k, k);
+    rows.forEach((clip, j) => { const y = j * (up + dn) + up; g.fillStyle = j ? '#8a5038' : '#a4623e'; g.fillRect(0, j * (up + dn), W, up + dn); g.fillStyle = '#ffb84a'; g.fillRect(0, y, W, 1);
+      clip.frames.forEach((f, i) => { const x = G + i * (l + r + G) + l; g.drawImage(S.img, f.x, f.y, f.w, f.h, x - f.ax, y - f.ay, f.w, f.h); }); });
+    return c.toDataURL(); }, move);
+  fs.writeFileSync(`${out}/strip_${move}.png`, Buffer.from(d.split(',')[1], 'base64')); }
+{ const S = moves.speeds, same = (a, b, e = 0.5) => Math.abs(a - b) <= e;
+  for (const side of ['right', 'left']){ const o = moves[side];
+    check(`moves (${side}): Down crouches (crouch_in -> crouch) and Left / Right walk crouched at P.CROUCH (no auto-run however long), Shift makes the low run (P.LOWRUN); letting go stands him up (crouch_out -> idle), a crouch let go half way reverses at the mirrored frame`,
+      o.crouchIn.join() === 'crouch_in,crouch' && o.crouched && same(o.crouchwalk.vx, S.CROUCH) && same(o.lowrun.vx, S.LOWRUN) && o.crouchStop[o.crouchStop.length - 1] === 'crouch' &&
+      o.crouchOut.join() === 'crouch_out,idle' && o.stoodUp && o.crouchwalk.anims.join() === 'crouchwalk>crouchwalk' && o.lowrun.anims.join() === 'lowrun>lowrun' &&
+      o.reverse.to === 'crouch_out#' + (o.reverse.n - 1 - +o.reverse.from.split('#')[1]) && o.reverse.from.startsWith('crouch_in'), o); }
+  for (const side of ['right', 'left']){ const o = moves[side];
+    check(`moves (${side}): C sneaks at P.SNEAK (no auto-run), standing still with it on guard (alert), letting go idles (through alert_out); C standing still brings the guard up through alert_in and back down through alert_out; the gaits drawn from the facing's own set`,
+      same(o.sneak.vx, S.SNEAK) && o.sneak.anims.join() === 'sneak>sneak' && o.sneakStop[o.sneakStop.length - 1] === 'alert' && o.sneakOff.join() === 'alert_out,idle' &&
+      o.alertWays.join() === 'idle,alert_in,alert,alert_out,idle' && [o.crouchwalk, o.lowrun, o.sneak].every(g => g.sets.join() === side), { sneak: o.sneak, stop: o.sneakStop, off: o.sneakOff, ways: o.alertWays }); }
+  check('moves: the gaits\' frames follow the ground speed exactly (px moved per sheet frame shown = the clip\'s speed / fps: the planted foot stays put), both facings',
+    ['right', 'left'].every(side => ['crouchwalk', 'lowrun', 'sneak'].every(g => { const r = moves[side][g]; return r.sheetPxPerFrame && Math.abs(r.pxPerFrame / r.sheetPxPerFrame - 1) < 0.01; })),
+    Object.fromEntries(['right', 'left'].map(side => [side, Object.fromEntries(['crouchwalk', 'lowrun', 'sneak'].map(g => [g, [moves[side][g].pxPerFrame, moves[side][g].sheetPxPerFrame]]))])));
+  const RL = moves.roll, sides = f => ['right', 'left'].every(side => f(moves[side], side));
+  check(`moves: X from standing rolls him the clip's whole travel (${(RL.travel - RL.tx0).toFixed(2)} px), every frame from its first shown, then on guard P.ALERT s, then idle through alert_out`,
+    sides((o, side) => same(o.roll.dx, RL.travel - RL.tx0, 0.5) && o.roll.seq.join() === 'roll,alert,alert_out,idle' && o.roll.frames === RL.n && o.roll.first === 0 && o.roll.lastFrame === RL.n - 1 &&
+      Math.abs(o.roll.alertSteps - 120) <= 2 && o.roll.set === side), { roll: RL, right: moves.right.roll, left: moves.left.roll });
+  // into the roll: idle starts at frame 0 (the standing set-off), every move at a frame no taller than his pose (on the move at
+  // least ROLL_DIP x speed / WALK lower: never the standing frames 0-1, from a walk past the upright frame 2, from a run deeper
+  // still), from a planted pose (idle, a walk, a sneak, a crouch walk, a crouch) the boots stay put (<= 8 px: the poses' own footing;
+  // the run's and the low run's are in their stride, only reported), and he never slows below min(his speed, the clip's mean speed)
+  // before the dive; the body goes the clip's whole travel (the frames skipped at once, from there their own root motion)
+  const PLANTED_IN = ['idle', 'walk', 'sneak', 'crouchwalk', 'crouch'];
+  check(`moves: into a roll from idle, a walk, a run, the low run, a sneak, a crouch walk and a crouch - it starts at the frame of its set-off that matches his pose (none drawn taller than it, no standing frame on the move, deeper the faster he goes: a walk at 3 or later, a run no earlier), from a planted pose the boots stay put (<= 8 px), keeps his speed (never under min(his speed, the clip's mean ${RL.mean} px/s) before the dive) and travels the clip's whole root motion (${(RL.travel - RL.tx0).toFixed(2)} px)`,
+    sides(o => Object.entries(o.entries).every(([k, e]) => (k === 'idle' ? e.k0 === 0 : e.k0 >= 2) && e.maxUp <= e.pose && e.firstUp === e.maxUp && e.minVx >= Math.min(e.v0, RL.mean) - 1 && same(e.dx, e.tx, 0.5) &&
+      (!PLANTED_IN.includes(k) || Math.abs(e.dBoots) <= 8)) &&
+      o.entries.walk.k0 >= 3 && o.entries.run.k0 >= o.entries.walk.k0) &&
+      moves.right.entries.run.v0 > 250 && moves.right.entries.lowrun.v0 > 200, { right: moves.right.entries, left: moves.left.entries });
+  // out of it with keys held through it: no pop at the switch (the silhouette's height within P.POP, the boots within 8 px)
+  check(`moves: out of a roll with keys held through it (a direction, Shift too, Down with and without one, C with and without one) he switches only once the get-up has him up to that pose: the silhouette's height changes <= P.POP = ${S.POP} px, the boots move <= 8 px`,
+    sides(o => Object.entries(o.exits).every(([k, e]) => e.pastCommit && Math.abs(e.dUp) <= S.POP && Math.abs(e.dBoots) <= 8 &&
+      e.to.split('#')[0] === { walk: 'walk', run: 'walk', crouchwalk: 'crouchwalk', crouch: 'crouch', sneak: 'sneak', alert: 'alert' }[k])), { right: moves.right.exits, left: moves.left.exits });
+  check(`moves: the roll is committed - mid-roll the other way and a jump do nothing - and past its commit point (${RL.commit} s) the other way held ends it only once he is up to the walk's height (not curled at the commit point); a jump pressed just before the commit point fires at it, X pressed 3 steps before a landing rolls him as he lands`,
+    sides((o, side) => !o.commit.jumped && o.commit.endedAtStep !== null && o.commit.lastRollFrame.fi > o.commit.commitFrame && o.commit.lastRollFrame.up >= o.commit.walkUp - S.POP &&
+      o.commit.faceAfter === (side === 'right' ? -1 : 1) && o.commit.walkedBack && o.commitJump.stepsAfterPress !== null && o.commitJump.stepsAfterPress <= 5 &&
+      o.rollBuffer.rolled && o.rollBuffer.rolled.step - o.rollBuffer.landStep <= 1 && o.rollBuffer.rolled.step >= o.rollBuffer.landStep),
+    { right: { commit: moves.right.commit, jump: moves.right.commitJump, buffer: moves.right.rollBuffer }, left: { commit: moves.left.commit, jump: moves.left.commitJump, buffer: moves.left.rollBuffer } });
+  check('moves: a jump from a crouch is a standing jump (full height, upright in the air), crouched again on landing with Down held',
+    ['right', 'left'].every(side => { const j = moves[side].crouchJump; return Math.abs(j.apex - S.JUMP_H) < 3 * K && j.airCrouch === 0 && j.landedCrouched; }), { right: moves.right.crouchJump, left: moves.left.crouchJump });
+  const L = moves.rollOffLedge, W = moves.rollWall, RF = moves.rollRefused;
+  check('moves: a roll off a ledge (leaving it slow and in the dive) tumbles on in the air at most at the run\'s speed, no jump out of it (Space mashed), and lands rolling; into the shaft it tumbles to its last frame before the fall clip; into a wall (both facings) or the level\'s end the body stops short of it, no frame drawn over it, never moves back and stays stopped, the clip plays to its end; down a 1-tile step it stays a roll',
+    [L.slow, L.fast].every(l => l.airAnims.join() === 'roll' && !l.jumped && l.maxAirVx <= S.RUN && l.landed && l.feet >= 11 * TS && !l.died && l.seq[0] === 'roll' && !l.seq.includes('fall')) &&
+    L.fast.leftAtFrame >= RL.dive - 1 && L.pit.airAnims.join() === 'roll,fall' && L.pit.fallAfterRollFrame === RL.n - 1 && !L.pit.jumped && L.pit.maxAirVx <= S.RUN && L.pit.died &&
+    W.right.farthestLead <= W.right.wallAt && W.left.farthestLead >= W.left.wallAt && W.end.farthestLead <= W.end.wallAt &&
+    Object.values(W).every(w => w.framesShown === RL.n && w.lastFrame === RL.n - 1 && w.seq[0] === 'roll' && w.maxBack <= 0 && w.creepAfterStop === 0 && w.moved > 0) && W.right.stopped && W.left.stopped &&
+    moves.rollStep.seq[0] === 'roll' && !moves.rollStep.seq.includes('fall') && moves.rollStep.ground, { ledge: L, wall: W, step: moves.rollStep });
+  check('moves: a roll needs room - from point blank (a tile off the D steel block, both facings: its frames would reach into it) and from 2 tiles off it (it would go less than P.ROLL_ROOM of its travel) X does nothing (no dive into the wall, no backing off it, no tumble on the spot)',
+    Object.values(RF).every(r => r.framesShown === 0 && r.moved === 0 && r.seq.join() === 'idle'), RF);
+  check('moves: the win entered mid-roll (X on the cage going down): the roll plays out on the spot through the ride - on to its last frame, then the guard (no frame held, no walk in place)',
+    moves.winRoll.winSteps > 200 && moves.winRoll.anims.join() === 'roll,alert' && moves.winRoll.lastRoll === RL.n - 1 && moves.winRoll.maxHold <= Math.ceil(60 / RL.fps), moves.winRoll);
+  const SW = moves.rollSweep;
+  check(`moves: THE ROLL NEVER BACKS HIM - ${SW.rolls} rolls toward every edge and wall (every standable cell, both facings, from standing, a walk, a run, the low run and a crouch; ${SW.offLedge} off a ledge, ${SW.wallStops} stopped by a wall - ${SW.airStops} of them in the air -, ${SW.refused} refused for want of room): no step moves him against his facing (but the belt's push and a mover's pixel snap), on the ground no frame drawn over a wall ahead (also landed after a stop in the air), nothing past the level's ends, no NaN, the hitbox never in a solid tile, every roll ends`,
+    SW.rolls > 1000 && SW.offLedge > 50 && SW.wallStops > 50 && SW.maxBack <= 0.01 && SW.overlaps.length === 0 && SW.outside.length === 0 && SW.nan === 0 && SW.inSolid === 0 && SW.unfinished.length === 0, SW);
+  check('moves: a turn-around roll - X with the other direction held at a full run rolls on the way he runs (his speed along the run never reverses in it); from standing still it turns him',
+    sides((o, side) => o.turnRoll.runV > 250 && o.turnRoll.faceAtRun === (side === 'right' ? 1 : -1) && o.turnRoll.minVAlongRun >= 0 && o.turnRoll.rolledStanding && o.turnRoll.faceStanding === (side === 'right' ? -1 : 1)),
+    { right: moves.right.turnRoll, left: moves.left.turnRoll });
+  const ST = moves.stances;
+  check(`moves: STANCES - every switch between the ground stances (idle, walk, run, the other way, crouch, crouch walk, the low run, sneak, guard: ${ST.runs} runs, both facings, from each held and half way into it) changes his drawn height by <= P.POP = ${S.POP} px; the crouch ways play on the spot (moved ${ST.wayMoved} px)`,
+    ST.runs === 360 && ST.deaths === 0 && ST.switches > 500 && ST.pops.length === 0 && ST.wayMoved < 0.5, { worst: ST.worst, pops: ST.pops.slice(0, 8), switches: ST.switches, deaths: ST.deaths, seqs: ST.seqs });
+  const RK = moves.rollKey;
+  check(`moves: X pressed again past the commit point near a wall (${RK.tries} tries at the D steel block, both facings: standing, walking and running at it, nothing held, the other way, his own way or Down, 1..12 steps past the commit point): a new roll where it has room (${RK.chained}), else the roll goes on (${RK.goesOn}) - every switch out of it on the ground changes his drawn height by <= P.POP (a new roll: no taller), no anim shown for one step between two rolls`,
+    RK.tries > 1500 && RK.chained > 200 && RK.goesOn > 200 && RK.pops.length === 0 && RK.blips.length === 0, { worst: RK.worst, pops: RK.pops, blips: RK.blips, switches: RK.switches });
+  check('moves: Down and a direction pressed together from standing crouch him on the spot first (crouch_in), then he crouch-walks; both let go crouch-walking, he stops and stands up on the spot (crouch_out -> idle); Down let go with the direction held, he stands up on the spot and walks on (also moving faster than the crouch walk, up to the sneak\'s speed); walking, Down takes him down through the low run',
+    sides(o => o.downDir.seq === 'idle,crouch_in,crouch,crouchwalk' && o.downDir.movedInWay === 0 && o.downDir.vx === Math.round(S.CROUCH) && o.cwStop.seq === 'crouchwalk,crouch_out,idle' && o.cwStop.movedInWay < 0.5 &&
+      o.cwUp.seq.startsWith('crouchwalk,crouch_out,idle,walk') && o.cwUp.movedInWay < 0.5 && o.cwUpFast.seq.startsWith('crouchwalk,crouch_out,idle,walk') && o.cwUpFast.movedInWay < 0.5) &&
+      /^(walk|run),lowrun,crouchwalk$/.test(ST.seqs['walk>crouchwalk']),
+    Object.assign({ seqs: ST.seqs }, ...['right', 'left'].map(side => ({ [side]: { downDir: moves[side].downDir, cwStop: moves[side].cwStop, cwUp: moves[side].cwUp, cwUpFast: moves[side].cwUpFast } }))));
+  check('moves: crouch-walking onto a ladder\'s top climbs down it (Down at a ladder top climbs, crouched or not)', moves.ladderTopCrouch.climbed && moves.ladderTopCrouch.ground && moves.ladderTopCrouch.feet === 12 * TS, moves.ladderTopCrouch);
+  const U = moves.underBelt, BC = moves.bucketCrouch;
+  check('moves: crouched under low things nothing breaks - under the belt\'s tail he crouch-walks into post 116 and stands up, a jump from the crouch stops his hair under the belt; crouched in the moving bucket he rides it at one pixel offset and stands up in it',
+    same(U.x, U.postAt, 0.01) && U.crouch && U.jumpTopY >= U.hairLimit - 0.01 && U.stood && U.stoodFeet === 11 * TS &&
+    BC.offOrStanding === 0 && Object.keys(BC.rel).length === 1 && Object.values(BC.rel)[0] > 30 && BC.stoodOn === 'bucket' && !BC.crouch, { underBelt: U, bucket: BC });
+  const T = Object.entries(moves.shaft.tries);
+  check('moves: no move clears the E shaft - the low run, crouch walk, sneak and run with a jump 0..4 steps past the lip, the low run let go into a jump, rolls off the lip and run / low run rolls into it, walking and running rolls into a jump buffered into the commit point at the lip, a roll chained there: every try falls in (reaching the far side at most at its wall, under its top)',
+    T.length === 27 && T.every(([, t]) => t.died && t.farthestRightEdge <= moves.shaft.farSide && (t.miss === null || t.miss > 0)),
+    { farSide: moves.shaft.farSide, farthest: Math.max(...T.map(([, t]) => t.farthestRightEdge)), closestMissPx: Math.min(...T.filter(([, t]) => t.miss !== null).map(([, t]) => t.miss)), tries: moves.shaft.tries }); }
 const seen = report.seen = await page.evaluate(() => __bot.seen);
-const states = ['idle', 'walk', 'run', 'jump_up', 'jump_apex', 'fall', 'land', 'climb'];
+const states = [...BASE, ...MOVES];
 const used = Object.fromEntries(states.map(st => [st, Object.keys(seen).filter(k => k.startsWith(st + ' >')).map(k => k.split(' > ')[1])]));
-check('all 8 animation states played, each with its own sheet clip (no safety net)', states.every(st => used[st].length && used[st].every(c => c === st)), used);
+check(`all ${states.length} animation states played (the 8 platformer ones and the moves), each with its own sheet clip (no safety net)`, states.every(st => used[st].length && used[st].every(c => c === st)), used);
 console.log('  probes', JSON.stringify(probe));
 const P = await page.evaluate(() => { const P = LVL.engine.P; return { JUMP_H: P.JUMP_H, WALK: P.WALK }; });
 check('jump apex ~2.35 tiles (P.JUMP_H)', Math.abs(probe.runJump.apex - P.JUMP_H) < 3 * K && Math.abs(probe.walkJump.apex - P.JUMP_H) < 3 * K && Math.abs(P.JUMP_H / TS - 2.34) < 0.02, { walk: probe.walkJump.apex, run: probe.runJump.apex, tiles: P.JUMP_H / TS });
@@ -849,11 +1304,15 @@ check('A slag steps keep the ground cycle (no air pose on a 1-tile step down)', 
   check('facing left plays the left set (no mirroring); facing right the right set', A.left.sets.join() === 'left' && A.standing.sets.join() === 'right' && A.running.sets.join() === 'right', { left: A.left.sets, right: A.running.sets }); }
 // The left set is the 3D model seen from the other side, not a mirror. The pauldron (its bright orange) sits on his LEFT shoulder:
 // facing left that is the near shoulder, so it shows in every frame of the left set (near the body's axis in the near-profile game
-// view: no more than 3 px behind the anchor however far he leans into a run); facing right it is the far one, hidden in many frames
-// and, where it peeks out, screen right of the anchor; on the ladder (seen from behind) it is screen left in both. A mirror of the
-// right set would show it only in the frames where the right set does. And both are lit from the upper left: over all frames the
-// silhouette's left-edge pixels (inside the black contour) are brighter than its right-edge ones (a mirror flips the sign).
-{ const look = await page.evaluate(() => {
+// view: no more than 3 px behind the anchor however far he leans into a run - the upright clips; crouched, his shoulders go further
+// forward); facing right it is the far one, hidden in many frames and, where it peeks out, screen right of the anchor; on the ladder
+// (seen from behind) it is screen left in both. A mirror of the right set would show it only in the frames where the right set
+// does. And the left set is no mirror at all: each base clip's frames, flipped about the anchor and laid over the right set's, differ
+// in a fifth or more of their pixels (a mirror: none). The light comes from the upper left in both by construction (the key light is
+// fixed in view space); the left set's silhouette is brighter on its left edge than on its right (over the platformer clips). The
+// right set's edge balance is no test in the near-profile view: facing right his back - the dark pack, the dark hair - is the left
+// edge, so material, not light, decides it.
+{ const look = await page.evaluate(BASE => {
     const S = LVL.sheet, img = S.img, c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
     const g = c.getContext('2d'); g.drawImage(img, 0, 0); const d = g.getImageData(0, 0, c.width, c.height).data, W = c.width;
     const f = v => { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
@@ -862,23 +1321,60 @@ check('A slag steps keep the ground cycle (no air pose on a 1-tile step down)', 
     for (const [k, set] of [['right', S.sets[1]], ['left', S.sets[-1]]]){
       if (!set){ out[k] = null; continue; }
       const o = out[k] = { pauldron: {} }; let ev = 0, en = 0;
-      for (const [name, clip] of Object.entries(set)){
+      for (const [name, clip] of Object.entries(set)){ const moveClip = !BASE.includes(name);
         const xs = [];
         for (const fr of clip.frames){ let sx = 0, n = 0;
           for (let y = 0; y < fr.h; y++){ const row = [];
             for (let x = 0; x < fr.w; x++){ const i = ((fr.y + y) * W + fr.x + x) * 4; if (!d[i + 3]) continue;
               if (d[i] > 150 && d[i + 1] > 60 && d[i + 1] < 170 && d[i + 2] < 90 && d[i] - d[i + 2] > 100){ sx += x + 0.5 - fr.ax; n++; }
               if (d[i] + d[i + 1] + d[i + 2] >= 30) row.push(lum(i)); }
-            if (row.length >= 6){ ev += (row[0] + row[1] - row[row.length - 1] - row[row.length - 2]) / 2; en++; } }
+            if (row.length >= 6 && !moveClip){ ev += (row[0] + row[1] - row[row.length - 1] - row[row.length - 2]) / 2; en++; } }
           if (n) xs.push(sx / n); }
         o.pauldron[name] = { frames: xs.length, of: clip.frames.length, meanX: xs.length ? +(xs.reduce((a, b) => a + b, 0) / xs.length).toFixed(1) : null };
       }
       o.leftMinusRightEdgeL = +(ev / en).toFixed(4);
     }
-    return out; });
-  const onLeftShoulder = (set, near) => Object.entries(set.pauldron).every(([n, p]) => (near ? p.frames === p.of : true) && (p.frames === 0 || (n === 'climb' ? p.meanX < 0 : p.meanX > (near ? -3 : 0))));
+    // the left set against the right set flipped about the anchor: the share of their joint opaque pixels that differ (alpha or colour)
+    let dn = 0, du = 0;
+    if (S.sets[1] && S.sets[-1]) for (const name of BASE){ const R = S.sets[1][name], L = S.sets[-1][name]; if (!R || !L) continue;
+      for (let k = 0; k < Math.min(R.frames.length, L.frames.length); k++){ const a = L.frames[k], b = R.frames[k];
+        const px = (fr, x, y) => (x < 0 || y < 0 || x >= fr.w || y >= fr.h) ? -1 : ((fr.y + y) * W + fr.x + x) * 4;
+        for (let y = -Math.max(a.ay, b.ay); y < Math.max(a.h - a.ay, b.h - b.ay); y++)
+          for (let u = -Math.max(a.ax, b.w - b.ax); u < Math.max(a.w - a.ax, b.ax); u++){
+            const i = px(a, a.ax + u, a.ay + y), j = px(b, b.ax - u - 1, b.ay + y);
+            const oa = i >= 0 && d[i + 3] > 0, ob = j >= 0 && d[j + 3] > 0; if (!oa && !ob) continue; du++;
+            if (oa !== ob || Math.abs(d[i] - d[j]) + Math.abs(d[i + 1] - d[j + 1]) + Math.abs(d[i + 2] - d[j + 2]) > 60) dn++; } } }
+    out.mirrorDiff = du ? +(dn / du).toFixed(3) : 0;
+    return out; }, BASE);
+  const onLeftShoulder = (set, near) => Object.entries(set.pauldron).every(([n, p]) => (near ? p.frames === p.of : true) &&
+    (p.frames === 0 || (n === 'climb' ? p.meanX < 0 : p.meanX > (near ? (BASE.includes(n) ? -3 : -10) : 0))));
   check('the left set is rendered from the 3D model, not mirrored: pauldron on his LEFT shoulder in both sets, both lit from the upper left',
-    look.left && onLeftShoulder(look.left, true) && onLeftShoulder(look.right, false) && look.left.leftMinusRightEdgeL > 0 && look.right.leftMinusRightEdgeL > 0, look); }
+    look.left && onLeftShoulder(look.left, true) && onLeftShoulder(look.right, false) && look.left.leftMinusRightEdgeL > 0 && look.mirrorDiff > 0.2, look); }
+// The moves' anchors (export_hero.mjs): every clip is drawn at one world point, so switching clips never hops. On the drawn pixels:
+// the planted moves (the crouch, the guard and their ways in and out, the crouch walk, the sneak) stand every frame's lowest row on
+// the ground line (ay), like idle, and so does the roll every frame on the floor (all but its dive's); and at each switch the game
+// makes between the stances - idle -> crouch_in -> crouch -> crouch_out -> idle, idle -> alert_in -> alert -> alert_out -> idle,
+// idle -> roll, roll -> alert - the boots (the lowest 8 rows' centroid) move at most 3.5 px across: the stances' own footing (the
+// alert's wider stance, the crouch's planted feet), not a jump of the anchor (the roll's switches into the gaits are played: the
+// moves' exit check)
+{ const an = await page.evaluate(() => {
+    const S = LVL.sheet, img = S.img, c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+    const g = c.getContext('2d'); g.drawImage(img, 0, 0); const d = g.getImageData(0, 0, c.width, c.height).data, W = c.width, a = (f, x, y) => d[((f.y + y) * W + f.x + x) * 4 + 3];
+    const low = f => { for (let y = f.h - 1; y >= 0; y--) for (let x = 0; x < f.w; x++) if (a(f, x, y)) return y; return -1; };
+    const boots = f => { const l = low(f); let s = 0, n = 0; for (let y = l - 7; y <= l; y++) for (let x = 0; x < f.w; x++) if (a(f, x, y)){ s += x + 0.5 - f.ax; n++; } return s / n; };
+    const out = {};
+    for (const [side, set] of [['right', S.sets[1]], ['left', S.sets[-1]]]){
+      const o = out[side] = { offGround: [], hops: {} };
+      for (const n of ['idle', 'crouch_in', 'crouch', 'crouch_out', 'crouchwalk', 'sneak', 'alert', 'alert_in', 'alert_out']) set[n].frames.forEach((f, i) => { if (low(f) !== f.ay) o.offGround.push(n + '#' + i + ' ' + (low(f) - f.ay)); });
+      o.rollOff = set.roll.frames.map((f, i) => low(f) !== f.ay ? i : -1).filter(i => i >= 0);
+      const fr = (n, i) => set[n].frames[i < 0 ? set[n].frames.length + i : i];
+      for (const [p, i, q, j] of [['idle', 0, 'crouch_in', 0], ['crouch_in', -1, 'crouch', 0], ['crouch', 0, 'crouch_out', 0], ['crouch_out', -1, 'idle', 0], ['idle', 0, 'alert_in', 0],
+        ['alert_in', -1, 'alert', 0], ['alert', 0, 'alert_out', 0], ['alert_out', -1, 'idle', 0], ['idle', 0, 'roll', 0], ['roll', -1, 'alert', 0]])
+        o.hops[p + '>' + q] = +Math.abs(boots(fr(q, j)) - boots(fr(p, i))).toFixed(1); }
+    return out; });
+  const dive = await page.evaluate(() => LVL.debug.roll().dive);
+  check('the moves\' anchors: the planted moves stand every frame on the ground line, so does the roll every frame but its dive\'s (one run of frames lifted, before the root motion\'s fastest frame: no bounce in the tumble), and the switches between the stances, the crouch, the guard and the roll move the boots <= 3.5 px (no hop)',
+    ['right', 'left'].every(k => an[k].offGround.length === 0 && Object.values(an[k].hops).every(v => v <= 3.5) && an[k].rollOff.length <= 2 && an[k].rollOff.every((i, j, a) => i <= dive && (!j || i === a[j - 1] + 1))), { ...an, dive }); }
 check('land plays straight out of a hard landing and only then (walking on ends it; a landing on the move shows none: no late squash)',
   probe.landWalkOff.firstGroundAnim === 'land' && probe.landWalkOff.walkedAt >= 0 && !probe.landWalkOff.landAfterWalk && !probe.landRunStop.land, { walkOff: probe.landWalkOff, runStop: probe.landRunStop });
 check('the climb advances its frames with the distance climbed (dy: hands planted), holds still when he hangs, hands on the ladder axis',
@@ -929,7 +1425,7 @@ check('a jump under the belt stops under it (no head through the belt)', probe.u
 check('a respawn (win, death) puts the camera on the hero at once (both axes at their rest)', ['win', 'death'].every(k => { const r = probe.respawnCam[k]; return r && Math.abs(r.was[0] - r.rest[0]) < 0.01 && Math.abs(r.was[1] - r.rest[1]) < 0.01; }), probe.respawnCam);
 check('foreground silhouettes stay off the hero at the E shaft edge and in the cage (cols 140-149)', Object.entries(probe.fgOcclusion).every(([c, n]) => c < 140 || c > 149 || n < 50 * K * K), probe.fgOcclusion);
 check('parallax: no gap at the top or bottom of the frame at the camera\'s top, middle and lowest view, all along the level', probe.gaps.length === 0, probe.gaps.slice(0, 8));
-check('level ends: walking, running, a jump and a run-jump into either end (P.END) keep his whole drawn frame inside the frame',
+check('level ends: walking, running, a jump, a run-jump and a roll into either end (P.END) keep what is drawn of him (the frame\'s opaque box) inside the frame',
   Object.values(probe.ends.runs).every(r => r.box[0] >= 0 && r.box[1] <= VW) && probe.ends.runs.L_walk.stopX === probe.ends.END && probe.ends.runs.R_walk.stopX === probe.ends.LW - probe.ends.W - probe.ends.END, probe.ends);
 check('mover fronts: the cage\'s bars and the bucket\'s near wall go under the hero outside the mover (his face in front of the post at the lip), over him straddling its edge and inside it',
   ['cage', 'bucket'].every(id => probe.moverFront[id + '_outside'] === 'under' && probe.moverFront[id + '_straddling'] === 'over' && probe.moverFront[id + '_inside'] === 'over'), probe.moverFront);
@@ -993,8 +1489,11 @@ for (const [w, h, name] of [[1300, 900, 'desktop'], [375, 812, 'phone']]){
   await page.screenshot({ path: `${out}/page_${name}.png` });
 }
 check('Down on a ladder top climbs down to the street', probe.ladderDownFromTop.climbed && probe.ladderDownFromTop.reachedStreet, probe.ladderDownFromTop);
-check('Down on a catwalk drops through it', probe.catwalkDropThrough.ground && probe.catwalkDropThrough.feet === 12 * TS, probe.catwalkDropThrough);
-check('the belt is not drop-through', probe.beltNoDrop.ground && probe.beltNoDrop.feet === 7 * TS, probe.beltNoDrop);
+{ const C = probe.catwalkDropThrough;
+  check('on a catwalk Down alone crouches (it stays under him), Down + a jump drops through it (no jump): a fall at once (no crouch frames in the air), crouched again the moment he lands with Down held',
+    C.downAlone.ground && C.downAlone.feet === 8 * TS && C.downAlone.crouch && C.ground && C.feet === 12 * TS && C.rosePx === 0 && C.airAnims.join() === 'fall' && C.firstGroundAnims[0] === 'crouch', C); }
+{ const BN = probe.beltNoDrop;
+  check('the belt is not drop-through: Down + a jump on it is a plain jump, back onto the belt (never below its top)', BN.ground && BN.feet === 7 * TS && BN.lowestFeet === 7 * TS && BN.highestFeet < 7 * TS - 50 * K, BN); }
 check('jump leaps off a ladder', probe.ladderLeap.wasClimbing && probe.ladderLeap.leapt, probe.ladderLeap);
 
 // ---------- display + input on other screens (fresh browser contexts) ----------
@@ -1070,12 +1569,55 @@ for (const [name, w, h, dpr] of [['phone_390x844_dpr3', 390, 844, 3], ['phone_37
   const inView = g.cv.top >= -0.5 && g.cv.bottom <= h + 0.5 && g.pad && g.pad.top >= -0.5 && g.pad.bottom <= h + 0.5;
   check(`touch ${name}: canvas and pad on screen together, the pad walks the hero, no horizontal scroll`, inView && lay[name].movedPx > 100 * K && keysAfter.length === 0 && g.scrollW <= g.innerW && g.cv.left >= 15.5,
     { cv: g.cv, pad: g.pad, innerH: h, moved: lay[name].movedPx, maxVx: Math.max(...samples.map(s => s[1])), dscale: g.dscale, crisp: g.crisp, smooth: g.smooth, keysAfter });
-  // pad layout: one row, the two groups on opposite sides (jump under the right thumb, arrows under the left)
-  const pl = await pg.evaluate(() => { const r = k => document.querySelector(`#pad [data-k="${k}"]`).getBoundingClientRect();
-    return Object.fromEntries(['left', 'right', 'run', 'down', 'up', 'jump'].map(k => { const b = r(k); return [k, { x: Math.round(b.left + b.width / 2), top: Math.round(b.top), w: Math.round(b.width) }]; })); });
-  const tops = new Set(Object.values(pl).map(b => b.top));
+  // pad layout: the two groups on opposite sides (the arrows and toggles under the left thumb, crouch / up / roll / jump under the
+  // right); in landscape one row, in portrait two (the toggles over ◀ ▶, ▲ ↻ over ▼ ⤒); every button at least 40 px, none overlapping
+  const PADK = ['left', 'right', 'run', 'sneak', 'down', 'up', 'roll', 'jump'];
+  const pl = await pg.evaluate(K => { const r = k => document.querySelector(`#pad [data-k="${k}"]`).getBoundingClientRect();
+    return Object.fromEntries(K.map(k => { const b = r(k); return [k, { x: Math.round(b.left + b.width / 2), top: Math.round(b.top), l: b.left, r: b.right, t: b.top, b: b.bottom, w: Math.round(b.width), h: Math.round(b.height) }]; })); }, PADK);
+  const tops = new Set(Object.values(pl).map(b => b.top)), portrait = h > w, same = ks => new Set(ks.map(k => pl[k].top)).size === 1;
+  const overlap = PADK.some((a, i) => PADK.slice(i + 1).some(c => pl[a].l < pl[c].r - 0.5 && pl[c].l < pl[a].r - 0.5 && pl[a].t < pl[c].b - 0.5 && pl[c].t < pl[a].b - 0.5));
   lay[name].pad = pl;
-  check(`touch ${name}: pad on one row, arrows left of centre, jump right of centre`, tops.size === 1 && pl.left.x < w / 2 && pl.right.x < w / 2 && pl.jump.x > w / 2 && pl.up.x > w / 2, pl);
+  check(`touch ${name}: pad ${portrait ? 'on two rows (toggles over ◀ ▶, ▲ ↻ over ▼ ⤒)' : 'on one row'}, arrows and toggles left of centre, crouch / up / roll / jump right of centre, buttons >= 40 px, none overlapping`,
+    (portrait ? tops.size === 2 && same(['left', 'right', 'down', 'jump']) && same(['run', 'sneak', 'up', 'roll']) && pl.run.top < pl.left.top : tops.size === 1) &&
+    ['left', 'right', 'run', 'sneak'].every(k => pl[k].x < w / 2) && ['down', 'up', 'roll', 'jump'].every(k => pl[k].x > w / 2) && PADK.every(k => pl[k].w >= 40 && pl[k].h >= 40) && !overlap, pl);
+  // the moves from the pad: ▼ held crouches, with ▶ (a second finger) the crouch walk, BIEG on (and ▼ ▶) the low run, SKRAD on (BIEG
+  // goes off) and ▶ the sneak, ↻ rolls; on the catwalk ▼ held and ⤒ with a second finger, and one thumb sliding from ▼ onto ⤒,
+  // drop him through it; a thumb sliding from ⤒ onto ↻ does not roll (↻ takes no slides) and picks up no ▼ crossing it (landscape
+  // ▲ ↻ ▼ ⤒); every key let go at the end
+  { const pt = async k => (await btn(k)), P0 = await pg.evaluate(() => { const P = LVL.engine.P; return { CROUCH: P.CROUCH, SNEAK: P.SNEAK, LOWRUN: P.LOWRUN }; });
+    const touch = (type, pts) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: pts.map(([b, id]) => ({ x: b.x, y: b.y, id })) });
+    const st = () => pg.evaluate(() => { const s = LVL.debug.state(); return { vx: Math.round(Math.abs(s.vx)), crouch: s.crouch, anim: s.anim, rollT: s.rollT, feet: Math.round(s.y + LVL.engine.P.H), keys: Object.entries(LVL.debug.keys).filter(([, v]) => v).map(([k]) => k),
+      run: document.querySelector('#pad [data-k="run"]').getAttribute('aria-pressed'), sneak: document.querySelector('#pad [data-k="sneak"]').getAttribute('aria-pressed') }; });
+    const tapB = async k => { const b = await pt(k); await touch('touchStart', [[b, 9]]); await waitSteps(pg, 2); await touch('touchEnd', []); await waitSteps(pg, 2); };
+    const r = {}, D = await pt('down'), Rt = await pt('right');
+    await pg.evaluate(() => { LVL.debug.spawn(4); LVL.debug.place(133 * LVL.map.TS, 11 * LVL.map.TS); }); await waitSteps(pg, 3);
+    await touch('touchStart', [[D, 3]]); await waitSteps(pg, 30); r.crouch = await st();
+    await touch('touchStart', [[D, 3], [Rt, 4]]); await waitSteps(pg, 40); r.crouchwalk = await st();
+    await touch('touchEnd', []); await waitSteps(pg, 10);
+    await tapB('run'); r.runOn = await st(); await touch('touchStart', [[D, 3]]); await touch('touchStart', [[D, 3], [Rt, 4]]); await waitSteps(pg, 45); r.lowrun = await st();
+    await touch('touchEnd', []); await waitSteps(pg, 10);
+    await pg.evaluate(() => { LVL.debug.spawn(4); LVL.debug.place(133 * LVL.map.TS, 11 * LVL.map.TS); }); await waitSteps(pg, 3);
+    await tapB('sneak'); r.sneakOn = await st(); await touch('touchStart', [[Rt, 4]]); await waitSteps(pg, 40); r.sneak = await st(); await touch('touchEnd', []); await waitSteps(pg, 10);
+    await tapB('sneak'); await pg.evaluate(() => { LVL.debug.spawn(4); LVL.debug.place(133 * LVL.map.TS, 11 * LVL.map.TS); }); await waitSteps(pg, 3);
+    const Rl = await pt('roll'); await touch('touchStart', [[Rl, 5]]); await waitSteps(pg, 6); r.roll = await st(); await touch('touchEnd', []); await waitSteps(pg, 90); r.after = await st();
+    // (rolls seen in the page from now on: a page-side sampler after every frame, so none is missed between the test's round trips)
+    const J = await pt('jump'), slide = async (id, a, b) => { for (let i = 1; i <= 4; i++) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: a.x + (b.x - a.x) * i / 4, y: a.y + (b.y - a.y) * i / 4, id }] }); };
+    const onCatwalk = () => pg.evaluate(() => { const T = LVL.map.TS; LVL.debug.spawn(2); LVL.debug.place(79 * T + (T - LVL.engine.P.W) / 2, 8 * T); });
+    await onCatwalk(); await waitSteps(pg, 3); await touch('touchStart', [[D, 3]]); await waitSteps(pg, 8); await touch('touchStart', [[D, 3], [J, 4]]); await waitSteps(pg, 50);
+    r.dropTwoFingers = await st(); await touch('touchEnd', []); await waitSteps(pg, 6);
+    await onCatwalk(); await waitSteps(pg, 3); await touch('touchStart', [[D, 6]]); await waitSteps(pg, 8); await slide(6, D, J); await waitSteps(pg, 50);
+    r.dropSlide = await st(); await touch('touchEnd', []); await waitSteps(pg, 6);
+    await pg.evaluate(() => { window.__rolls = 0; const t = () => { if (LVL.debug.state().rollT !== null) __rolls++; requestAnimationFrame(t); }; t();
+      LVL.debug.spawn(4); LVL.debug.place(133 * LVL.map.TS, 11 * LVL.map.TS); });
+    await waitSteps(pg, 3); await touch('touchStart', [[J, 7]]); await waitSteps(pg, 4); await slide(7, J, Rl); await waitSteps(pg, 60);
+    r.jumpSlidToRoll = { ...(await st()), rollsSeen: await pg.evaluate(() => __rolls) }; await touch('touchEnd', []); await waitSteps(pg, 6); r.end = await st();
+    lay[name].padMoves = r;
+    check(`touch ${name}: the pad plays the moves - ▼ crouches, ▼ + ▶ crouch-walk, BIEG + ▼ + ▶ the low run, SKRAD (BIEG off) + ▶ the sneak, ↻ rolls; ▼ + ⤒ (two fingers, or one thumb sliding from ▼ onto ⤒) drops through the catwalk; a thumb sliding from ⤒ onto ↻ does not roll, nor picks up ▼ on its way (no crouch); nothing held after`,
+      r.crouch.crouch && r.crouch.vx === 0 && r.crouchwalk.crouch && Math.abs(r.crouchwalk.vx - P0.CROUCH) <= 1 && r.runOn.run === 'true' && r.lowrun.crouch && Math.abs(r.lowrun.vx - P0.LOWRUN) <= 1 &&
+      r.sneakOn.sneak === 'true' && r.sneakOn.run === 'false' && Math.abs(r.sneak.vx - P0.SNEAK) <= 1 && r.sneak.anim === 'sneak' && r.roll.rollT !== null && r.roll.anim === 'roll' &&
+      r.after.keys.length === 0 && r.after.rollT === null && r.dropTwoFingers.feet === 12 * TS && r.dropSlide.feet === 12 * TS && r.jumpSlidToRoll.rollsSeen === 0 &&
+      !r.jumpSlidToRoll.keys.includes('down') && !r.jumpSlidToRoll.crouch &&
+      r.end.keys.length === 0, r); }
   // a thumb slides from ◀ to ▶ without lifting: the hero turns and walks right (on the open E street: no wall within his reach)
   if (name === 'phone_390x844_dpr3'){
     const L = await btn('left'), Rb = await btn('right');

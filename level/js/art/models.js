@@ -1,6 +1,7 @@
 /* art/models.js - the owner's three 3D models (a mining headframe, a rusty 200 l drum, a car of two mine tubs) as pixel sprites,
  * for the playfield and its movers (the parallax layers keep art/bg.js's painted lattice headframes: tall and slender against the
- * sunset, they read better at that distance than this squat strut frame scaled down).
+ * sunset, they read better at that distance than this squat strut frame scaled down; they are painted in this model's materials,
+ * rust steelwork and teal sheaves, seen through the smog: style.js's headframes track).
  *
  * The sprites are rendered offline from level/models/*.glb by tools/model_sprites.mjs in the hero's pipeline: an orthographic
  * render at SCALE.pxPerM (52.5 px per metre), the texture sorted into material classes, the light from the upper left posterised

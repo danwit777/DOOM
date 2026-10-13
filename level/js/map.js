@@ -5,7 +5,7 @@
  * his feet at y = 11 * TS = 528 (row 12 = 576 in the colony street of C, which dips a row).
  * Tile kinds (one char each):
  *   '.' air   G ground / slag (solid)   B familok brick (solid)   S riveted steel (solid)   C crate (solid)
- *   P lattice catwalk (one-way: land from above, Down drops through)   T conveyor belt (one-way, pushes right, NOT drop-through)
+ *   P lattice catwalk (one-way: land from above, Down + a jump drops through)   T conveyor belt (one-way, pushes right, NOT drop-through)
  *   L ladder (climbable; its top cell is a one-way ledge, Down climbs back down)
  * Outside the map: columns < 0 or >= MW are solid walls, rows < 0 are air, rows >= MH repeat the bottom row (ground goes on down,
  * a pit stays open: falling out of the level = death).
@@ -87,7 +87,7 @@ const isSolid = (c, r) => SOLID.has(tile(c, r));
 const isLadder = (c, r) => tile(c, r) === 'L';
 // One-way ledges: catwalks, the belt, and the top cell of a ladder.
 const isOneWay = (c, r) => { const t = tile(c, r); return t === 'P' || t === 'T' || (t === 'L' && tile(c, r - 1) !== 'L'); };
-// Ledges that Down drops through (the belt is not one: its posts would otherwise trap the hero under it).
+// Ledges that Down + a jump drops through (the belt is not one: its posts would otherwise trap the hero under it).
 const isDropThrough = (c, r) => tile(c, r) === 'P';
 // First row from the top that the hero can stand on in column c (MH if none: a pit).
 function standRow(c){ for (let r = 0; r < MH; r++) if (isSolid(c, r) || isOneWay(c, r)) return r; return MH; }

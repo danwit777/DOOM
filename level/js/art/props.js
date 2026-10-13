@@ -586,8 +586,12 @@ function rails(cv, c0 = E.rails.c0, c1 = E.rails.c1){
 // cage guides (Spurlatten) from the deck down the shaft, the deck girder with its railing and the sheaves' bearing pedestals; the
 // raking back strut toward the engine house (backStrut, painted behind the house: it rakes down behind its roof), tied to the
 // right leg at its two upper strut levels. The two sheaves (style.js SCALE.sheaveR) stand on the deck, their lowest rows in the
-// deck slot, their tops at the box's top. The right leg's outer chord takes a warm rim from the low sun near the top, fading out
-// down the leg (sky[5] -> sky[4] -> sky[3] -> steel).
+// deck slot, their tops at the box's top. It is painted in the model's materials: the steelwork red lead gone to rust, a step
+// over the model's own body and lit steps (rust[2] / rust[3]: its 1 px members have no mass to read by) - members rust[3], their
+// lit edges rust[4], shadowed sides rust[1], the legs' and the strut's lacing rust[2], the X-bracing a rust[3] bar over a rust[1]
+// shadow row (it reads on the dark town and on the bright sunset alike), the deck girder rust[2] with its lit rows rust[3..4],
+// rivets rust[5] -, the cage guides, the bearing blocks and the sheaves steel-teal. The right leg's outer chord takes a warm rim
+// from the low sun near the top, fading out down the leg (sky[5] -> sky[4] -> sky[3] -> rust[1]).
 const MD = LVL.art.models, SHAFT_X = (E.shaft.c0 + E.shaft.c1 + 1) / 2 * TS;   // the model sprites; the shaft's centre line
 let HFM = null;                          // the model headframe where it stands (models.headframeGeo, + the ropes' arrivals): build()
 // the rope holes in the engine house's corner pilaster, one per sheave; w.arr: where the rope from its hole arrives on the wheel
@@ -623,10 +627,10 @@ function backStrut(cv){
   const h = hfGeo(), { gy, ty, tr } = h, sx = h.strutX;
   paint(cv, tr - 2, ty - 2, sx - tr + 14, gy - ty + 2, g => {
     const A = t => [tr + (sx - tr) * t, ty + (gy - 1 - ty) * t], B = t => [tr + (sx - 21 - tr) * t, ty + 15 + (gy - 1 - ty - 15) * t];
-    for (let k = 0; k < 18; k++){ const a = A(k / 18), b = B((k + 0.5) / 18), c = A((k + 1) / 18); seg(g, a[0], a[1], b[0], b[1], ST[3]); seg(g, b[0], b[1], c[0], c[1], ST[3]); }
-    seg(g, tr, ty, sx, gy - 1, ST[5]); seg(g, tr + 1, ty, sx + 1, gy - 1, ST[3]); seg(g, tr, ty + 15, sx - 21, gy - 1, ST[4]);
+    for (let k = 0; k < 18; k++){ const a = A(k / 18), b = B((k + 0.5) / 18), c = A((k + 1) / 18); seg(g, a[0], a[1], b[0], b[1], RU[2]); seg(g, b[0], b[1], c[0], c[1], RU[2]); }
+    seg(g, tr, ty, sx, gy - 1, RU[4]); seg(g, tr + 1, ty, sx + 1, gy - 1, RU[1]); seg(g, tr, ty + 15, sx - 21, gy - 1, RU[3]);
     for (const y of h.levels.slice(-2)){ const xb = Math.round(B((y - ty - 15) / (gy - ty - 15))[0]), xa = hfRightLeg(h, y);
-      R(g, xa, y, xb - xa, 1, ST[4]); R(g, xa, y + 1, xb - xa, 1, ST[2]); }
+      R(g, xa, y, xb - xa, 1, RU[3]); R(g, xa, y + 1, xb - xa, 1, RU[1]); }
     R(g, sx - 30, gy - 9, 42, 9, IR[5]); R(g, sx - 30, gy - 9, 42, 1, IR[7]); R(g, sx + 11, gy - 9, 1, 9, IR[3]);
   });
 }
@@ -639,28 +643,28 @@ function headframe(cv){
     for (const gx of [E.shaft.c0 * TS + 1, (E.shaft.c1 + 1) * TS - 5]){
       R(g, gx, deck + 9, 4, M.LH - deck - 9, ST[4]); R(g, gx, deck + 9, 1, M.LH - deck - 9, ST[5]); R(g, gx + 3, deck + 9, 1, M.LH - deck - 9, ST[2]);
       for (let y = deck + 30; y < M.LH; y += 36) dot(g, gx + 2, y, ST[6]); }
-    // X-bracing in each panel (inner chords), then the strut levels with their gussets
+    // X-bracing in each panel (inner chords; a lit bar over its shadow row), then the strut levels with their gussets
     const lv = [ty + 3, ...h.levels.slice().reverse(), gy - 1];
     for (let k = 0; k + 1 < lv.length; k++){ const ya = lv[k] + 3, yb = lv[k + 1];
-      seg(g, L.i(ya), ya, Rr.i(yb), yb, ST[3]); seg(g, Rr.i(ya), ya, L.i(yb), yb, ST[3]); }
+      for (const [c, d] of [[RU[1], 1], [RU[3], 0]]){ seg(g, L.i(ya), ya + d, Rr.i(yb), yb + d, c); seg(g, Rr.i(ya), ya + d, L.i(yb), yb + d, c); } }
     for (const y of h.levels){ const a = L.i(y), b = Rr.i(y);
-      R(g, a, y, b - a + 1, 1, ST[5]); R(g, a, y + 1, b - a + 1, 1, ST[4]); R(g, a, y + 2, b - a + 1, 1, ST[2]);
-      for (const gx of [a - 2, b - 5]){ R(g, gx, y - 3, 8, 8, ST[4]); R(g, gx, y - 3, 8, 1, ST[6]); R(g, gx + 7, y - 2, 1, 7, ST[2]); dot(g, gx + 2, y, ST[7]); dot(g, gx + 5, y + 3, ST[7]); } }
+      R(g, a, y, b - a + 1, 1, RU[4]); R(g, a, y + 1, b - a + 1, 1, RU[3]); R(g, a, y + 2, b - a + 1, 1, RU[1]);
+      for (const gx of [a - 2, b - 5]){ R(g, gx, y - 3, 8, 8, RU[3]); R(g, gx, y - 3, 8, 1, RU[4]); R(g, gx + 7, y - 2, 1, 7, RU[1]); dot(g, gx + 2, y, RU[5]); dot(g, gx + 5, y + 3, RU[5]); } }
     // legs: two chords each with zig-zag lacing; the left leg's outer chord faces the light, the right leg's outer chord the sun
-    const rim = y => y < ty + 36 ? SK[5] : y < ty + 54 ? SK[4] : y < ty + 66 ? SK[3] : ST[3];
-    for (const [leg, oc, ic] of [[L, () => ST[6], ST[4]], [Rr, rim, ST[5]]]){
-      for (let y = ty + 6; y + 21 <= gy; y += 21){ seg(g, leg.o(y), y, leg.i(y + 10), y + 10, ST[3]); seg(g, leg.i(y + 10), y + 10, leg.o(y + 21), y + 21, ST[3]); }
+    const rim = y => y < ty + 36 ? SK[5] : y < ty + 54 ? SK[4] : y < ty + 66 ? SK[3] : RU[1];
+    for (const [leg, oc, ic] of [[L, () => RU[4], RU[3]], [Rr, rim, RU[3]]]){
+      for (let y = ty + 6; y + 21 <= gy; y += 21){ seg(g, leg.o(y), y, leg.i(y + 10), y + 10, RU[2]); seg(g, leg.i(y + 10), y + 10, leg.o(y + 21), y + 21, RU[2]); }
       for (let y = ty; y < gy; y++){ dot(g, leg.i(y), y, ic); dot(g, leg.o(y), y, oc(y)); } }
     // deck girder: lit top, rivets, brackets under its overhangs; its railing; the sheaves' bearing pedestals (behind the wheels)
-    R(g, d0, deck - 21, d1 - d0, 1, ST[5]); R(g, d0, deck - 11, d1 - d0, 1, ST[3]);
-    for (let px = d0; px <= d1; px += 21) R(g, px, deck - 21, 1, 21, ST[4]);
+    R(g, d0, deck - 21, d1 - d0, 1, RU[4]); R(g, d0, deck - 11, d1 - d0, 1, RU[2]);
+    for (let px = d0; px <= d1; px += 21) R(g, px, deck - 21, 1, 21, RU[3]);
     for (const wh of h.wheels){
-      seg(g, wh.x - 20, deck - 1, wh.x - 4, wh.y + 4, ST[4]); seg(g, wh.x - 19, deck - 1, wh.x - 3, wh.y + 4, ST[2]);
-      seg(g, wh.x + 20, deck - 1, wh.x + 4, wh.y + 4, ST[3]); seg(g, wh.x + 19, deck - 1, wh.x + 3, wh.y + 4, ST[2]);
+      seg(g, wh.x - 20, deck - 1, wh.x - 4, wh.y + 4, RU[4]); seg(g, wh.x - 19, deck - 1, wh.x - 3, wh.y + 4, RU[1]);
+      seg(g, wh.x + 20, deck - 1, wh.x + 4, wh.y + 4, RU[3]); seg(g, wh.x + 19, deck - 1, wh.x + 3, wh.y + 4, RU[1]);
       R(g, wh.x - 8, wh.y - 4, 17, 10, ST[3]); R(g, wh.x - 8, wh.y - 4, 17, 1, ST[6]); R(g, wh.x - 8, wh.y + 5, 17, 1, ST[1]); }
-    R(g, d0, deck, d1 - d0, 9, ST[4]); R(g, d0, deck, d1 - d0, 1, ST[6]); R(g, d0, deck + 1, d1 - d0, 1, ST[5]); R(g, d0, deck + 8, d1 - d0, 1, ST[1]);
-    for (let px = d0 + 4; px < d1; px += 12) dot(g, px, deck + 4, ST[6]);
-    for (const [a, b] of [[d0 + 3, L.i(ty + 27)], [d1 - 3, Rr.i(ty + 27)]]){ seg(g, a, deck + 9, b, ty + 27, ST[3]); seg(g, a, deck + 10, b, ty + 28, ST[2]); }
+    R(g, d0, deck, d1 - d0, 9, RU[2]); R(g, d0, deck, d1 - d0, 1, RU[4]); R(g, d0, deck + 1, d1 - d0, 1, RU[3]); R(g, d0, deck + 8, d1 - d0, 1, RU[0]);
+    for (let px = d0 + 4; px < d1; px += 12) dot(g, px, deck + 4, RU[4]);
+    for (const [a, b] of [[d0 + 3, L.i(ty + 27)], [d1 - 3, Rr.i(ty + 27)]]){ seg(g, a, deck + 9, b, ty + 27, RU[3]); seg(g, a, deck + 10, b, ty + 28, RU[1]); }
     // the hoist ropes from the engine house: from its wall up to where they lie over each sheave (static: the wheel turns under them)
     for (const wh of h.wheels){ rope(g, wh.hole.x, wh.hole.y, wh.arr.x, wh.arr.y); R(g, wh.hole.x - 3, wh.hole.y - 2, 6, 6, CO[0]); }
   });

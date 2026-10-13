@@ -129,7 +129,7 @@ const fogGlass = h => { const i = LA.indexOf(h); return i < 0 ? null : LA[Math.m
 // courses, arched headers, quoins, door and window surrounds, lit edges) - a colour of no ramp listed (a sprite's) by its value -
 // and a band paints the roles in its three dusk steps (MIDFOG).
 const ROLES = { mbrick: [0, 1, 2, 2], smog: [0, 0, 1, 1, 2, 2, 2, 2, 2], dsteel: [0, 0, 0, 1, 2, 2], steel: [0, 0, 0, 1, 1, 2, 2, 2],
-  wood: [0, 1, 2, 2, 2], paper: [0, 1, 2, 2], sky: [1, 1, 1, 2, 2, 2, 2, 2, 2] };
+  wood: [0, 1, 2, 2, 2], paper: [0, 1, 2, 2], sky: [1, 1, 1, 2, 2, 2, 2, 2, 2], mrust: [0, 0, 1, 2, 2], msteel: [0, 0, 1, 2, 2] };
 const roleOf = h => { for (const k in ROLES){ const i = RAMP[k].indexOf(h); if (i >= 0) return ROLES[k][i]; } const L = lumOf(h); return L < 0.012 ? 0 : L < 0.075 ? 1 : 2; };
 const MIDFOG = [[DU[4], DU[5], DU[6]], [DU[5], DU[6], DU[7]], [DU[6], DU[7], DU[8]]];
 // The layers' fog rules (b = the band): far +2 dusk steps, capped at dusk[5] in the first band (+1 step and cap per band down);
@@ -256,26 +256,32 @@ const HEADFRAMES = [
   ['midfar', 780, 570, 66, 162, 14, 1, false, [880, 540]], ['midfar', 1560, 570, 66, 162, 14, 1, false, [1660, 540]], ['midfar', 2150, 570, 66, 162, 14, 1, false, [2250, 540]],
   ['mid', 450, 594, 138, 378, 25, 1, true, [742, 452]], ['mid', 3669, 594, 108, 321, 20, 0, true, [3870, 470]]
 ];
+// The headframes' ramps per layer, [frame, sheaves] (style.js headframes track): the owner's model's materials, red lead gone to
+// rust for the steelwork and steel-teal for what turns or guides - the sheaves, their bearing blocks, the wire ropes -, each the
+// farther back the nearer the smog's dusk steps.
+const HF_RAMP = { mid: [RAMP.mrust, RAMP.msteel], midfar: [RAMP.mfrust, RAMP.mfsteel] };
 // Lattice headframe, painted: two 3 px legs (lit outer chord on the left, shaded on the right) tapering from the ground to the
-// deck, a girt every `step` px with a gusset plate (a lit pixel) at each joint and 1 px X-bracing in every panel, the deck (lit
-// top, railing), the sheaves' pedestals, the hoist ropes (down the shaft between the legs, and off the sheaves' tops to the
-// engine), and with strut a raking back-strut of two laced chords. Ramp k = [dark, brace, body, lit, rim] steps; the sheave rims
-// are painted here (2 px, shaded), their spokes turn as anims; a mast between them carries the warning lamp. Returns { anims,
-// lamps }.
-function headframe(g, layer, x, gy, w, h, r, strut, k, sun, rope){
+// deck, a girt every `step` px with a gusset plate at each joint (2 lit px laid over the leg's chords: the rim step on the left
+// leg, lit on the right) and 1 px X-bracing in every panel, the deck (lit top, railing), the sheaves' pedestals, the hoist ropes
+// (down the shaft between the legs, and off the sheaves' tops to the engine), and with strut a raking back-strut of two laced
+// chords. The frame in its layer's rust [dk, br, bd, lt, hi] = [dark, brace, body, lit, rim] (HF_RAMP), the sheave rims (2 px,
+// shaded; their spokes turn as anims), the bearing blocks on their axles and the ropes in its teal [sd, sb, sm, sl, sh], the
+// same steps; a mast between the sheaves carries the warning lamp. Returns { anims, lamps }.
+function headframe(g, layer, x, gy, w, h, r, strut, sun, rope){
   const inset = Math.round(w * 0.28), tl = x + inset, tr = x + w - inset, ty = gy - h, step = Math.max(14, Math.round(h / 12));
-  const [dk, br, bd, lt, hi] = k, legX = (y, side) => Math.round(side < 0 ? x + inset * (gy - y) / h : x + w - inset * (gy - y) / h);
+  const [[dk, br, bd, lt, hi], [sd, sb, sm, sl, sh]] = HF_RAMP[layer], legX = (y, side) => Math.round(side < 0 ? x + inset * (gy - y) / h : x + w - inset * (gy - y) / h);
   let prev = { lx: x, rx: x + w, y: gy };
   for (let y = gy - step; y > ty + 6; y -= step){
     const lx = legX(y, -1), rx = legX(y, 1);
     g.fillStyle = br; line(g, prev.lx + 2, prev.y - 1, rx - 2, y + 1); line(g, prev.rx - 2, prev.y - 1, lx + 2, y + 1);
-    R(g, lx, y, rx - lx + 1, 1, bd); R(g, lx + 3, y + 1, rx - lx - 5, 1, dk); R(g, lx + 1, y - 1, 2, 1, hi); R(g, rx - 2, y - 1, 2, 1, lt);
+    R(g, lx, y, rx - lx + 1, 1, bd); R(g, lx + 3, y + 1, rx - lx - 5, 1, dk);
     prev = { lx, rx, y };
   }
   g.fillStyle = br; line(g, prev.lx + 2, prev.y - 1, tr - 2, ty + 1); line(g, prev.rx - 2, prev.y - 1, tl + 2, ty + 1);
   // legs: three chords each, the left one lit on its outer face, the right one shaded on its outer face
   g.fillStyle = lt; line(g, x, gy, tl, ty); g.fillStyle = bd; line(g, x + 1, gy, tl + 1, ty); g.fillStyle = dk; line(g, x + 2, gy, tl + 2, ty);
   g.fillStyle = bd; line(g, x + w - 2, gy, tr - 2, ty); line(g, x + w - 1, gy, tr - 1, ty); g.fillStyle = dk; line(g, x + w, gy, tr, ty);
+  for (let y = gy - step; y > ty + 6; y -= step){ R(g, legX(y, -1) + 1, y - 1, 2, 1, hi); R(g, legX(y, 1) - 2, y - 1, 2, 1, lt); }   // gussets
   if (sun){ g.fillStyle = SK[5]; line(g, tr + 1, ty + 3, Math.round(tr + (x + w - tr) * 0.45) + 1, Math.round(ty + h * 0.45)); }
   if (strut){
     const sx = strut > 0 ? x + w + Math.round(h * 0.5) : x - Math.round(h * 0.5), ax = strut > 0 ? tr : tl, d = Math.max(7, Math.round(h * 0.04));
@@ -289,14 +295,14 @@ function headframe(g, layer, x, gy, w, h, r, strut, k, sun, rope){
   for (let i = dx0; i < dx0 + dw; i += 6) R(g, i, ty - 11, 1, 7, br); R(g, dx0, ty - 11, dw, 1, bd); R(g, dx0, ty - 7, dw, 1, br);
   const wheels = [{ x: tl + 3, y: wy, r }, { x: tr - 3, y: wy, r }];
   // the cage ropes drop off each sheave's left side: the right one's into the shaft between the legs, the left one's through the deck
-  g.fillStyle = dk; for (const wl of wheels) line(g, wl.x - r + 1, wl.y + 2, wl.x - r + 1, wl.x - r + 1 > tl + 2 ? gy - Math.round(h * 0.12) : ty - 4);
-  if (rope) for (const wl of wheels){ g.fillStyle = dk; line(g, wl.x + Math.round(r * 0.55), wl.y - Math.round(r * 0.83), rope[0], rope[1]); }
-  for (const wl of wheels){ rim(g, wl.x, wl.y, wl.r, shade3(hi, lt, bd)); rim(g, wl.x, wl.y, wl.r - 1, shade3(lt, bd, dk)); rim(g, wl.x, wl.y, wl.r - 4, shade3(bd, br, dk));
-    const pw = Math.max(4, Math.round(r * 0.3));                                  // the bearing trestle: two raking legs, a brace
+  g.fillStyle = sd; for (const wl of wheels) line(g, wl.x - r + 1, wl.y + 2, wl.x - r + 1, wl.x - r + 1 > tl + 2 ? gy - Math.round(h * 0.12) : ty - 4);
+  if (rope) for (const wl of wheels) line(g, wl.x + Math.round(r * 0.55), wl.y - Math.round(r * 0.83), rope[0], rope[1]);
+  for (const wl of wheels){ rim(g, wl.x, wl.y, wl.r, shade3(sh, sl, sm)); rim(g, wl.x, wl.y, wl.r - 1, shade3(sl, sm, sd)); rim(g, wl.x, wl.y, wl.r - 4, shade3(sm, sb, sd));
+    const pw = Math.max(4, Math.round(r * 0.3));                                  // the bearing trestle: two raking legs, a brace; the block
     g.fillStyle = lt; line(g, wl.x - pw, ty - 5, wl.x - 1, wl.y + 3); g.fillStyle = bd; line(g, wl.x + pw, ty - 5, wl.x + 1, wl.y + 3);
-    R(g, wl.x - Math.round(pw / 2), Math.round((ty - 5 + wl.y) / 2) + 2, pw + 1, 1, br); R(g, wl.x - 2, wl.y + 2, 5, 3, bd); R(g, wl.x - 2, wl.y + 2, 5, 1, lt); }
+    R(g, wl.x - Math.round(pw / 2), Math.round((ty - 5 + wl.y) / 2) + 2, pw + 1, 1, br); R(g, wl.x - 2, wl.y + 2, 5, 3, sm); R(g, wl.x - 2, wl.y + 2, 5, 1, sl); }
   const mx = Math.round((tl + tr) / 2), my = wy - r - 6; R(g, mx, my, 1, ty - 11 - my, br); R(g, mx - 1, ty - 13, 3, 2, bd);
-  const strip = spokeStrip(r, k);
+  const strip = spokeStrip(r, HF_RAMP[layer][1]);
   return { anims: wheels.map((wl, i) => ({ x: wl.x - r, y: wl.y - r, strip: strip.c, n: strip.n, spin: SPIN[layer] * (i & 1 ? -1 : 1) })), lamps: [{ x: mx, y: my - 1 }] };
 }
 const SPIN = { midfar: 0.04, mid: 0.05 };
@@ -313,10 +319,10 @@ function spokeStrip(r, k){
 }
 // opt.headframe's sprite or the painted lattice, for HEADFRAMES entry hf on layer canvas g -> { anims, lamps } either brings
 let HFSPR = null;
-function placeHeadframe(g, hf, k){
+function placeHeadframe(g, hf){
   const [layer, x, gy, w, h, r, strut, sun, rope] = hf, spr = HFSPR && HFSPR({ layer, x, gy, w, h, r, strut, sun, rope });
   if (spr){ g.drawImage(spr.img, spr.x, spr.y); return { anims: spr.anims || [], lamps: spr.lamps || [] }; }
-  return headframe(g, layer, x, gy, w, h, r, strut, k, sun, rope);
+  return headframe(g, layer, x, gy, w, h, r, strut, sun, rope);
 }
 // Mid-scale brick (SCALE.mid: 8 x 3 bricks, 1 px mortar, 4 px courses, running bond) in the silhouette steps (body mbrick[1],
 // mortar mbrick[0]) as a pattern anchored to the layer; from 2 rows over the fog's highest edge down the wall is flat body: the
@@ -586,7 +592,7 @@ function buildMidFar(){
     slits(g, x + 9, hz - 60, x + w - 6, hz - 48, 15, 12, 9, 5, 0.6, LA[1], DU[1], x);
     R(g, x, hz - 39, w, 1, DU[1]); R(g, x, hz - 38, w, 1, DU[3]);
   }
-  for (const hf of HEADFRAMES) if (hf[0] === 'midfar'){ const p = placeHeadframe(g, hf, [DU[1], DU[2], DU[3], DU[4], DU[5]]); anims.push(...p.anims); lamps.push(...p.lamps); }
+  for (const hf of HEADFRAMES) if (hf[0] === 'midfar'){ const p = placeHeadframe(g, hf); anims.push(...p.anims); lamps.push(...p.lamps); }
   { const x = 1851; R(g, x, hz - 225, 12, 225, DU[2]); R(g, x, hz - 225, 2, 225, DU[3]); R(g, x + 11, hz - 225, 1, 225, DU[1]); R(g, x - 1, hz - 228, 14, 4, DU[3]); R(g, x - 1, hz - 228, 14, 1, DU[4]);
     for (let y = hz - 200; y < hz - 20; y += 45) R(g, x, y, 12, 2, DU[1]);
     steam.push({ x: x + 6, y: hz - 230, rate: 0.15, tone: [SM[2], SM[3], SM[4]], grow: 0.075 }); lamps.push({ x: x + 5, y: hz - 234 }); }
@@ -605,10 +611,10 @@ function buildMidFar(){
 // the cable-car rope (309). lw = 5100: wider than any camera sees (0.6 x 6720 + 960), so the layer never wraps.
 function buildMid(){
   const lw = 5100, hz = 594, [c, g] = mk(lw, LH, true), rr = rng(55);
-  const anims = [], smoke = [], lamps = [], stK = [ST[1], ST[2], ST[3], ST[5], ST[6]];
+  const anims = [], smoke = [], lamps = [];
   const coal = [SM[2], SM[3], SM[4]];
   // A: headframe with its raking strut, the winding-engine house and its stack
-  const hfA = placeHeadframe(g, HEADFRAMES[3], stK); anims.push(...hfA.anims); lamps.push(...hfA.lamps);
+  const hfA = placeHeadframe(g, HEADFRAMES[3]); anims.push(...hfA.anims); lamps.push(...hfA.lamps);
   { const x = 711, w = 174, eave = hz - 186;
     brick(g, x, eave, w, hz - eave); R(g, x, eave, 1, hz - eave, MB[3]); R(g, x + 1, eave, 2, hz - eave, MB[2]); R(g, x + w - 1, eave, 1, hz - eave, MB[0]);
     g.fillStyle = SM[3]; poly(g, [x - 6, eave, x + w + 6, eave, x + w / 2, eave - 45]); g.fillStyle = SM[4]; poly(g, [x - 6, eave, x + w / 2, eave - 45, x + w / 2, eave - 39, x + 6, eave]);
@@ -654,7 +660,7 @@ function buildMid(){
   // a hopper and chute below; along the box a band of glazing lit by the night shift, evenly: dim amber with warm-dark mullions
   // every 30 px, the hall's lamps and the lit floor under them; no dark pane: the hero's backdrop on the belt. Its vent stack, the
   // shaft headframe east of it and the conveyor bridge between them.
-  const hfD = placeHeadframe(g, HEADFRAMES[4], stK); anims.push(...hfD.anims); lamps.push(...hfD.lamps);
+  const hfD = placeHeadframe(g, HEADFRAMES[4]); anims.push(...hfD.anims); lamps.push(...hfD.lamps);
   { const x = 3270, w = 360, top = 225, bot = 354;
     for (const lx of [x + 9, x + 126, x + 240, x + w - 12]){ R(g, lx, bot, 3, hz - bot, DS[3]); R(g, lx, bot, 1, hz - bot, DS[5]); R(g, lx + 2, bot, 1, hz - bot, DS[1]); }   // the frame
     g.fillStyle = DS[2];

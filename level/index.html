@@ -11,7 +11,9 @@
    past 1240 px for a big integer scale, and .bleed when one more integer step fits the window's whole width (1920 x 1080 at x2):
    the stage then spans it edge to edge, without gutters or border; in full screen (#fs) the stage alone fills the screen, the
    canvas centred on black. On touch screens the pad sits inside the stage: under the canvas in portrait, over its lower corners
-   in landscape, so the canvas and the controls are always on screen together. */
+   in landscape, so the canvas and the controls are always on screen together; in landscape each group is one row (▲ ↻ ▼ ⤒: ▼
+   next to ⤒, so one thumb slides from one onto the other for the catwalk drop), in portrait two (the toggles over the arrows, ▲ ↻
+   over ▼ ⤒: eight buttons do not fit one row of a phone held upright). */
 :root{
   color-scheme: dark;
   --bg:#141014; --panel:#1c161a; --line:#3a2d2e; --fg:#e8dcc0; --muted:#a8957c;
@@ -38,18 +40,19 @@ canvas{display:block;position:relative;margin:0 auto;width:100%;aspect-ratio:960
 canvas.smooth{image-rendering:auto}                   /* a non-integer fit under 2 device px per pixel: soft beats dropped columns */
 .bar{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center}
 .btn{font-family:var(--f-pixel);font-size:12px;background:var(--panel);color:var(--fg);border:1px solid var(--line);padding:8px 12px;cursor:pointer;letter-spacing:.04em}
-.btn:hover{border-color:var(--rust)}
+@media (hover:hover){.btn:hover{border-color:var(--rust)}}   /* (touch keeps :hover on the last tap: a pad toggle looked half on) */
 .btn[aria-pressed="true"]{background:var(--rust);color:#140c08;border-color:var(--rust)}
 .btn:focus-visible,.chk input:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
 .layers{display:flex;flex-wrap:wrap;gap:6px 14px}
 .chk{display:flex;align-items:center;gap:6px;font-size:14px;color:var(--muted);cursor:pointer}
 .chk input{accent-color:var(--rust)}
 .hint{font-family:var(--f-pixel);font-size:10px;color:var(--muted);letter-spacing:.04em}
+@media (min-width:700px){.hint span{white-space:nowrap}}   /* a line wraps between the items, never inside one (a phone: anywhere) */
 .pad{display:none}
-.pad .grp{display:flex;gap:6px}       /* two groups, always on opposite sides: arrows + run under the left thumb, up / down / jump right */
+.pad .grp{display:flex;gap:6px}       /* two groups, always on opposite sides: arrows + toggles under the left thumb, up / roll / down / jump right */
 .pad .btn{font-size:18px;min-width:44px;min-height:44px;padding:8px 10px;user-select:none;-webkit-user-select:none;touch-action:none;
   -webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
-.pad .btn[data-k="run"]{font-size:11px;padding:8px 6px}
+.pad .btn[data-k="run"],.pad .btn[data-k="sneak"]{font-size:11px;padding:8px 6px}
 @media (pointer:coarse){
   /* width 0 + min-width 100 %: the pad never widens the stage, it takes the canvas's width */
   .pad{display:flex;justify-content:space-between;flex-wrap:nowrap;gap:6px;padding:8px;width:0;min-width:100%;background:var(--bg)}
@@ -58,7 +61,12 @@ canvas.smooth{image-rendering:auto}                   /* a non-integer fit under
   .pad{gap:4px;padding:6px}
   .pad .grp{gap:4px}
   .pad .btn{min-width:40px;padding:6px 3px;font-size:16px}
-  .pad .btn[data-k="run"]{font-size:10px;padding:6px 2px}
+  .pad .btn[data-k="run"],.pad .btn[data-k="sneak"]{font-size:10px;padding:6px 2px}
+}
+@media (pointer:coarse) and (orientation:portrait){   /* two rows per group: the toggles and ▲ ↻ on top, the thumbs' ◀ ▶ / ▼ ⤒ below */
+  .pad{align-items:end}
+  .pad .grp{display:grid;grid-template-columns:repeat(2,auto)}
+  .pad .btn[data-k="run"],.pad .btn[data-k="sneak"],.pad .btn[data-k="up"],.pad .btn[data-k="roll"]{order:-1}
 }
 @media (pointer:coarse) and (orientation:landscape){
   .pad{position:absolute;left:0;right:0;bottom:0;width:auto;min-width:0;background:none;pointer-events:none}
@@ -107,11 +115,13 @@ ol.beats li{display:grid;grid-template-columns:40px minmax(0,1fr);gap:12px}
       <div class="grp">
         <button class="btn" data-k="left" aria-label="W lewo (przytrzymaj 0,6 s: bieg)">◀</button>
         <button class="btn" data-k="right" aria-label="W prawo (przytrzymaj 0,6 s: bieg)">▶</button>
-        <button class="btn" data-k="run" aria-pressed="false" aria-label="Bieg (przełącznik)">BIEG</button>
+        <button class="btn" data-k="run" aria-pressed="false" aria-label="Bieg (przełącznik; z przysiadem: niski bieg)">BIEG</button>
+        <button class="btn" data-k="sneak" aria-pressed="false" aria-label="Skradanie (przełącznik)">SKRAD</button>
       </div>
       <div class="grp">
-        <button class="btn" data-k="down" aria-label="W dół">▼</button>
         <button class="btn" data-k="up" aria-label="W górę">▲</button>
+        <button class="btn" data-k="roll" aria-label="Przewrót">↻</button>
+        <button class="btn" data-k="down" aria-label="Przysiad (przytrzymaj); na drabinie w dół; przesunięty na ⤒: zeskok z kładki">▼</button>
         <button class="btn" data-k="jump" aria-label="Skok">⤒</button>
       </div>
     </div>
@@ -124,7 +134,7 @@ ol.beats li{display:grid;grid-template-columns:40px minmax(0,1fr);gap:12px}
     <div class="layers" id="layers"></div>
   </div>
   <div class="bar">
-    <span class="hint">← → / A D: ruch · przytrzymaj 0,6 s lub Shift: bieg (na dotyku też przełącznik BIEG) · Spacja / W: skok (krótko = niżej) · ↑ ↓ na drabinie · ↓ na kładce: zeskok</span>
+    <span class="hint"><span>← → / A D: ruch</span> · <span>przytrzymaj 0,6 s lub Shift: bieg</span> · <span>Spacja / W / Z: skok (krótko = niżej)</span> · <span>↓ / S: przysiad, z ← →: chód w kucki, z Shiftem: niski bieg</span> · <span>C: skradanie</span> · <span>X / K: przewrót</span> · <span>↑ ↓ na drabinie</span> · <span>↓ + skok na kładce: zeskok</span> · <span>na dotyku BIEG i SKRAD to przełączniki</span> · <span>↻ tylko stuknięciem (nie kciukiem zsuniętym z ▼)</span></span>
   </div>
 
   <div class="sheet">
@@ -167,12 +177,13 @@ ol.beats li{display:grid;grid-template-columns:40px minmax(0,1fr);gap:12px}
             <tr><td>Zasięg skoku</td><td class="num">≈2,8 / 4,2</td><td>Kafla przerwy z chodu / z biegu. Rów 2 kafli przeskakuje się nawet z chodu; szyb (5 kafli) i przepaść kolejki (8) są szersze niż każdy skok, także z coyote time.</td></tr>
             <tr><td>Tolerancje</td><td class="num">0,08 / 0,12 s</td><td>Coyote time po zejściu z krawędzi i bufor skoku przed lądowaniem.</td></tr>
             <tr><td>Prześwit</td><td class="num">≥ 3 kafle</td><td>Nad każdą powierzchnią, na której da się stanąć (sprawdzane w teście).</td></tr>
-            <tr><td>Bez pułapek</td><td class="num">0</td><td>Z każdego miejsca, do którego bohater może dojść, da się jeszcze wygrać albo zginąć: test stawia go na każdym kaflu, po którym można chodzić, i sprawdza chód, bieg, skoki, drabiny i zeskoki prawdziwym sterowaniem.</td></tr>
+            <tr><td>Bez pułapek</td><td class="num">0</td><td>Z każdego miejsca, do którego bohater może dojść, da się jeszcze wygrać albo zginąć: test stawia go na każdym kaflu, po którym można chodzić, i sprawdza prawdziwym sterowaniem chód, bieg, skoki, drabiny i zeskoki oraz ruchy: chód w kucki, niski bieg i skok z niego, skradanie, przewroty z chodu, z biegu i z przysiadu, skok tuż po przewrocie.</td></tr>
             <tr><td>Kamera</td><td class="num">20 × 11,25</td><td>Kadr pokazuje 20 × 11,25 kafla z 160 × 14, więc kamera idzie za bohaterem w obu osiach. W pionie stoi, dopóki stopy są w pasie 55–72 % wysokości kadru. Gdy bohater dotrze na powierzchnię (wejdzie po drabinie, wyląduje co najmniej 1,5 kafla wyżej lub niżej, odrodzi się), kamera układa się w jej widoku, tym samym bez względu na drogę: widok ulicy (najniższy), jeśli stopy są w nim w pasie, a jeśli nie, stopy w połowie pasa (dachy, kładka, taśmociąg). Zejście albo podskok o kafel (stopnie hałdy, skrzynie, hunt) zostawia martwą strefę, więc stopień przesuwa kamerę najwyżej o kafel (dlatego szczyt hałdy po starcie i po powrocie z ulicy ma inny widok), a podskok w miejscu niczego nie zmienia: dojazd do widoku i zerknięcie w dół trwają dalej. Przodem do uskoku na skraju dachu kamera zerka w dół, aż widać miejsce lądowania, i patrzy tam jeszcze 0,4 s po odwróceniu się. Na drabinie patrzy 2 kafle do przodu, w skoku stoi, a w spadku celuje w widok miejsca lądowania, także w górę, na wyższą podłogę. W dół nigdy nie jedzie szybciej, niż bohater spada, więc nie podskakuje on na ekranie; gdy za chwilę złapie go drabina, kamera stoi. Poza drabiną i spadkiem przesuwa się najwyżej o 2 px na klatkę: dojazd do widoku powierzchni, zerknięcie w dół i wejście w strefę E to spokojne panoramy. W E pokazuje całą wieżę szybową (ulica najniżej na 85 % wysokości kadru) i trzyma ją w kadrze także w klatce, dopóki nie musi zjechać za bohaterem w szyb. Zawsze trzyma całą klatkę bohatera w kadrze, także szczyt pełnego skoku z najwyższego dachu; test to sprawdza w każdej klatce.</td></tr>
             <tr><td>Platformy</td><td class="num">108 px/s</td><td>Skok z jadącego kubła lub hunta zachowuje ich prędkość aż do lądowania, więc skok w miejscu ląduje z powrotem w kuble. W kuble głowa uderza w poprzeczkę jarzma, pod taśmociągiem w taśmę.</td></tr>
-            <tr><td>Animacje</td><td class="num">8 stanów</td><td>idle, walk, run, jump_up, jump_apex, fall, land, climb, każdy z własnym klipem. W skoku klatkę wybiera prędkość pionowa (wybicie, szczyt, spadek), więc krótki skok wchodzi w szczyt wcześniej; zejście z krawędzi, zeskok z kładki i puszczenie drabiny to od razu spadek. Lądowanie tylko prosto z lotu: ruch je przerywa i nie wraca. Zawrócenie w miejscu nie miga klatką idle. Na drabinie klatki idą za przebytą drogą, dłonie trzymają szczeble.</td></tr>
+            <tr><td>Ruchy taktyczne</td><td class="num">40 / 54 / 207 px/s</td><td>Ruchy z mocapu bohatera (jak w MGS): ↓ / S przysiad, z ← → chód w kucki (40 px/s), z Shiftem niski bieg (207 px/s, wolniejszy od biegu); C skradanie w półprzysiadzie (54 px/s), a w miejscu czujna postawa z gardą; X / K przewrót w przód (≈ 2,6 kafla w 1,3 s, ciało przesuwa się dokładnie o ruch z klipu). Przewrót potrzebuje miejsca: gdy ściana (także koniec planszy) zatrzymałaby go, zanim przebędzie jedną trzecią swojej drogi, X nic nie robi. Zaczyna się od klatki pasującej do postawy: z miejsca od stania, z przysiadu od przysiadu, w ruchu od razu od pochylenia (z biegu głębiej niż z chodu); stopy zostają tam, gdzie stały, a bohater nie hamuje: klip przyspiesza (najwyżej 3×), aż jego własny ruch dogoni prędkość, z jaką bohater wszedł w przewrót. Do punktu nieodwołalności (0,95 s, gdy po przewrocie przez plecy ma już nogi pod sobą) nie reaguje na klawisze: stoczy się z krawędzi i spada dalej w przewrocie (najwyżej z prędkością biegu, bez skoku), zatrzyma się przed ścianą tak, że żadna jego klatka jej nie zasłania, i zostaje tam do końca przewrotu; nigdy nie cofa się wbrew kierunkowi przewrotu. Strzałka w przeciwną stronę wciśnięta z X obraca go i przewraca w drugą stronę, ale nie w pełnym biegu (wtedy toczy się dalej przed siebie). Potem skok kończy przewrót od razu, X też (nowym przewrotem), jeśli jest na niego miejsce, a trzymany kierunek, ↓ lub ↑ dopiero wtedy, gdy wstając dojdzie do postawy, w którą przechodzi (sylwetka zmienia wysokość najwyżej o 12 px, bez przeskoku z kucnięcia do wyprostu); bez klawisza bohater zostaje 2 s w gardzie. X wciśnięte do 0,12 s przed lądowaniem daje przewrót zaraz po nim. Przysiad i wstawanie dzieją się w miejscu (0,32 s, stopy stoją): ↓ ze strzałką naraz najpierw go przykuca, potem rusza w kucki, a puszczone naraz zatrzymują go i podnoszą; w biegu i w chodzie zmienia postawę w ruchu, przez klatkę niskiego biegu. Chód w kucki i skradanie są ok. 1,25× szybsze niż w mocapie, a ich klatki (i niskiego biegu) idą z prędkością ruchu, więc stopa na ziemi nie ślizga się. Na dotyku kciuk przesunięty z ▼ na ⤒ trzyma oba (zeskok z kładki jednym kciukiem), a ↻ reaguje tylko na dotknięcie, nie na przesunięty kciuk; kciuk zsuwający się z ⤒ nie łapie ▼. Skok z przysiadu to zwykły skok z prędkości, którą bohater miał: żaden ruch nie skacze dalej niż bieg, więc szyb i przepaść zostają nie do przeskoczenia. Hitbox jest ten sam w każdym ruchu: nad każdą powierzchnią są 3 wolne kafle, więc niższy hitbox niczego by nie otworzył, a tak bohater zawsze może wstać.</td></tr>
+            <tr><td>Animacje</td><td class="num">18 klipów</td><td>idle, walk, run, jump_up, jump_apex, fall, land, climb oraz ruchy: crouch_in, crouch, crouch_out, crouchwalk, sneak, lowrun, roll, alert, alert_in, alert_out, każdy stan z własnym klipem. Przysiad i garda mają krótkie przejścia z postawy i z powrotem (4 klatki: ręce unoszą się i opadają, nie skaczą), także przy ruszaniu w kucki i zatrzymaniu się z niego; odwrócone w połowie wchodzą w drugie w lustrzanej klatce. W ruchu przejściem między przysiadem a wyprostem jest niski bieg (od klatki ze stopą na ziemi), więc żadna zmiana postawy nie zmienia wysokości sylwetki o więcej niż 12 px. W skoku klatkę wybiera prędkość pionowa (wybicie, szczyt, spadek), więc krótki skok wchodzi w szczyt wcześniej; zejście z krawędzi, zeskok z kładki i puszczenie drabiny to od razu spadek. Lądowanie tylko prosto z lotu: ruch je przerywa i nie wraca. Zawrócenie w miejscu nie miga klatką idle. Na drabinie klatki idą za przebytą drogą, dłonie trzymają szczeble.</td></tr>
             <tr><td>Zejście z progu</td><td class="num">&lt; 61,5 px</td><td>Zejście z krawędzi bez skoku zostaje w cyklu chodu przez 0,1 s i dopóki spadek jest krótszy niż 61,5 px (kafel, hunt ma 60 px): stopnie hałdy wyglądają jak schody, nie jak trzy upadki.</td></tr>
-            <tr><td>Drabiny</td><td class="num">120 px/s</td><td>↑ łapie drabinę, ↓ schodzi ze szczytu. Na górze bohater od razu staje na krawędzi (bez podskoku), u stóp drabiny ← → odchodzi, Spacja zeskakuje w bok.</td></tr>
+            <tr><td>Drabiny</td><td class="num">120 px/s</td><td>↑ łapie drabinę, ↓ schodzi ze szczytu (ma pierwszeństwo przed przysiadem: także gdy bohater wejdzie na szczyt chodem w kucki). Na górze bohater od razu staje na krawędzi (bez podskoku), u stóp drabiny ← → odchodzi, Spacja zeskakuje w bok.</td></tr>
             <tr><td>Kontrast</td><td class="num">≥ 1,6 / 1,4</td><td>Bohater jest prawie czarny (średnia luminancja ≈ 0,03). Tło tuż za nim musi być jaśniejsze: test mierzy kontrast sylwetki z pierścieniem tła szerokim na 9 px w 32 miejscach (przy widoku spoczynkowym kamery, a pierwszy dach i kładka także przy najwyższym widoku, na jaki pozwala martwa strefa) i na 5 checkpointach; cel 1,6, nigdzie poniżej 1,4. Niebo zachowuje gradient zachodu: pas nad horyzontem co najmniej 1,4× jaśniejszy niż góra nieba.</td></tr>
           </tbody>
         </table></div>
@@ -190,7 +201,7 @@ ol.beats li{display:grid;grid-template-columns:40px minmax(0,1fr);gap:12px}
           <li><kbd>B</kbd><span>Cegła familoka z oknami, pełna kolizja</span></li>
           <li><kbd>S</kbd><span>Stal nitowana, pełna kolizja</span></li>
           <li><kbd>C</kbd><span>Skrzynia, pełna kolizja</span></li>
-          <li><kbd>P</kbd><span>Kładka kratowa, tylko od góry, ↓ zeskakuje</span></li>
+          <li><kbd>P</kbd><span>Kładka kratowa, tylko od góry, ↓ + skok zeskakuje (sam ↓ to przysiad)</span></li>
           <li><kbd>T</kbd><span>Taśmociąg, tylko od góry, pcha 126 px/s (2,6 kafla/s), bez zeskoku; od spodu głowa się od niego odbija, z boku jest ścianą</span></li>
           <li><kbd>L</kbd><span>Drabina, szczyt działa jak kładka, ↓ schodzi</span></li>
         </ul>
