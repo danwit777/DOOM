@@ -157,6 +157,9 @@ const RAMP_HD = [
   ['#25282a','#3d4143','#62645f','#908e87','#b3b1a9'],   // beard
   ['#10110e','#1f201b','#35372d','#4f5245','#636658']    // trousers: cooler and one step lighter than the coat
 ];
+// HD ramp of the head's hair (CHAR_FS hairColour, the flyaways): the owner's reference - dusty, greasy grey, warm grey-brown in the
+// darks (the gaps and roots), mid grey, light grey only in thin highlights; darkest .. lightest, indexed by the strand texture's tone
+const HAIR_HD = ['#181715', '#211f1c', '#2b2925', '#36342f', '#43403a', '#524e45', '#645f53', '#787162', '#8b8370'];
 const NCLS = RAMP.length;
 // Pauldron weathering: where the procedural masks in CHAR_FS put rust, grime or a paint chip, these ramps replace the paint's,
 // indexed by the same light band (deep, dark, mid, light, rim)
@@ -199,6 +202,9 @@ varying vec2 vUv; varying vec3 vN; varying vec3 vP; varying vec3 vNs; varying ve
 #ifdef SMOOTHN
 attribute vec3 sNormal; attribute vec2 aCav; attribute float aRim;
 #endif
+#ifdef HAIR_TUFT
+uniform float uHairPxM;   // (the hair's tufts, buildHairCards: those with uv.x 1 drawn from the strand texture's switch up only)
+#endif
 void main(){
   vUv = uv; vP = position; vCav = vec2(0.0); vNb = normal; vRim = 1.0;   // vNb: bind-pose normal (smoothed when there is one), like vP stable under skinning
   #ifdef SMOOTHN
@@ -219,6 +225,9 @@ void main(){
   vN = normalize(normalMatrix * objectNormal); vNs = normalize(normalMatrix * sn);
   vec4 mv = modelViewMatrix * vec4(transformed, 1.0); vV = mv.xyz;
   gl_Position = projectionMatrix * mv;
+  #ifdef HAIR_TUFT
+    if (uv.x > 0.5 && uHairPxM > 0.0125) gl_Position = vec4(0.0, 0.0, 2.0, 1.0);   // below ~150 px: outside the clip volume, not drawn
+  #endif
 }`;
 const CHAR_FS = `
 uniform sampler2D map; uniform float uUseMap; uniform sampler2D uMat; uniform float uUseMat; uniform vec3 uColor; uniform float uFlat;
@@ -284,6 +293,124 @@ float legD(vec3 p){
   vec3 q = vec3(abs(p.x), p.y, p.z);
   float d = min(segD(q, vec3(0.125, 0.957, 0.006), vec3(0.174, 0.578, 0.011)), segD(q, vec3(0.174, 0.578, 0.011), vec3(0.21, 0.155, -0.01)));
   return d - 0.05 * smoothstep(0.02, 0.09, p.z);
+}
+// ---- hair (the owner's corrected head reference): the base's swept-back style, but unkempt - not a combed helmet. A strand texture
+// anchored to the bind pose in long streaks along the sweep, dark and dusty / greasy: dark grey-brown roots, gaps and under-layer take
+// a fifth to a quarter of the hair (as in the reference's side view), mid grey the lit planes, light grey only in thin strands and
+// highlights on the lit side. HD tones come from the hair's own warm grey-brown ramp (HAIR_HD), posterised. Layers, every line placed by its distance
+// in output pixels (the coordinates' screen derivatives), so it stays exactly 1 px wide at any size and steps to a coarser set where
+// its spacing would drop under 3 px (grazing angles, smaller sizes) instead of speckling or shimmering as the head moves:
+//  - the light band (on the mostly smoothed normal: one broad lit side, one shaded); the under-layer (the hair's lower part over and
+//    behind the ears and down the back of the head) two steps darker, the nape in the collar's shade (and the locks' hanging ends)
+//    darker still;
+//  - locks (~1.7 cm across) a step and a half down, none or up, each a long run of one tone along the sweep (~half the head) before
+//    it changes; a dark 1 px gap along half their edges where they are wide enough (~600 px);
+//  - single 1 px strands, dark grey-brown or light grey (a mid one in the shadow; the highlights on light locks on the lit side), each
+//    a long run of one tone, on the finest set (48, 24, 12 or 6 per radian) whose lines stay 3 px apart - 3 - 6 px apart at 600 px,
+//    at 300 px one per lock (a 3 - 4 px streak with its line); a strand keeps its tone in every set (keyed by its place on the finest
+//    one), so nothing jumps where the sets meet. The tones, measured on the 600 px side view: HAIR_HD 0 - 1 a fifth of the hair
+//    (gaps, roots, the under-layer), 2 - 3 27 %, mid grey 4 - 5 a third (the lit fill), light grey 6 - 8 a fifth (strands,
+//    highlights) - the reference's side view: 24 / 27 / 18 / 31 %.
+// Below the strand texture's switch (~155 - 230 px) the scan's own tone clusters (with the base's comb lines while they last: a couple
+// of light streaks keep the sweep at 130 - 200 px) on HAIR_HD 2 / 4 / 7 - the sprite palette's three hair tones, made warm the same
+// way (hairColour): one hue family and about one value (mean luminance within ~8 of the 300 px strand texture's) from 64 px up. The
+// scan's own comb (its painted lines, the normal map's sculpted grooves and their cavity) is left out above that.
+// Coordinates, from the bind position - the scan's hair and the hair cards alike, so a card continues the strands of the hair it grows
+// from: across = th, the angle round a front-back axis 6 cm under the head's centre, taken on the direction from the centre (the
+// scan's bumps - the hair's bulge over the ears - never fold the strands into whorls): the strands fan out from the brow over the
+// crown, run back over the temples in long flat arcs and gather down the back toward the nape; along = ph, the arc length (10 cm
+// units) round a left-right axis 8 cm under the centre, + toward the brow (that axis lies under all the hair: ph never wraps on it).
+float hairH(vec2 p){ vec3 q = fract(p.xyx * vec3(0.1031, 0.1030, 0.0973)); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
+float hairN(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hairH(i), hairH(i + vec2(1.0, 0.0)), f.x), mix(hairH(i + vec2(0.0, 1.0)), hairH(i + vec2(1.0, 1.0)), f.x), f.y); }
+// the head's hair: the hair cards (the only hair-class surfaces without the scan's class map), and the scan's hair on the head - not
+// the coat's stand-up collar (the scan textures its top band like hair: round the back and the sides it rises to y 1.65 at 11 - 14 cm
+// from the neck's axis, its lower edge tapering in to 9.4 - 10.6 cm at y 1.60 - 1.61; the head's hair lies within 10 cm of the axis
+// at that height, and closer below 1.635), nor the brows (light texels in the face's box, as in main: left to the face)
+bool hairOnHead(vec3 p){
+  if (uUseMat < 0.5) return true;
+  if (p.z > 0.07 && p.y < 1.735) return false;
+  return p.y > 1.66 || length(p.xz - vec2(0.0, -0.01)) < 0.106 - 0.5 * max(0.0, 1.635 - p.y);
+}
+// across the strands (th, above): the axis lies inside the head (the direction's y + 0.55), so every plane through it cuts the scalp and
+// th never peaks on it; its wrap (th = +-pi) lies down the middle of the nape below the axis (the differences below are taken across it)
+float hairAcross(vec3 p){ vec3 d = normalize(p - vec3(0.0, 1.70, -0.01)); return atan(d.x, d.y + 0.55); }
+float hairWrap(float a){ return abs(mod(a + 3.14159265, 6.2831853) - 3.14159265); }
+// the strand coordinates: x across, y along, z: across per output pixel
+vec3 hairCoord(vec3 p, vec3 dPx, vec3 dPy){
+  float th = hairAcross(p); vec2 q = vec2(p.z + 0.01, p.y - 1.62);
+  return vec3(th, atan(q.x, q.y) * length(q) * 10.0, hairWrap(hairAcross(p + dPx) - th) + hairWrap(hairAcross(p + dPy) - th) + 1e-5);
+}
+// distance in output pixels from the middle of the period that S (in periods) lies in, P: the period in pixels
+float hairPx(float S, float P){ return abs(fract(S) - 0.5) * P; }
+float gHairV = 0.0;   // the head's hair: its tone on the HD ramp (hairStrandT -> hairColour)
+// t: the hair's tone before the scan's strands (light band + material offsets), tl: the same on the mostly smoothed normal and without
+// the normal map (HD: the scan's lumpy hair surface and its sculpted comb grooves would break the light band into blotches - camo -
+// under the streaks; smoothed, it leaves one broad lit side and one shaded), lum: the texture's luminance there. Returns the sprite
+// tone (the ramp's), sets gHairV
+float hairStrandT(float t, float tl, vec3 p, vec3 dPx, vec3 dPy, float lum, float hd){
+  float hs = clamp((0.0125 - uPxM) / 0.004, 0.0, 1.0);          // strand texture: from ~155 px, full from ~230 px
+  float ts = t + (lum - uHair.x) * uHair.y - 0.6 * hd;           // sprite: the base's tone clusters (hairColour makes them warm)
+  // the nape locks (cards below the occiput) in the dark cluster the base's lower back had there: their own light band would break
+  // that one dark shape into speckle at sprite size
+  if (uUseMat < 0.5 && p.y < 1.705) ts = min(ts, 0.45);
+  // mid sizes: those clusters with the base's comb lines (as main's, fading out below ~128 px), on HAIR_HD 2 / 4 / 7
+  float gs = clamp((0.016 - uPxM) / 0.008, 0.0, 1.0), f = fract(atan(p.x, p.y - 1.6) * 5.5 + sin(p.z * 24.0) * 0.3 + sin(p.y * 31.0) * 0.15);
+  float k = min(floor(clamp(ts + gs * (f < 0.2 ? -1.2 : (f > 0.48 && f < 0.66 ? 0.8 : 0.0)), 0.0, 3.0) + 0.5), 2.0);
+  gHairV = k > 1.5 ? 7.0 : 2.0 + 2.0 * k;
+  if (hs <= 0.0) return ts;
+  vec3 c = hairCoord(p, dPx, dPy); float th = c.x, ph = c.y, fth = c.z;
+  float lit = smoothstep(0.5, 1.6, tl);                         // the lit side
+  // the light band: the shadow half HAIR_HD 1 - 3, the lit side 4 - 6
+  float v = 0.6 + 1.75 * (tl + 0.9);
+  // the under-layer (two steps) and the nape (one more)
+  v -= 2.0 * smoothstep(1.78, 1.69, p.y) + 0.8 * smoothstep(1.68, 1.625, p.y);
+  // the sweep, unkempt: a slow wander, the neighbouring locks bending together (it never folds back on itself into swirls)
+  float a = th + (hairN(vec2(th * 2.0, ph)) - 0.5) * 0.14 + 0.012 * sin(ph * 6.0 + th * 8.0);
+  // strands: 1 px lines, each down the middle of its cell, on the finest of the sets (48, 24, 12 or 6 per radian) whose lines stay
+  // 3 px apart or more (denser, the 1 px lines would shimmer as the head moves); locks: groups of 8 strands of the finest set (6 per
+  // radian, ~1.7 cm), so a lock's edges are cell edges of every set and the layers never beat against each other (no moire: at 300 px
+  // a lock is one cell, a 3 - 4 px streak with its line)
+  float N = max(48.0 * exp2(-max(ceil(log2(max(3.0 * 48.0 * fth, 1.0))), 0.0)), 6.0), P = 1.0 / (N * fth);
+  float S = (a + 0.004 * sin(ph * 23.0 + floor(a * 6.0) * 1.7)) * N, si = floor(S);
+  float key = floor((si + 0.5) * 48.0 / N), lk = floor(key / 8.0);   // the cell's strand on the finest set (its tone in every set), its lock
+  // the lock: a step and a half down / none / a step up, each a run of ~2 units along (about half the head)
+  float lh = hairH(vec2(lk + 0.5, floor(ph * 0.5 + hairH(vec2(lk, 1.7)) * 4.0) + 0.5));
+  v += lh < 0.35 ? -1.5 : (lh > 0.62 ? 1.3 : 0.0);
+  // the strand: a run of ~1.8 units of one tone - dark grey-brown (32%), light grey on the lit side (32%; mid in the shadow), or none;
+  // on a light lock on the lit side the light ones are the highlights
+  float h = hairH(vec2(key * 1.37 + 0.3, floor(ph * 0.55 + hairH(vec2(key, 3.1)) * 4.0) + 0.5));
+  if (P > 1.8 && hairPx(S, P) < 0.5){
+    if (h < 0.32) v -= 2.5;
+    else if (h > 0.68) v = lit > 0.4 && lh > 0.62 ? max(v + 1.0, 6.8 + 1.2 * lit) : v + 0.6 + 2.4 * lit;
+  }
+  // a dark 1 px gap along half the locks' edges (each edge decides per run, for both its sides) where the locks are 3.4 px or wider
+  // and the strands 1.5 px or more off their edges
+  float PL = 1.0 / (6.0 * fth), ei = floor(a * 6.0 + 0.5);
+  bool gap = PL > 3.4 && P > 2.9 && hairPx(a * 6.0 + 0.5, PL) < 0.5 && hairH(vec2(ei + 0.25, floor(ph * 1.2 + hairH(vec2(ei, 5.3)) * 3.0) + 3.5)) < 0.5;
+  if (gap) v = min(v, 0.6);
+  gHairV = mix(gHairV, clamp(v, 0.0, 8.0), hs);
+  return ts;
+}
+// the hair's HD ramp, by index
+vec3 hairHD(float k){
+  vec3 c = vec3(0.0);
+  ${HAIR_HD.map((h, i) => `if (k == ${i}.0) c = vec3(${new T.Color(h).toArray().map(v => v.toFixed(4)).join(', ')});`).join('\n  ')}
+  return c;
+}
+// the head's hair colour: at HD its own ramp (HAIR_HD: warm, dusty grey-brown .. light grey), posterised (no blends). The sprite
+// palette below ~100 px in the same hue family: the base's cool teal / neutral grey / light grey clusters on HAIR_HD 2 / 4 / 7 (a
+// darker warm grey; its lightest tone, the lit clusters and the top's rim step, a step down). Each swap is taken on the finished
+// colour (after the rim), one colour for another, so the base's cluster edges stay and no new pixel boundaries appear (no speckle);
+// the collar's hair-class texels (not hairOnHead) keep theirs
+bool hairIs(vec3 a, vec3 b){ return all(lessThan(abs(a - b), vec3(0.004))); }
+vec3 hairColour(vec3 rc){
+  if (gHd < 1.0){
+    if (hairIs(rc, ramp(${CLS.hair}.0, 3.0)) || hairIs(rc, ramp(${CLS.hair}.0, 2.0))) rc = hairHD(7.0);
+    else if (hairIs(rc, ramp(${CLS.hair}.0, 1.0))) rc = hairHD(4.0);
+    else if (hairIs(rc, ramp(${CLS.hair}.0, 0.0))) rc = hairHD(2.0);
+  }
+  return mix(rc, hairHD(floor(gHairV + 0.5)), gHd);
 }
 // ---- pauldron weathering: value noise on the bind pose (anchored to the mesh, so nothing swims while the shoulder moves) ----
 float hash3(vec3 p){ p = fract(p * 0.3183099 + vec3(0.71, 0.113, 0.419)); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
@@ -708,6 +835,235 @@ float coatDetail(vec3 p, vec3 nb, vec3 ns, vec3 px, vec3 py, float hd, float tc0
   }
   return t + o;
 }
+// ---- Face and beard (the head's skin / beard classes): the owner's head references - an old, weathered, hard face ----
+// Drawn on the bind pose (vP), so it rides the head through every pose and never swims. Everything lives on a chart of the face
+// unrolled round the head: s = the arc (at 14 cm) round the vertical axis through the head's middle, from the centre line back over
+// the cheek, the temple and the jaw to the ear (s ~ |x| on the face's front; mirrored - the scars and the seeds are per side), and y.
+// Unlike the flat (|x|, y) chart it gives the head's side planes their own room, so in the side and 3/4 views nothing stretches back
+// toward the ear (a brow, a socket or a wrinkle drawn at one |x| would run along the whole side plane). A crease takes its width from
+// the screen gradient of its distance (the chain rule on the screen derivatives of vP, taken at the top of main()), so it stays a 1 px
+// line at any size and slant; where the chart is squeezed on screen (a grazing view: the far cheek in 3/4, the face's silhouette in
+// profile) the creases and the scar are left off instead of piling up into streaks. Landmarks (bind metres): hairline ~1.75, brows
+// ~1.69 - 1.71, eyes 1.684 (|x| 0.042: the eye mask; its outer corner s ~0.085), nose tip 1.648, mouth ~1.597, chin 1.52; the hair
+// comes down to the temple at s ~0.1 - 0.13 and in front of the ear to ~1.68, the ear from s ~0.17; the stand-up collar |x| > 0.1.
+//  - faceClass() (with the class refinements, after the eye mask): the beard is a chart region, not the scan's texels - the moustache
+//    under the nose, the cheeks below a line from the moustache's corner up to the sideburn, the sideburn in front of the ear (it meets
+//    the hair's texels there), the jaw and the chin down to a rounded lower edge that rises along the jaw line (the throat, the neck and
+//    the collar keep their 9a8c06e classes); the scan's skin and dark texels inside it join it. HD: the heavy brows (dark grey hair,
+//    ragged edges) and from ~150 px the mouth (a dark line, its corners turned down), from ~230 px the lower lip under it, are their
+//    own parts.
+//  - faceTone() on the light band. Sprite size: the beard two flat greys (the owner's sprites: greyL toward the light, grey on the
+//    shadow side - never the ramp's dark teal steps); at 96 px one shadow row over each eye (broken over the nose bridge) and one
+//    darker grey row for the mouth under the moustache - nothing finer. HD: the sockets - deep shadow right under the brows' inner
+//    half and in the inner corners, elsewhere a shadowed upper lid with a dark lid line over the eye bar and a thin lower lid under it
+//    (an eye in a socket, not a visor); from ~230 px forehead wrinkles (each broken in two, stopped short of the scar), the frown
+//    lines between the brows, the under-eye bags, the nasolabial folds, a cheek crease, the cheekbone plane over a sunken cheek and a
+//    thin scar across the forehead and the right brow (a pale line with a dark edge on its far side from the light); the beard
+//    (faceBeardTone) charcoal to mid grey like the references' (about the hair's value, half the lit skin's), darker at the sides and
+//    under the jaw, the chin and the moustache lighter, the moustache outlined as its own drooping mass, in short strokes. A crease is
+//    a dark 1 px core a step down with (from ~430 px on the forehead) a lip half a step up toward the key light. The fine ones (a third
+//    wrinkle, crow's feet) only from ~430 px.
+//  - faceColor(): HD - the head's skin turned to the references' weathered tan (warm brown in the shadows, never grey-brown), the beard
+//    to a warm, dusty grey (luminance kept, so it stays posterised on the ramps' steps).
+float gFaceR = 0.0;   // this fragment's face part: 0 none, 1 head skin, 2 the face's skin, 3 beard, 4 mouth, 5 lower lip, 6 brow
+float faceHash(vec2 p){ vec3 q = fract(vec3(p.xyx) * 0.1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
+// signed distance (metres, + toward the left-hand normal of a -> b) to the segment a - b bowed by 'bend' at its middle, in a 2D chart:
+// (distance, position along 0 .. 1, its gradient in the chart)
+vec4 faceArc(vec2 q, vec2 a, vec2 b, float bend){
+  vec2 e = b - a, n = normalize(vec2(-e.y, e.x)); float ee = dot(e, e), t = dot(q - a, e) / ee;
+  return vec4(dot(q - a, n) - bend * 4.0 * t * (1.0 - t), t, n - bend * 4.0 * (1.0 - 2.0 * t) * e / ee);
+}
+// a line on the zero set of d (gd: its gradient in the bind pose, px / py: the screen derivatives of vP, w: core width in px):
+// x = the core, y = the pixel beside it toward the key light (screen space, upper left), z = the one beside it away from the light.
+// The L1 screen gradient keeps a slanted line 8-connected and 1 px thick
+vec3 faceLine(float d, vec3 gd, vec3 px, vec3 py, float w){
+  vec2 g = vec2(dot(gd, px), dot(gd, py));
+  float s = d / max(abs(g.x) + abs(g.y), 1e-7) * (dot(g, uL.xy) < 0.0 ? -1.0 : 1.0), hw = 0.5 * w;
+  return vec3(step(abs(s), hw), step(hw, s) * step(s, hw + 1.0), step(s, -hw) * step(-hw - 1.0, s));
+}
+// the chart's s at p and its gradient in the bind pose: (s, ds/dx, ds/dz)
+vec3 faceS(vec3 p){
+  float ax = abs(p.x), r2 = max(ax * ax + p.z * p.z, 1e-6);
+  return vec3(0.14 * atan(ax, p.z), 0.14 * p.z / r2 * sign(p.x), -0.14 * ax / r2);
+}
+// a chart gradient (d/ds, d/dy) taken back to the bind pose
+vec3 faceGrad(vec2 g, vec3 S){ return vec3(g.x * S.y, g.y, g.x * S.z); }
+// how squeezed the chart is on screen: its area per pixel against a face-on view (1 face-on, ~1 / cos of the view angle)
+float faceSquash(vec3 S, vec3 px, vec3 py){
+  vec3 gs = vec3(S.y, 0.0, S.z);
+  return abs(dot(gs, px) * py.y - dot(gs, py) * px.y) / max(uPxM * uPxM * length(gs), 1e-12);
+}
+// a crease on the chart, given by faceArc
+vec3 faceArcLine(vec4 a, vec3 S, vec3 px, vec3 py, float on){
+  return on * step(0.0, a.y) * step(a.y, 1.0) * faceLine(a.x, faceGrad(a.zw, S), px, py, 1.0);
+}
+float faceMouthY(float ax){ return 1.5965 - 0.0055 * (ax / 0.026) * (ax / 0.026); }   // the mouth line (on |x|: the face's front), its corners turned down
+// the beard's top edge: the moustache right under the nose to its corner (s 0.045), the cheek line rising from there toward the ear,
+// and the sideburn climbing in front of the ear (s 0.125 - 0.163) to meet the hair - a steep ramp, never a step
+float faceBeardTop(float s){
+  float c = s < 0.045 ? 1.627 - 0.12 * max(s - 0.025, 0.0) : 1.6246 + 0.42 * (s - 0.045);
+  return mix(c, 1.70, smoothstep(0.125, 0.145, s));
+}
+// its lower edge: a rounded chin, rising along the jaw line to the jaw's angle under the ear
+float faceBeardBot(float s){ return min(1.513 + 0.25 * s + 2.0 * s * s, 1.596); }
+// its back edge: the ear's front, under the ear lobe back to the jaw's angle
+float faceBeardBack(float y){ return mix(0.163, 0.21, smoothstep(1.64, 1.62, y)); }
+// the brows: heavy, low over the eyes, frowning - the inner ends pulled down onto the eye bar, a short steep rise to the arch over the
+// eye's outer half, a tapering tail that ends at the temple (s 0.1, ~1.5 cm behind the eye's corner): (middle line y, half width)
+vec2 faceBrow(float s){
+  return vec2(1.6915 + 0.019 * smoothstep(0.004, 0.068, s) - 0.005 * smoothstep(0.072, 0.102, s), mix(0.0058, 0.0024, smoothstep(0.015, 0.1, s)));
+}
+// the scar across the forehead and down through the right brow (-x: the side the sprite view shows): (pale core, -, dark edge on the
+// side away from the light); w: the core's width in px (wider: the band the forehead wrinkles keep clear of)
+vec3 faceScar(vec3 p, vec3 S, vec3 px, vec3 py, float w){
+  if (p.x > 0.0) return vec3(0.0);
+  vec4 a = faceArc(vec2(S.x, p.y), vec2(0.021, 1.753), vec2(0.061, 1.6905), -0.002);
+  return step(0.0, a.y) * step(a.y, 1.0) * faceLine(a.x, faceGrad(a.zw, S), px, py, w);
+}
+// beard strokes: cells one pixel across and 4 (6 from ~430 px) long, laid along the hair's fall (the moustache down and out from the
+// middle, the beard down and in toward the chin, the two sides meeting in a V on the chin's centre line, where the strokes are shorter -
+// never a comb of long vertical columns), each column's cells staggered; a value 0 .. 1 per stroke
+float faceStrand(vec2 q, bool mo, float sd){
+  float cw = max(uPxM, 0.0028), ch = cw * mix(4.0, 6.0, step(uPxM, 0.0045)) * mix(0.6, 1.0, smoothstep(0.004, 0.02, q.x));
+  vec2 dir = mo ? normalize(vec2(0.75, -1.0)) : normalize(vec2(-0.2 - 0.4 * smoothstep(0.005, 0.06, q.x), -1.0));
+  float u = dot(q, vec2(-dir.y, dir.x)), col = floor(u / cw);
+  sd += mo ? 17.0 : 0.0;
+  return faceHash(vec2(col, floor(dot(q, dir) / ch + faceHash(vec2(col, sd + 3.0))) + sd));
+}
+void faceClass(inout float cls, inout float off, vec3 p, vec3 px, vec3 py){
+  float ax = abs(p.x), y = p.y, hd = clamp((0.022 - uPxM) / 0.008, 0.0, 1.0);   // hd: must match main()'s
+  bool skin = cls == ${CLS.skin}.0;
+  if (y < 1.515 && ax > 0.085) return;   // off the neck below the chin: the collar's front flaps / the pauldron's rim keep their 9a8c06e skin flecks
+  // the head's own skin (ears, temples, the back of the neck): over the collar's top, or on the face's front - never the skin-class
+  // texels the head's box also takes in low at the sides (the pauldron's inner rim, flecks on the collar's front flaps: 9a8c06e's)
+  if (skin && ((ax < 0.14 && y > 1.615) || (ax < 0.104 && p.z > -0.03))) gFaceR = 1.0;
+  // the face and the jaw only: not the collar (|x| > 0.1 round the jaw), the back of the head, the throat
+  if (p.z < -0.03 || ax > 0.104 || y < 1.5 || y > 1.77) return;
+  if (!(skin || cls == ${CLS.coat}.0 || cls == ${CLS.beard}.0)) return;
+  vec3 S = faceS(p); float s = S.x, pw = max(uPxM, 0.0028), sd = p.x < 0.0 ? 13.0 : 0.0;
+  float top = faceBeardTop(s), bot = faceBeardBot(s);
+  if (hd > 0.5){   // HD: ragged edges in 1 px columns (the hairs' tips over the cheek and under the chin)
+    float c = floor(s / pw) + sd;
+    top += (faceHash(vec2(c, 5.0)) - 0.5) * 0.005; bot += (faceHash(vec2(c, 6.0)) - 0.6) * 1.6 * pw;
+  }
+  if (y < top && y > bot && s < faceBeardBack(y)){
+    if (uPxM < 0.013 && ax < 0.026){
+      // the mouth: a dark 1 px line from ~150 px (the moustache's shaded lower edge over it only from ~230 px, so smaller it never
+      // reads as an open mouth), the lower lip under it from ~230 px
+      float my = faceMouthY(ax);
+      if (faceLine(y - my, vec3(16.27 * p.x, 1.0, 0.0), px, py, 1.0).x > 0.5){ cls = ${CLS.skin}.0; gFaceR = 4.0; return; }
+      if (uPxM < 0.0085 && ax < 0.018 && y < my && y > my - 0.0075 * (1.0 - (ax / 0.018) * (ax / 0.018))){ cls = ${CLS.skin}.0; gFaceR = 5.0; return; }
+    }
+    cls = ${CLS.beard}.0; gFaceR = 3.0; off = uOff; return;
+  }
+  if (!skin || s > 0.17) return;
+  gFaceR = 2.0;
+  // the brows (HD): dark grey hair, the lower edge ragged (a hair or two overhanging the socket), the top bushy; broken where the
+  // forehead scar crosses
+  vec2 b = faceBrow(s);
+  float j = faceHash(vec2(floor(s / pw) + sd, 9.0)), lo = b.x - b.y - step(0.7, j) * pw, hi = b.x + b.y + (j - 0.3) * pw;
+  if (hd > 0.5 && s > 0.006 && s < 0.102 && y > lo && y < hi && faceScar(p, S, px, py, 1.0).x < 0.5){ cls = ${CLS.beard}.0; gFaceR = 6.0; off = uOff; }
+}
+// the beard's tone on the light band. Sprite size: two flat greys like the owner's sprites - greyL toward the light, grey on the
+// shadow side, never the ramp's dark teal steps (so the lower face reads as a grey beard, not a dark mask); at 96 px the mouth one
+// grey row under the moustache on the lit side (a beard, not a muzzle). HD: the references' grizzled beard - charcoal to mid grey,
+// about the hair's value and half the lit skin's, never the brightest mass on the head: a step under the light band, darker toward
+// the sides, the sideburns and under the jaw (the roots), the chin a little lighter; the moustache its own drooping mass, half a step
+// lighter, outlined a full step down along its lower edge (in shadow over the mouth) and its outer edge (down past the mouth's
+// corners); half a step down where the beard turns away from the view; a 1 px darker edge at the roots along the top; short strokes
+// along the fall of the hair, light strands and dark gaps (below ~230 px only a few light strands: no 1 px mottle). nz: the
+// smoothed normal's view z
+float faceBeardTone(float tc0, vec3 p, vec3 S, float nz, vec3 px, vec3 py, float hd){
+  float ax = abs(p.x), y = p.y, s = S.x, pw = max(uPxM, 0.0028), my = faceMouthY(ax);
+  // the moustache: over the mouth line and, past the mouth's corners (s ~0.033), its tips drooping down beside the lower lip (the
+  // references' horseshoe)
+  bool mo = s < 0.05 && y > (s < 0.036 ? my + 0.0015 : 1.574);
+  if (hd < 0.5) return tc0 > 1.5 ? (hd > 0.0 && ax < 0.02 && faceLine(y - my, vec3(0.0, 1.0, 0.0), px, py, 1.0).x > 0.5 ? 2.0 : 3.0) : 2.0;
+  float tb = 0.25 + 0.5 * tc0;
+  tb += 0.25 * smoothstep(0.05, 0.012, s) * smoothstep(1.592, 1.56, y);      // the chin: lighter
+  tb -= 0.5 * smoothstep(0.055, 0.085, s);                                    // the sides, the sideburns: darker
+  if (y - faceBeardBot(s) < 2.0 * pw) tb -= 0.5;                              // its lower edge, rolling under the jaw
+  float e = 1.2 * pw;
+  if (mo) tb += 0.5;                                                          // the moustache: half a step lighter, ...
+  bool sh = mo && uPxM < 0.0085 && s < 0.036 && y - my < 0.0015 + e;         // ... its lower edge in shadow over the mouth,
+  if (sh) tb -= 1.0;
+  // ... and a dark 1 px outline round the tips: down the outer edge, under the tip, up the inner edge to the mouth's corner
+  if (!mo && s > 0.036 - e && s < 0.05 + e && y > 1.574 - e && (s > 0.05 || y < 1.574 || (s < 0.036 && y < my + 0.0015))) tb -= 1.0;
+  tb -= 0.5 * smoothstep(0.5, 0.25, nz);                                      // where it turns away from the view (the cheeks' sides
+                                                                              // face-on, the chin's front in profile): half a step down
+  if (faceBeardTop(s) - y < 1.2 * pw) tb -= 0.5;                              // the roots
+  float h = faceStrand(vec2(s, y), mo, p.x < 0.0 ? 41.0 : 0.0);
+  tb += uPxM < 0.0085 ? (h > 0.74 ? 0.5 : (h < 0.26 ? (tb > 1.9 ? -1.0 : -0.5) : 0.0)) : 0.5 * step(0.84, h);   // the strokes
+  return clamp(tb, sh ? 0.0 : 0.5, 2.5);
+}
+float faceTone(float t, float tc0, float nz, vec3 p, vec3 px, vec3 py, float hd){
+  float r = gFaceR, ax = abs(p.x), y = p.y;
+  float fA = step(uPxM, 0.0085), fB = step(uPxM, 0.0045);   // detail levels: the main creases from ~230 px, the fine ones from ~430 px
+  if (r < 1.5) return t;                                      // the rest of the head's skin: its plain light band
+  if (r > 3.5 && r < 4.5) return 0.0;                         // the mouth
+  if (r > 4.5 && r < 5.5) return clamp(tc0 - 1.0, 1.0, 2.0) - (faceLine(y - faceMouthY(ax) + 0.0075, vec3(0.0, 1.0, 0.0), px, py, 1.0).x > 0.5 ? 0.5 : 0.0);   // lower lip: dull, its lower edge in shadow
+  vec3 S = faceS(p); float s = S.x, pw = max(uPxM, 0.0028);
+  vec2 b = faceBrow(s);
+  if (r > 5.5){
+    // brow: near-black along its lower half (it overhangs the socket), dark grey hair above, a few lighter hairs along its top on the lit side
+    float h = faceHash(vec2(floor(y / pw), floor(s / pw)) + (p.x < 0.0 ? 7.0 : 0.0));
+    return y < b.x - 0.2 * b.y ? 0.0 : 0.5 + 0.5 * step(1.5, tc0) * step(0.6, h) * fA;
+  }
+  if (r > 2.5) return faceBeardTone(tc0, p, S, nz, px, py, hd);
+  // the face's skin
+  float eh = max(0.0085, 0.55 * uPxM);   // the eye bar's half height (as the eye mask)
+  // sprite (96 px): the brow's shadow, exactly one row over each eye, a step down - broken over the nose bridge, not black (with the
+  // bar it must not read as a visor)
+  if (hd < 0.5) return hd > 0.0 && s > 0.012 && s < 0.075 && faceLine(y - 1.684 - eh - 0.5 * uPxM, vec3(0.0, 1.0, 0.0), px, py, 1.0).x > 0.5 ? min(t, 1.0) : t;
+  // the sockets (deep-set eyes): deep shadow only right under the brow's inner half and in the inner corner by the nose; elsewhere the
+  // upper lid in shadow (a step and a half down) with a dark lid line along the top of the eye bar, a thin dark lower lid under it -
+  // the bar and the red pupil read as an eye in a socket, not as a visor
+  float ex = (ax - 0.042) / max(0.03, 1.1 * uPxM), ey = eh * sqrt(max(1.0 - ex * ex, 0.0));   // the eye mask's ellipse: its half height here
+  if (s > 0.004 && s < 0.09 && y > 1.684 && y < b.x - b.y + 0.3 * pw)
+    return min(t, s < 0.016 || (s < 0.05 && y > b.x - b.y - 1.6 * pw) ? 0.5 : (y < 1.684 + ey + pw ? 1.0 : 1.5));
+  if (y < 1.684 && y > 1.684 - ey - pw && abs(ex) < 0.95) return min(t, 1.0);
+  // the cheekbone's lit plane over a sunken cheek (above the beard; the hollow only in the light - in the shadow band the warm shadow
+  // tint already sinks it, and stacked on the folds it turns to mud)
+  vec2 cb = (vec2(s, y) - vec2(0.066, 1.6645)) / vec2(0.018, 0.0048), cs = (vec2(s, y) - vec2(0.064, 1.648)) / vec2(0.02, 0.0095);
+  if (dot(cb, cb) < 1.0 && tc0 > 1.5) t += 0.5; else if (dot(cs, cs) < 1.0 && tc0 > 2.0) t -= 0.5;
+  // creases and the scar: only where the chart is not squeezed on screen (a grazing view)
+  float on = fA * step(faceSquash(S, px, py), 2.6);
+  vec3 ln = vec3(0.0), wr = vec3(0.0);
+  // forehead wrinkles: wavy, curving up a little toward the temples, well clear of the brows; two from ~230 px, three from ~430 px.
+  // Each is broken in two pieces of unequal length (the middle one also over the centre line) and stops short of the scar, which cuts
+  // through them; their lit lips only from ~430 px (smaller, a dark line with a light one under it reads as a pair of stripes)
+  float sg = 1.0 - faceScar(p, S, px, py, 7.0).x, gw = max(0.0035, 1.2 * pw);
+  for (int k = 0; k < 3; k++){
+    float fk = float(k), y0 = fB > 0.5 ? 1.7215 + 0.0115 * fk : 1.7235 + 0.0145 * fk, ph = s * 70.0 + fk * 2.3 + (p.x < 0.0 ? 1.1 : 0.0);
+    float o = on * sg * step(s, 0.058 - 0.006 * fk) * (k == 1 ? step(0.006, abs(p.x + 0.004)) : 1.0) * (k == 2 ? fB : 1.0);
+    o *= step(gw, abs(s - 0.026 - 0.011 * fk - (p.x < 0.0 ? 0.007 : -0.008)));   // the break
+    wr = max(wr, o * faceLine(y - y0 - 0.0011 * sin(ph) - 0.3 * s * s, faceGrad(vec2(-(0.077 * cos(ph) + 0.6 * s), 1.0), S), px, py, 1.0));
+  }
+  ln = vec3(wr.x, wr.y * fB, 0.0);
+  // frown lines: two creases between the brows, a little apart upward
+  ln = max(ln, on * step(1.693, y) * step(y, 1.713) * faceLine(s - 0.0065 - 0.2 * (y - 1.693), faceGrad(vec2(1.0, -0.2), S), px, py, 1.0));
+  // under-eye bags: a dark line under each socket (the bag: the lit lip above it)
+  float ue = mix(1.6635, 1.6665, fB);
+  ln = max(ln, on * step(0.021, s) * step(s, 0.07) * faceLine(y - ue - 8.0 * (s - 0.045) * (s - 0.045), faceGrad(vec2(-16.0 * (s - 0.045), 1.0), S), px, py, 1.0));
+  // crow's feet (from ~430 px): two short rays fanning back from the eye's outer corner, flatter than the scar
+  ln = max(ln, faceArcLine(faceArc(vec2(s, y), vec2(0.091, 1.6895), vec2(0.106, 1.6935), 0.0), S, px, py, on * fB));
+  ln = max(ln, faceArcLine(faceArc(vec2(s, y), vec2(0.09, 1.6785), vec2(0.104, 1.6745), 0.0), S, px, py, on * fB));
+  // nasolabial folds: deep, from the nose wing down and out to the moustache's corner, bowed out over the cheek
+  ln = max(ln, faceArcLine(faceArc(vec2(s, y), vec2(0.0195, 1.645), vec2(0.047, 1.6255), 0.002), S, px, py, on));
+  // a cheek crease on the side plane (it shows in 3/4 and in profile): from under the cheekbone down toward the jaw, bowed forward
+  ln = max(ln, faceArcLine(faceArc(vec2(s, y), vec2(0.079, 1.6595), vec2(0.093, 1.6395), -0.0015), S, px, py, on));
+  if (ln.x > 0.5) t -= 1.0; else if (ln.y > 0.5) t += 0.5;
+  // the scar: a pale line (scar tissue) with a dark edge on its far side from the light
+  vec3 sc = on * faceScar(p, S, px, py, 1.0);
+  if (sc.x > 0.5) t = max(t + 1.0, 2.5); else if (sc.z > 0.5) t -= 1.0;
+  return t;
+}
+vec3 faceColor(vec3 rc, float cls){
+  if (gHd <= 0.0 || (cls != ${CLS.skin}.0 && cls != ${CLS.beard}.0)) return rc;
+  vec3 lw = vec3(0.299, 0.587, 0.114); float l = dot(rc, lw);
+  vec3 c = cls == ${CLS.skin}.0 ? mix(vec3(1.0, 0.64, 0.42), vec3(1.0, 0.77, 0.55), smoothstep(0.12, 0.4, l)) : vec3(1.06, 1.0, 0.86);
+  return mix(rc, c * (l / dot(c, lw)), (cls == ${CLS.skin}.0 ? (gFaceR < 1.5 ? 0.6 : 0.75) : 0.7) * gHd);
+}
 // ---- Trousers (CLS.trou): hand-pixelled cloth detail on the inner layer around the legs, in whole / half ramp steps of the tone ----
 // Everything is anchored to the bind pose (vP), so it rides the legs through every pose and never swims: a dark olive camo (clusters of
 // short horizontal dashes, like the sheet and the owner's sprites), the trousers bloused over the boots (stacked rolls), creases behind /
@@ -1120,6 +1476,7 @@ void main(){
         vec2 pq = vec2(abs(vP.x) - 0.04, vP.y - 1.684) / vec2(max(0.008, 0.5 * uPxM), max(0.0055, 0.38 * uPxM));
         cls = ${CLS.eye}.0; eyeT = dot(pq, pq) < 1.0 ? 3.0 : 0.6;
       }
+      if (headR && eyeT < 0.0) faceClass(cls, off, vP, dPx, dPy);   // face / beard parts (the moustache, mouth, brows ... on vP)
       shirtBelt(cls, off, dw);                         // shirt panels, belt parts (re-classed)
       if (uDbg > 0.5){ vec3 dc[11]; dc[10]=vec3(.6,.6,.2); dc[0]=vec3(.3,.3,.25); dc[1]=vec3(0.); dc[2]=vec3(1.,.7,.5); dc[3]=vec3(.8); dc[4]=vec3(.1,.1,.6);
         dc[5]=vec3(0.,.8,.8); dc[6]=vec3(1.,.5,0.); dc[7]=vec3(1.,0.,0.); dc[8]=vec3(.8,0.,.8); dc[9]=vec3(.5,.9,.5);
@@ -1156,6 +1513,7 @@ void main(){
     if (cls == ${CLS.pad}.0) t = 1.0 + 0.5 * t;
     if (uBands < 0.5) t = clamp((d - uB.z) / (uB.x - uB.z) + 1.0, 0.0, 3.0);
     t += (g - 0.5) * 4.0 * uDetail * cd.x * dw * (1.0 - 0.8 * hd) + cd.y + off;   // painted dirt: half strength or less at HD (no camo mottle)
+    float tHair = t;   // the head's hair starts from here (hairStrandT, below the scan's strands)
     if (cls == ${CLS.skin}.0) t -= 0.35 * hd;   // HD faces / arms: room for the brow, nose and cheek shadow planes
     // HD: the coat's occlusion on the trousers - the outer side of the thighs (under the panels) sits half a step lower
     if (cls == ${CLS.trou}.0) t -= 0.5 * hd * smoothstep(0.19, 0.25, abs(vP.x)) * smoothstep(0.35, 0.5, vP.y);
@@ -1185,6 +1543,8 @@ void main(){
       }
       else if (tc < 1.2 && gl_FrontFacing && cls != ${CLS.orange}.0 && dot(nd, uFill) > 0.75) t += 0.5 * hd * uCav.y;
     }
+    // the head's hair: unkempt strands instead of the comb (the scan's comb lines, sculpted grooves and their cavity left out)
+    if (cls == ${CLS.hair}.0 && hairOnHead(vP)) t = hairStrandT(tHair, tHair - tc + toneOf(dot(normalize(mix(n, nS, 0.8)), uL)), vP, dPx, dPy, dot(alb, vec3(0.299, 0.587, 0.114)), hd);
     // the coat's shell: coat cloth that the leg rule above classes as trousers (coatShell) - the coat draws its folds there, the trousers
     // leave it alone (legD first: most of the trousers are ruled out without the angle)
     float ldS = cls == ${CLS.trou}.0 ? legD(vP) : 0.0;
@@ -1194,6 +1554,7 @@ void main(){
     if (cls == ${CLS.trou}.0 && gl_FrontFacing && !shell) t = trouDetail(vP, dPx, dPy, hd, tc0, t, cls);   // camo, folds, seams, cargo pocket (may hand an ink pixel the coat's class)
     // coat lining (the inside of the shell, back faces): its own dark tone, never the unlit black
     if (!gl_FrontFacing && cloth) t = clamp(t - 1.0, 0.5, 1.0);
+    if (gFaceR > 0.5 && gl_FrontFacing) t = faceTone(t, tc0, nS.z, vP, dPx, dPy, hd);   // creases, sockets, scars, the beard's strokes
     t = clamp(t, 0.0, 3.0);
     if (nn.y > 0.35 && abs(nn.z) < uRim && t > 1.5) t += cls == ${CLS.pad}.0 ? 0.5 : 1.0;   // (the knee plates' top edges: half, at their halved contrast)
     if (cls == ${CLS.orange}.0 && abs(nn.z) < 0.2 * clamp((0.02 - uPxM) / 0.01, 0.0, 1.0)) t = min(t, 1.0);   // dark armour rim (HD only)
@@ -1237,6 +1598,7 @@ void main(){
     if (uBands < 0.5 || (hd > 0.5 && fract(t) > 0.01)){ float t0 = floor(t); rc = mix(ramp(cls, t0), ramp(cls, t0 + 1.0), t - t0); }   // smooth light / HD half steps
     bool tint = cls != ${CLS.skin}.0 && cls != ${CLS.eye}.0 && cls != ${CLS.orange}.0 && cls != ${CLS.hair}.0 && cls != ${CLS.beard}.0 && cls != ${CLS.pad}.0;
     rc = finish(rc, t, nn, hd, tint);
+    if (cls == ${CLS.hair}.0 && hairOnHead(vP)) rc = hairColour(rc);   // the head's hair: its own dusty ramp (HD)
     if (rust > 0.5) rc = rust > 1.5 ? uPal[${PAL_LIST.indexOf(PAL.rust)}] : uPal[${PAL_LIST.indexOf(PAL.skinS)}];   // rust spot: a dark red-brown rim round a rust core
     // weathered pauldron: rust patches and streaks, grime and paint chips replace the paint in the same light band
     // (rust keeps one flat tone over the lit and the mid band, so a patch reads as one shape across the terminator)
@@ -1245,6 +1607,7 @@ void main(){
       if (w.x > 0.5) rc = wearRamp(w.x, (w.x < 1.5 && t > 1.5 ? 3.0 : (w.x > 2.5 ? min(t, 3.0) : t)) + w.y);
       else if (w.y > 0.5 && t > 1.5) rc = ramp(cls, t + 1.0);   // paint one step up: the worn edge, the lit lower lip of a chip
     }
+    if (gFaceR > 0.5) rc = faceColor(rc, cls);      // HD: weathered tan skin, warm grey beard
     // specular glints (HD): boots and gloves, metal fittings (the pauldron's paint is matt)
     if (hd > 0.0 && eyeT < 0.0){
       float sp = dot(nd, normalize(uL + vec3(0.0, 0.0, 1.0)));
@@ -1259,9 +1622,11 @@ void main(){
     float rw = 0.0;
     if (hd > 0.0 && eyeT < 0.0){
       float cw = 0.0; for (int j = 0; j < ${NCLS}; j++){ if (float(j) == cls) cw = uRimW[j]; }
+      if (cls == ${CLS.hair}.0 && hairOnHead(vP)) cw = 0.0;   // the head's hair: matt, dusty - no back-light rim (the collar keeps it)
       vec3 nr = normalize(n + nS); float sl = length(nr.xy), aw = sl > 1e-3 ? dot(nr.xy / sl, vec2(0.86, 0.5)) : 0.0;
       rw = cw * hd * smoothstep(0.0, 0.45, aw) * smoothstep(0.1, 0.35, sl);
     }
+    if (gFaceR > 1.5 && cls == ${CLS.skin}.0) rw *= 0.35;   // the face: a faint back-light rim (a cool one greys the tan nose in profile)
     bool plate = (uPart > 0.5 && uPart < 3.5) || ((uPart > 4.5 && uPart < 5.5 || uPart > 6.5) && hd > 0.5);
     gl_FragColor = vec4(rc, plate ? 0.45 - 0.4 * rw : 1.0 - 0.5 * rw);
     return;
@@ -1438,19 +1803,37 @@ const post = new T.ShaderMaterial({
   float D(vec2 o){ return texture2D(tD, vUv + o*px).r; }
   vec3 C(vec2 o){ return texture2D(tC, vUv + o*px).rgb; }
   bool same(vec3 a, vec3 b){ return dot(abs(a-b), vec3(1.0)) < 0.02; }
+  // hair flyaways (HAIR_WISP: alpha 0.49, between the plates' < 0.475 and the shaded surfaces' >= 0.5): 1 px strands kept as they are -
+  // they neither take nor cast the black outline / inner depth lines, nor catch the rim (outlined they read as 3 - 7 px dark spikes);
+  // only where one crosses a surface's own outline does it take the outline's black (wispEdge)
+  bool wispAt(vec2 o){ float a = texture2D(tC, vUv + o*px).a; return a > 0.475 && a < 0.496; }
+  // a flyaway's pixel on a surface's own outline (another surface within the outline width, the background within one pixel more):
+  // the outline's black - the outline stays unbroken and the strand leaves it
+  bool wispEdge(){
+    bool s = false, b = false;
+    for (int i = -5; i <= 5; i++) for (int j = -5; j <= 5; j++){
+      float r = abs(float(i)) + abs(float(j)); if (r < 0.5 || r > uOW + 1.5) continue;
+      vec2 o = vec2(float(i), float(j));
+      if (D(o) >= 0.9999) b = true; else if (r <= uOW + 0.5 && !wispAt(o)) s = true;
+    }
+    return s && b;
+  }
   void main(){
     float dc = D(vec2(0.0));
     bool fg = dc < 0.9999;
     float dl=D(vec2(-1.,0.)), dr=D(vec2(1.,0.)), du=D(vec2(0.,1.)), dd=D(vec2(0.,-1.));
     // outline width grows with the character's pixel height (1 px at sprite sizes, ~1 px per 240 px in HD)
-    bool near = dl<0.9999 || dr<0.9999 || du<0.9999 || dd<0.9999;
+    bool wl = wispAt(vec2(-1.,0.)), wr = wispAt(vec2(1.,0.)), wu = wispAt(vec2(0.,1.)), wd = wispAt(vec2(0.,-1.));
+    bool near = (dl<0.9999 && !wl) || (dr<0.9999 && !wr) || (du<0.9999 && !wu) || (dd<0.9999 && !wd);
     bool nearIn = false;
     if (uOW > 1.5){
       for (int i = -4; i <= 4; i++) for (int j = -4; j <= 4; j++){
         float r = abs(float(i)) + abs(float(j)); if (r < 0.5 || r > uOW + 0.5) continue;
         float dn = D(vec2(float(i), float(j)));
-        if (dn < 0.9999) near = true;
-        if (dn < dc - uInner * (1.0 + r) && r <= uOW - 0.5) nearIn = true;
+        if (dn < 0.9999 && !wispAt(vec2(float(i), float(j)))){
+          near = true;
+          if (dn < dc - uInner * (1.0 + r) && r <= uOW - 0.5) nearIn = true;
+        }
       }
     }
     if (!fg){
@@ -1477,8 +1860,8 @@ const post = new T.ShaderMaterial({
     // right-hand neighbours (within the outline width) are background or clearly farther - catches a crisp cool line
     // The character shader writes a per-material back-light weight into alpha (1 = none): hair, leather and metal catch it strongly,
     // cloth weakly, boots not at all, and only where the surface turns away from the key light. Strong rims get 2 px, weak ones 1.
-    float a0 = texture2D(tC, vUv).a; bool plate = a0 < 0.475;
-    float rw = (plate ? (0.45 - a0) / 0.4 : (1.0 - a0) * 2.0) * uRimK;
+    float a0 = texture2D(tC, vUv).a; bool plate = a0 < 0.475, wisp = a0 > 0.475 && a0 < 0.496;
+    float rw = wisp ? 0.0 : (plate ? (0.45 - a0) / 0.4 : (1.0 - a0) * 2.0) * uRimK;
     if (uDesp < 0.5 && rw > 0.05){
       float hit = 0.0;
       for (int i = 1; i <= 5; i++){
@@ -1505,7 +1888,8 @@ const post = new T.ShaderMaterial({
         }
       }
     }
-    if (uOutline > 0.5 && (plateN || nearIn || dl < dc-uInner || dr < dc-uInner || du < dc-uInner || dd < dc-uInner)) col = vec3(0.0);
+    if (uOutline > 0.5 && wisp && wispEdge()) col = vec3(0.0);
+    if (uOutline > 0.5 && (plateN || nearIn || (dl < dc-uInner && !wl) || (dr < dc-uInner && !wr) || (du < dc-uInner && !wu) || (dd < dc-uInner && !wd))) col = vec3(0.0);
     gl_FragColor = vec4(col,1.0);
   }`,
   depthTest:false, depthWrite:false
@@ -2630,6 +3014,375 @@ function buildKneeGuards(){
     return Math.min(1, Math.max(0, 1 - (phi - g.a0)/0.5)); } };
   skinToBody(straps, KNEE.strap, 'kneeStraps', sOpt); skinToBody(buckles, KNEE.buckle, 'kneeBuckles', sOpt);
 }
+// ---- the head's hair, geometry (the owner's corrected head reference): wispy flyaways, tufts breaking the smooth outline, and ragged
+// locks down the back of the head to the collar. Built at the rest pose in character space (+x front, +z the character's right) from
+// the scalp: rays in toward the head's centre hit the hair, and below it the coat collar's lip.
+// hairScalp().at(az, el, all): the surface in the direction (az: from the front toward the character's right, el: up from the
+// horizontal; degrees) from the head's centre - the head-bone surface (the hair), or with `all` the outermost surface round the head
+// and the neck (the collar's lip below the hair's edge) - point, outward normal (half the hit face's, half the radial: the scan's
+// triangles are large and uneven), distance r; .radial(d): the outermost surface's distance along the unit direction d; .flow(p, n):
+// the sweep there (unit, in the tangent plane) - round the front-back axis 5.5 cm under the head's centre, as the strand texture's
+// (CHAR_FS hairAcross): up off the brow, back over the crown and the temples, down the back of the head; .skin: skinToBody options
+// that make a lock ride on the scan's surface under it
+function hairScalp(){
+  const C = bodyCloud(/^(?!head)/, 1.55, 1.95), rc = new T.Raycaster(), O = new T.Vector3(0, 1.70, 0);
+  // the outermost surface: the scan round the head and the neck (the collar's triangles, which the scan shares between the head and the
+  // clavicles too), only within 24 cm of the neck's axis - every ray tests every triangle, so this keeps the drape quick
+  const CA = bodyCloud(/^(upperarm|lowerarm|hand|thigh|calf|foot)/, 1.55, 1.95);
+  { const g = CA.mesh.geometry, P = g.attributes.position, ix = g.index.array, keep = [];
+    for (let f = 0; f < ix.length; f += 3) if ([0, 1, 2].every(k => Math.hypot(P.getX(ix[f+k]), P.getZ(ix[f+k])) < 0.24)) keep.push(ix[f], ix[f+1], ix[f+2]);
+    g.setIndex(keep); }
+  const dir = (az, el) => { const a = az*Math.PI/180, e = el*Math.PI/180; return new T.Vector3(Math.cos(e)*Math.cos(a), Math.sin(e), Math.cos(e)*Math.sin(a)); };
+  const at = (az, el, all) => {
+    const d = dir(az, el); rc.set(O.clone().addScaledVector(d, 0.4), d.clone().negate()); rc.far = 0.4;
+    const h = rc.intersectObject((all ? CA : C).mesh, false)[0]; if (!h) return null;
+    const n = h.face.normal.clone(); if (n.dot(d) < 0) n.negate();
+    return { p: h.point.clone(), n: n.add(d).normalize(), d, r: 0.4 - h.distance };
+  };
+  const flow = (p, n) => {
+    const q = new T.Vector3(0, p.y - 1.645, p.z), r = q.length(), psi = Math.atan2(r, p.x); q.divideScalar(r || 1);
+    const f = new T.Vector3(-Math.sin(psi), 0, 0).addScaledVector(q, Math.cos(psi)); return f.addScaledVector(n, -f.dot(n)).normalize();
+  };
+  const radial = d => { rc.set(O.clone().addScaledVector(d, 0.4), d.clone().negate()); rc.far = 0.4; const h = rc.intersectObject(CA.mesh, false)[0]; return h ? 0.4 - h.distance : 0; };
+  // skinning of the locks and the tufts: the scan's vertices round the head and the nape (the hair, the back and the sides of the neck,
+  // the collar's lip; not the face below the brow) lend them their weights (the nearest 6, a smooth falloff), so each rides on the
+  // scan's surface under it. The nape's hair and the collar's lip move against the head bone in every anim (the scan weights them only
+  // 0.55 - 0.9 to it): rigid on the head bone, a lock lying a few mm over the nape would weave in and out of the hair as the neck bends;
+  // riding on it, it keeps its clearance. High on the head the weights are the head bone's alone (rigid with it)
+  let sm = null; model.traverse(o => { if (o.isSkinnedMesh && !sm) sm = o; });
+  const bp = sm.geometry.attributes.position, near = new Set();
+  for (let i = 0; i < bp.count; i++){
+    const x = bp.getX(i), y = bp.getY(i), z = bp.getZ(i);
+    if (y > 1.55 && Math.hypot(x, z + 0.01) < 0.2 && (y > 1.72 || z < 0.06)) near.add(i);
+  }
+  const skin = { uv: true, only: near, skip: /hand|lowerarm|finger|thumb|index|middle|ring|pinky/i, K: 6, sigma: 0.02 };
+  return { at, flow, dir, O, radial, skin, pts: C.P };
+}
+// character space (rest pose) -> the head bone's space
+function hairHeadSpace(){ const bone = B.head; hero.updateMatrixWorld(true); bone.updateWorldMatrix(true, false);
+  return new T.Matrix4().copy(bone.matrixWorld).invert().multiply(hero.matrixWorld); }
+// Flyaways: thin single strands that peel off the sweep and hook out - seven over each temple, up and out over the ears and curling
+// over, a few curling off the crown to the sides, sticking out and curling at the back, fine dark ends off some of the nape locks, and
+// one loose dark strand falling across the forehead from the hairline (the character's left). Each a GL line: exactly 1 output pixel
+// wide at any size, drawn by its own small material in the hair's HD ramp - dark grey-brown, or dark at the root and a mid grey from
+// about the middle out (tones 5 - 6: it reads against a dark background as well as a light one, as grey hair catching the light).
+// Drawn deeper than it lies (view space: 2.5 cm over the temples, 5 cm elsewhere): any part of a strand less than that in front of a
+// surface behind it is hidden, so a strand grows out of the outline (over the temples visibly from the mop's edge), never a light
+// scratch drawn across the hair (the forehead strand, lying on the skin, is not pushed). Each bends away from the head all along: it
+// is cut where a curl would turn it back toward the head's centre, or where, seen from any side, it would pass back inside the head's
+// outline - so what shows of it stays joined to the outline, no piece floats. The post pass leaves them out of the black outline and
+// the inner depth lines (alpha 0.49 marks them: outlined, a 1 px strand would read as a 3 - 7 px dark spike), except a strand's pixels
+// on the hair's own outline, which stay the outline's black (it stays unbroken: the strand leaves it). HD only: below the strand
+// texture's switch (~155 - 230 px) they fold back to their roots inside the hair (at sprite size 1 px strands would only blink in and
+// out: the tufts carry the ragged outline there); the finer half joins from ~360 px.
+const HAIR_WISP_FS = `
+  uniform vec3 uC[${HAIR_HD.length}]; varying float vT;
+  void main(){
+    float k = floor(vT + 0.5); vec3 c = uC[0];
+    for (int i = 1; i < ${HAIR_HD.length}; i++) if (float(i) == k) c = uC[i];
+    gl_FragColor = vec4(c, 0.49);
+  }`;
+const HAIR_WISP = {
+  mat: new T.ShaderMaterial({
+    uniforms: { uPxM: SH.uPxM, uPx: post.uniforms.px, uC: { value: HAIR_HD.map(h => new T.Color(h)) } },
+    vertexShader: `
+      attribute vec4 aWisp; attribute vec3 aTone; attribute vec3 aEnd; uniform float uPxM; uniform vec2 uPx; varying float vT;
+      void main(){
+        // aWisp: the strand's root (inside the hair) and its level (0 from ~155 - 230 px, -1 from ~360 - 490 px; + 2: the coarse
+        // copy); aTone: its tone on the hair's HD ramp, its depth push (m), a screen offset (output px, x: the forehead strand's root
+        // drawn 2 px wide); aEnd: the other end of its segment
+        float hs = clamp((0.0125 - uPxM) / 0.004, 0.0, 1.0), hf = clamp((0.0054 - uPxM) / 0.0014, 0.0, 1.0), lv = aWisp.w;
+        bool coarse = lv > 0.5; if (coarse) lv -= 2.0;
+        float g = lv > -0.5 ? hs : hf;
+        vec3 p = mix(aWisp.xyz, position, g);
+        vT = aTone.x;
+        vec4 mv = modelViewMatrix * vec4(p, 1.0); mv.z -= aTone.y;
+        gl_Position = projectionMatrix * mv;
+        // each segment drawn 0.6 px longer at both ends: at a bend GL lines can leave out the joint's pixel (the diamond-exit rule),
+        // which would cut the hook off the strand (orthographic: w = 1)
+        vec2 dp = (gl_Position.xy - (projectionMatrix * modelViewMatrix * vec4(mix(aWisp.xyz, aEnd, g), 1.0)).xy) / (2.0 * uPx);
+        if (dot(dp, dp) > 1e-6) gl_Position.xy += normalize(dp) * 1.2 * uPx;
+        gl_Position.x += aTone.z * 2.0 * uPx.x;
+        if (coarse != (uPxM > 0.0045)) gl_Position = vec4(0.0, 0.0, 2.0, 1.0);   // the other copy's size (outside the clip volume)
+      }`,
+    fragmentShader: HAIR_WISP_FS
+  }),
+  // the ends off the nape locks: skinned like the locks they grow from (riding on the hair / the collar's lip), drawn as the wireframe
+  // of degenerate triangles (a, b, b): GL lines like the others. uv: tone, level; short, so they simply show from their size up
+  skin: new T.ShaderMaterial({
+    uniforms: { uPxM: SH.uPxM, uC: null },
+    vertexShader: `
+      #include <common>
+      #include <skinning_pars_vertex>
+      uniform float uPxM; varying float vT;
+      void main(){
+        float hs = clamp((0.0125 - uPxM) / 0.004, 0.0, 1.0), hf = clamp((0.0054 - uPxM) / 0.0014, 0.0, 1.0), lv = uv.y;
+        bool coarse = lv > 0.5; if (coarse) lv -= 2.0;
+        vT = uv.x;
+        #include <skinbase_vertex>
+        #include <begin_vertex>
+        #include <skinning_vertex>
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(transformed, 1.0);
+        if ((lv > -0.5 ? hs : hf) < 0.5 || coarse != (uPxM > 0.0045)) gl_Position = vec4(0.0, 0.0, 2.0, 1.0);   // (outside the clip volume)
+      }`,
+    fragmentShader: HAIR_WISP_FS, wireframe: true
+  })
+};
+HAIR_WISP.skin.uniforms.uC = HAIR_WISP.mat.uniforms.uC; HAIR_WISP.skin.skinning = true;
+function buildHairWisps(H){
+  const P = [], E = [], R = [], Tn = [], V = (x, y, z) => new T.Vector3(x, y, z);
+  // one strand through the points pts (character space): line segments, per vertex its root (where it folds to), level, tone, depth
+  // push and screen offset. tone: one tone, or [root tone, outer tone, where the outer one starts (0..1)]. GL lines drop a segment
+  // shorter than about a pixel (it never leaves its first pixel's diamond): a fine-sampled curl breaks into specks, its hook vanishes
+  // at 300 px. So each strand is laid down twice, resampled to 6 mm segments (drawn from ~430 px up: 1.3 - 1.9 px) and to 12 mm ones
+  // (below: 1.4 px at 230 px, ~2 at 300 - a hook of a few straight segments)
+  const resample = (pts, len) => {
+    const cum = [0]; for (let i = 1; i < pts.length; i++) cum.push(cum[i-1] + pts[i].distanceTo(pts[i-1]));
+    const L = cum[cum.length - 1], n = Math.max(2, Math.round(L/len)), out = [];
+    for (let j = 0, i = 0; j <= n; j++){
+      const s = L*j/n; while (i < pts.length - 2 && cum[i+1] < s) i++;
+      out.push(pts[i].clone().lerp(pts[i+1], Math.min(1, Math.max(0, (s - cum[i])/Math.max(1e-9, cum[i+1] - cum[i])))));
+    }
+    return out;
+  };
+  const put = (pts0, root, tone, level, push, off = 0, upto = 1) => {
+    const tn = Array.isArray(tone) ? tone : [tone, tone, 1];
+    for (const [len, lv] of [[0.006, level], [0.012, level + 2]]){
+      const pts = resample(pts0, len);
+      for (let i = 0; i < pts.length - 1; i++){
+        if (i/(pts.length - 1) >= upto - 1e-6) break;
+        const k = (i + 0.5)/(pts.length - 1) < tn[2] ? tn[0] : tn[1];
+        for (const [q, e] of [[pts[i], pts[i+1]], [pts[i+1], pts[i]]]){ P.push(q.x, q.y, q.z); E.push(e.x, e.y, e.z); R.push(root.x, root.y, root.z, lv); Tn.push(k, push, off); }
+      }
+    }
+  };
+  // the outline's no-re-entry rule: the head (the head-bone scan and the tufts) seen from 16 horizontal directions, each as the convex
+  // hull of its projection; a strand is cut where, having left one of them, it would pass back inside (seen from there, what lies
+  // beyond would float off the outline)
+  const hulls = [];
+  {
+    const Q = []; for (let i = 0; i < H.pts.length; i += 3) Q.push([H.pts[i], H.pts[i+1], H.pts[i+2]]);
+    for (const p of H.tuftPts || []) Q.push([p.x, p.y, p.z]);
+    const cr = (o, a, b) => (a[0] - o[0])*(b[1] - o[1]) - (a[1] - o[1])*(b[0] - o[0]);
+    for (let k = 0; k < 16; k++){
+      const a = k/16*2*Math.PI, ux = -Math.sin(a), uz = Math.cos(a), lo = [], up = [];
+      const P2 = Q.map(q => [q[0]*ux + q[2]*uz, q[1]]).sort((p, q) => p[0] - q[0] || p[1] - q[1]);
+      for (const p of P2){ while (lo.length > 1 && cr(lo[lo.length-2], lo[lo.length-1], p) <= 0) lo.pop(); lo.push(p); }
+      for (let i = P2.length - 1; i >= 0; i--){ const p = P2[i]; while (up.length > 1 && cr(up[up.length-2], up[up.length-1], p) <= 0) up.pop(); up.push(p); }
+      hulls.push({ ux, uz, h: lo.slice(0, -1).concat(up.slice(0, -1)) });
+    }
+  }
+  const inside = (hl, q) => { const x = q.x*hl.ux + q.z*hl.uz, h = hl.h;
+    for (let i = 0; i < h.length; i++){ const a = h[i], b = h[(i+1) % h.length]; if ((b[0] - a[0])*(q.y - a[1]) - (b[1] - a[1])*(x - a[0]) < 0) return false; }
+    return true; };
+  // a flyaway from the point p (outward normal n, the sweep f there; root sunk 4 mm), length L: it leaves along the sweep tilted
+  // `lift` degrees off the surface and peels further off (`peel` degrees more over its first 30%), then hooks - its direction
+  // turning about the axis across the plane of (its direction, the hook direction hk = [out, up, sideways (n x f), along the
+  // sweep]) by `curl` degrees in all, more and more toward the tip (a hook, not an arc: at 300 px its last 2 - 3 segments still
+  // bend); `wob`: a slight twist out of that plane. Cut where it would turn back toward the head's centre or pass back inside the
+  // outline seen from any side (it only ever leaves the head, so what shows of it stays joined to the outline)
+  const strand = (p, n, f, L, lift, peel, hk, curl, wob, tone, level, push) => {
+    const sd = new T.Vector3().crossVectors(n, f).normalize(), a1 = new T.Vector3().crossVectors(f, n).normalize();
+    const root = p.clone().addScaledVector(n, -0.004), q = root.clone(), pts = [root.clone()], K = 24, ds = L/K;
+    const d = f.clone().applyAxisAngle(a1, lift*Math.PI/180);
+    const h = n.clone().multiplyScalar(hk[0]).add(V(0, hk[1], 0)).addScaledVector(sd, hk[2]).addScaledVector(f, hk[3]).normalize();
+    let a2 = null, rmax = root.distanceTo(H.O);
+    for (let i = 0; i < K; i++){
+      const u = (i + 0.5)/K;
+      q.addScaledVector(d, ds);
+      const r = q.distanceTo(H.O); if (i > 3 && r < rmax - 0.0015) break; rmax = Math.max(rmax, r);
+      pts.push(q.clone());
+      if (u < 0.3) d.applyAxisAngle(a1, peel/0.3*Math.PI/180/K);
+      else {
+        if (!a2){ a2 = new T.Vector3().crossVectors(d, h); if (a2.lengthSq() < 1e-6) a2 = sd.clone(); a2.normalize(); }
+        const w = (0.25 + Math.pow((u - 0.3)/0.7, 2.0))/0.58;         // curvature: 0.4 .. 2.2 of the mean, toward the tip
+        d.applyAxisAngle(a2, curl*w/0.7*Math.PI/180/K);
+        if (wob) d.applyAxisAngle(new T.Vector3().crossVectors(d, a2).normalize(), wob*Math.sin(u*7)*Math.PI/180/K);
+      }
+    }
+    const out = hulls.map(() => false);
+    for (let i = 1; i < pts.length; i++){
+      let cut = false; hulls.forEach((hl, k) => { if (!inside(hl, pts[i])) out[k] = true; else if (out[k]) cut = true; });
+      if (cut){ pts.length = i; break; }
+    }
+    if (pts.length > 2) put(pts, root, tone, level, push);
+  };
+  const wisp = (az, el, ...a) => { const s = H.at(az, el); if (s) strand(s.p, s.n, H.flow(s.p, s.n), ...a); };
+  const D = 1, M5 = [1, 5, 0.45], M6 = [0, 6, 0.5], TP = 0.025, BP = 0.05;   // tones; depth push: temples, elsewhere
+  // [az, el, length, lift, peel, hook [out, up, side, along], curl, wobble, tone, level, push]
+  for (const w of [
+    // temples, above and in front of the ears (7 a side): 6 - 10 cm strands leaving the sweep backward, peeling out and hooking up
+    // (a couple down), curling over at their ends; the two a side shown from ~200 px the longest, peeling out furthest and hooking
+    // hardest (at 300 px still a 2 - 3 segment hook, not a straight tick)
+    [84, 30, 0.1, 14, 45, [1, 1, 0, 0], 150, 12, M6, 0, TP], [96, 42, 0.085, 12, 50, [0.6, 1, 0, -0.3], 150, 15, D, -1, TP],
+    [74, 18, 0.085, 14, 45, [1, -0.7, 0, 0], 130, 10, M5, -1, TP], [104, 26, 0.1, 10, 50, [1, 0.8, 0, 0.2], 145, 14, D, 0, TP],
+    [88, 52, 0.06, 10, 30, [0.7, 1, 0.4, 0], 120, 12, M5, -1, TP], [78, 40, 0.065, 14, 40, [1, 1, 0.3, 0], 110, 10, D, -1, TP],
+    [100, 14, 0.07, 10, 30, [1, 0.6, 0, 0.3], 100, 12, M6, -1, TP],
+    [-82, 32, 0.1, 14, 45, [1, 1, 0, 0], 150, 12, D, 0, TP], [-98, 44, 0.085, 12, 50, [0.6, 1, 0, -0.3], 145, 15, M6, -1, TP],
+    [-72, 20, 0.085, 14, 45, [1, -0.7, 0, 0], 130, 10, D, -1, TP], [-106, 24, 0.1, 10, 50, [1, 0.8, 0, 0.2], 150, 14, M5, 0, TP],
+    [-90, 54, 0.06, 10, 30, [0.7, 1, -0.4, 0], 120, 12, D, -1, TP], [-80, 42, 0.065, 14, 40, [1, 1, -0.3, 0], 110, 10, M5, -1, TP],
+    [-102, 12, 0.07, 10, 30, [1, 0.6, 0, 0.3], 100, 12, D, -1, TP],
+    // the crown: lifting off the sweep, curling over to one side (seen from the front: small hooks, not upright ticks)
+    [30, 64, 0.075, 14, 35, [0.3, 0.2, 1, 0.3], 150, 10, M6, 0, BP], [-25, 66, 0.065, 12, 25, [0.3, 0.2, -1, 0.3], 115, 10, D, -1, BP],
+    [160, 62, 0.08, 12, 35, [0.5, 0.3, 1, 0.4], 140, 12, D, 0, BP], [-150, 58, 0.06, 10, 25, [0.5, 0.3, -1, 0.4], 120, 12, M5, -1, BP],
+    [120, 56, 0.055, 10, 30, [0.8, 1, 0, 0], 110, 10, M5, -1, BP], [-118, 52, 0.075, 12, 40, [0.8, 1, 0, 0], 145, 10, D, 0, BP],
+    // the back of the head: sticking out backward over the sweep, hooking up or sagging, curling sideways
+    [165, 32, 0.09, 14, 40, [1, 0.9, 0.4, 0], 145, 14, M6, 0, BP], [-168, 26, 0.07, 12, 30, [1, -0.7, -0.3, 0], 100, 14, D, -1, BP],
+    [190, 12, 0.07, 12, 30, [1, 0.8, -0.5, 0], 115, 12, D, -1, BP], [140, 20, 0.095, 12, 40, [1, 0.9, 0.3, 0], 150, 12, M5, 0, BP],
+    [-140, 16, 0.095, 12, 40, [1, 0.9, -0.3, 0], 140, 12, D, 0, BP], [205, 40, 0.06, 10, 30, [0.8, 1, -0.6, 0], 115, 10, M6, -1, BP]
+  ]) wisp(...w);
+  // the loose strand across the forehead: from under the hairline (the character's left of the widow's peak) in an S down over the
+  // brow, hanging a little off the skin (4 - 7 mm: seen from the side a strand in front of the brow's profile, not a line drawn on it),
+  // ending above the left eye's inner corner (the eyes stay clear); its root third drawn twice, a pixel apart (2 px wide where it
+  // leaves the hairline, at any size); a second one beside it down to the middle; deep tones, not pushed back
+  for (const [fh, tone, dbl] of [[[[-27, 36], [-22, 29], [-19, 24], [-20, 19], [-16, 14], [-12, 10.5]], 0, true], [[[-24, 37], [-20, 30], [-17, 25], [-18, 21]], 2, false]]){
+    const pts = [];
+    for (let i = 0; i <= 20; i++){
+      const u = i/20*(fh.length - 1), k = Math.min(fh.length - 2, Math.floor(u)), f = u - k;
+      const s = H.at(fh[k][0]*(1 - f) + fh[k+1][0]*f, fh[k][1]*(1 - f) + fh[k+1][1]*f);
+      if (s) pts.push(s.p.addScaledVector(s.n, i === 0 ? -0.004 : 0.004 + 0.003*Math.sin(Math.PI*i/20)));
+    }
+    if (pts.length > 1){ put(pts, pts[0], tone, 0, 0); if (dbl) put(pts, pts[0], tone, 0, 0, 1, 0.3); }
+  }
+  // fine dark ends off some of the nape locks' tips (buildHairCards: their tip points and directions), continuing them ~1.2 - 1.4 cm,
+  // bending a little off sideways along the collar's top edge (1 - 2 straight segments: these lines are not lengthened at their joints,
+  // so they do not bend hard); not pushed (they lie over the collar's top edge)
+  const ends = new T.Group(), P0 = P.length;
+  for (const t of H.tips || []){
+    const n = t.n, f = t.d;
+    strand(t.p.clone().addScaledVector(n, 0.003), n, f, t.L, 5, 15, [0.4, 1.5, t.side, 0], 25, 0, 1, t.level, 0.0);
+  }
+  // (moved out of the rigid strands into degenerate triangles: tone and level in their uv)
+  if (P.length > P0){
+    const pos = P.splice(P0), lv = R.splice(P0/3*4), tn = Tn.splice(P0), uv = [], idx = []; E.splice(P0);
+    for (let i = 0; i < pos.length/3; i++) uv.push(tn[3*i], lv[4*i + 3]);
+    for (let i = 0; i < pos.length/3; i += 2) idx.push(i, i + 1, i + 1);
+    const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(pos, 3));
+    g.setAttribute('normal', new T.Float32BufferAttribute(pos.map((_, k) => k % 3 === 1 ? 1 : 0), 3));
+    g.setAttribute('uv', new T.Float32BufferAttribute(uv, 2)); g.setIndex(idx);
+    ends.add(new T.Mesh(g, HAIR_WISP.skin));
+    skinToBody(ends, HAIR_WISP.skin, 'hairWispEnds', H.skin);
+  }
+  // into the head bone's space (rest pose), a child of the bone
+  const bone = B.head, M = hairHeadSpace(), v = new T.Vector3();
+  for (let i = 0; i < P.length; i += 3){
+    v.fromArray(P, i).applyMatrix4(M).toArray(P, i); v.fromArray(E, i).applyMatrix4(M).toArray(E, i);
+    v.fromArray(R, i/3*4).applyMatrix4(M); R[i/3*4] = v.x; R[i/3*4+1] = v.y; R[i/3*4+2] = v.z;
+  }
+  const g = new T.BufferGeometry();
+  g.setAttribute('position', new T.Float32BufferAttribute(P, 3));
+  g.setAttribute('aWisp', new T.Float32BufferAttribute(R, 4)); g.setAttribute('aTone', new T.Float32BufferAttribute(Tn, 3));
+  g.setAttribute('aEnd', new T.Float32BufferAttribute(E, 3));
+  const lines = new T.LineSegments(g, HAIR_WISP.mat); lines.name = 'hairWisps'; lines.frustumCulled = false; bone.add(lines);
+  return lines;
+}
+// Hair locks (cards): thin tapered locks with the hair class - the strand texture continues onto them from the hair they grow from
+// (CHAR_FS takes its coordinates from the bind position), the outline round them - drawn from both sides, riding on the scan's surface
+// under them (hairScalp().skin). Draped on the outermost surface (the hair, below it the collar's lip) along the rays from the head's
+// centre: growing out of the hair (roots 3 - 4 mm under it), every point out of the hair at least 7 mm clear of the surface under it,
+// bending outward smoothly ahead of the collar's lip (never back in under it).
+//  - The nape: the hair longer and ragged at the back - locks from behind one ear across the back of the head to behind the other,
+//    sweeping down over the hair's old clean edge onto the collar's top rim, each split in two strands of their own length ending in
+//    uneven points, a few fine dark flyaways off their tips (buildHairWisps). Their flat colour stands in for the scan's painted
+//    luminance: the dark of the scan's hair at the back of the head (the sprite keeps the back's dark tone cluster), and the strand
+//    texture's under-layer / nape shade darkens them like the hair just above them.
+//  - Tufts breaking the smooth outline: locks peeling off the sweep and lifting 2 - 3 cm clear of the mop at their pointed tips, folded
+//    lengthwise into a V (seen edge-on they keep their width): five big ones from sprite size up - both temples, the crown's right,
+//    its back-left, the back of the head - stable 1 - 2 px points / notches at 96 px, 3 - 6 px pointed lock ends at 300 px; smaller
+//    ones over the temples and the crown, and a broad one low on each temple (the mop sticking out past the face line in the front
+//    view), from the strand texture's switch up (HAIR_TUFT: their uv.x 1; at sprite size their 1 px tips would only blink).
+const HAIR_CARD = charMat({ cls: CLS.hair, color: '#474747', skinning: true, double: true });
+const HAIR_TUFT = charMat({ cls: CLS.hair, color: '#474747', skinning: true, double: true });
+HAIR_TUFT.defines.HAIR_TUFT = 1; HAIR_TUFT.uniforms.uHairPxM = SH.uPxM;
+function buildHairCards(H){
+  const grp = new T.Group(), tgrp = new T.Group(), tips = []; let id = 0;
+  H.tuftPts = [];
+  // a lock along the scalp directions path [[az, el], ...] (K samples), height over the surface h0 -> h1 (as the hp-th power along),
+  // width w0 (from half at the root, full from 30%, tapering to the tip over the last `tip` of its length), its edges `cup` x its half
+  // width under the middle (a V, deepening over the first 40%: the root's edges stay out of the hair); out of the hair every point at
+  // least `clr` clear of the surface under it; `edge`: it ends where the surface below steps out (the hair's edge over the collar's
+  // lip); the tip's flyaway (wisp: [length, curl, level]) or none; uv.x = hd (1: HD only); into the group `to`
+  const card = (path, h0, h1, w0, { wisp = null, hp = 1, cup = 0.15, hd = 0, to = grp, tip = 0.55, clr = 0.007, edge = false } = {}) => {
+    const K = 20; let S = [];
+    for (let i = 0; i <= K; i++){
+      const u = i/K*(path.length - 1), k = Math.min(path.length - 2, Math.floor(u)), f = u - k;
+      const az = path[k][0]*(1 - f) + path[k+1][0]*f, el = path[k][1]*(1 - f) + path[k+1][1]*f, s = H.at(az, el, true);
+      if (edge && i > 1 && (!s || s.r > S[i-1].s + 0.012)) break;
+      if (!s) return; S.push({ d: s.d, r: s.r + h0 + (h1 - h0)*Math.pow(i/K, hp), s: s.r });
+    }
+    // edge: the lock ends where the surface below steps out (the hair's edge over the collar's lip), resampled along its shorter
+    // length (the taper keeps its share)
+    if (S.length < K + 1){
+      const n = S.length - 1, R = S; S = [];
+      for (let j = 0; j <= K; j++){ const u = j/K*n, i = Math.min(n - 1, Math.floor(u)), f = u - i;
+        S.push({ d: R[i].d.clone().lerp(R[i+1].d, f).normalize(), r: R[i].r*(1 - f) + R[i+1].r*f, s: R[i].s*(1 - f) + R[i+1].s*f }); }
+    }
+    // flare out ahead of whatever stands out below (the collar's lip): at most 3.2 mm in per sample going down
+    for (let i = K - 1; i >= 0; i--) S[i].r = Math.max(S[i].r, S[i+1].r - 0.0032);
+    const C = S.map(s => H.O.clone().addScaledVector(s.d, s.r)), pos = [], uv = [], idx = [];
+    for (let i = 0; i <= K; i++){
+      const t = C[Math.min(K, i + 1)].clone().sub(C[Math.max(0, i - 1)]).normalize(), o = S[i].d;
+      const sd = new T.Vector3().crossVectors(t, o).normalize(), u = i/K, w = w0*(u < 1 - tip ? 0.5 + 0.5*Math.min(1, u/0.3) : Math.pow(Math.cos((u - 1 + tip)/tip*Math.PI/2), 0.7));
+      const out = S[i].r > H.radial(S[i].d) + 0.001;
+      for (const e of [-1, 0, 1]){
+        const p = C[i].clone().addScaledVector(sd, e*w/2).addScaledVector(o, e ? -Math.max(0.002, cup*w/2)*Math.min(1, u/0.4) : 0);
+        // out of the hair, every point at least clr clear of whatever lies under it (the collar's rim between the drape's rays)
+        if (out){ const q = p.clone().sub(H.O), r = q.length(), rs = H.radial(q.divideScalar(r)); if (r < rs + clr) p.copy(H.O).addScaledVector(q, rs + clr); }
+        pos.push(p); uv.push(hd, 0); if (to === tgrp) H.tuftPts.push(p);
+      }
+      if (i > 0) for (const [a, b] of [[0, 1], [1, 2]]){ const j = 3*(i - 1); idx.push(j + a, j + b, j + 3 + a, j + b, j + 3 + b, j + 3 + a); }
+    }
+    const g = new T.BufferGeometry().setFromPoints(pos); g.setAttribute('uv', new T.Float32BufferAttribute(uv, 2)); g.setIndex(idx);
+    g.computeVertexNormals();
+    // outward faces front (drawn both sides anyway; the light wants the outward normal)
+    const n0 = new T.Vector3().fromBufferAttribute(g.attributes.normal, 3*Math.floor(K/2) + 1);
+    if (n0.dot(S[Math.floor(K/2)].d) < 0){ for (let i = 0; i < idx.length; i += 3){ const a = idx[i]; idx[i] = idx[i+1]; idx[i+1] = a; } g.setIndex(idx); g.computeVertexNormals(); }
+    to.add(new T.Mesh(g, to === grp ? HAIR_CARD : HAIR_TUFT)); id++;
+    if (wisp){
+      const tp = C[K], td = C[K].clone().sub(C[K-2]).normalize();
+      tips.push({ p: tp, d: td, n: S[K].d.clone().addScaledVector(td, -S[K].d.dot(td)).normalize(), L: wisp[0], curl: wisp[1], level: wisp[2], side: id % 2 ? 0.5 : -0.5 });
+    }
+  };
+  // the nape: [root az, root el, tip el, width, tip wisp] - the roots across the back of the head from behind the right ear (az 95)
+  // to behind the left (az 260), the tips drawn a little in toward the back's middle (the sweep gathers toward the nape), each lock
+  // two strands, the second a little shorter and offset (one where it would start at the hair's edge). The hair's old clean edge lies at el -20 .. -24 (10 - 12 cm out), the
+  // collar's top rim just below it, 15 - 16 cm out. Measured clearances decide where they may go: behind the right ear the lip keeps
+  // 15 - 25 mm from the pack and the strap in every anim, so the locks there sweep over the lip's top and hang over its outer face,
+  // riding on it; behind the left ear the shoulder strap rides up to 0 - 2 mm of the lip's lower part in the run and the landing
+  // (9 - 12 mm at its top), so the locks there just reach over the rim's top edge; across the back (az 145 - 215) the landing's
+  // crouch brings the pack's lid within 0 - 6 mm of the lip and 6 - 15 mm of the occiput (y 1.68), 16 - 19 mm of the hair's lower
+  // edge (y 1.66), and the collar's inner wall stands 5 - 8 mm off the hair's edge - there the locks start below the occiput, lie
+  // 3.5 mm over the hair and end at its edge (each at its own place along it: uneven points just above the rim)
+  for (const [az, el0, el1, w, ws] of [
+    [96, 6, -24, 0.024, [0.012, 70, 0]], [110, 12, -27, 0.028, null], [124, 4, -22, 0.026, [0.014, 80, -1]], [138, 14, -26, 0.028, null],
+    [152, 2, -25, 0.026, null], [166, -2, -26, 0.03, [0.012, 70, -1]], [180, -12, -23, 0.026, null], [194, -2, -26, 0.03, null],
+    [208, -6, -24, 0.026, null], [222, 14, -23, 0.028, null], [236, 4, -22.5, 0.026, null], [250, 10, -23, 0.026, null],
+    [258, 4, -22, 0.022, null]
+  ]){
+    const az1 = az + (180 - az)*0.22, lip = az < 145 || az > 215, o = lip ? { hp: 0.45 } : { hp: 0.3, clr: 0.0035, edge: true };
+    const s2 = az < 145 ? -1 : (az > 215 ? 1 : 2.5);   // (the second strand: off toward the side over the lip, never toward the back)
+    card([[az, el0], [az*0.6 + az1*0.4, (el0 + el1)/2], [az1, el1]], -0.004, lip ? 0.008 : 0.0035, w, { wisp: ws, ...o });
+    if (el0 > -8) card([[az + 2*s2, el0 - 6], [az*0.5 + az1*0.5 + 2*s2, (el0 + el1)/2 - 3], [az1 + 2.4*s2, el1 + 3]], -0.003, lip ? 0.008 : 0.0035, w*0.7, o);
+  }
+  // the tufts: [path, lift, width, HD only, V depth]
+  for (const [path, lift, w, hd, cup] of [
+    // from sprite size up: both temples, the crown's right and (smaller) its left, its back-left, the back of the head and its upper
+    // right - not in pairs (from the front two alike on the crown would read as horns)
+    [[[86, 27], [99, 30], [112, 33]], 0.034, 0.024, 0, 0.8], [[[-88, 29], [-101, 32], [-114, 35]], 0.034, 0.024, 0, 0.8],
+    [[[78, 58], [98, 55], [118, 50]], 0.028, 0.022, 0, 0.8], [[[-72, 59], [-92, 57], [-112, 52]], 0.022, 0.02, 0, 0.8],
+    [[[-138, 52], [-149, 44], [-160, 36]], 0.034, 0.024, 0, 0.8], [[[172, 26], [175, 16], [178, 6]], 0.034, 0.024, 0, 0.8],
+    [[[134, 44], [142, 37], [150, 30]], 0.03, 0.022, 0, 0.8],
+    // HD: smaller ones over the temples, the crown and the back; a broad one low on each temple
+    [[[108, 41], [117, 44], [126, 46]], 0.02, 0.014, 1, 0.6], [[[-108, 43], [-117, 46], [-126, 48]], 0.02, 0.014, 1, 0.6],
+    [[[25, 74], [43, 75], [60, 74]], 0.018, 0.013, 1, 0.6], [[[-35, 75], [-52, 75], [-70, 74]], 0.014, 0.012, 1, 0.6],
+    [[[205, 45], [210, 40], [215, 35]], 0.02, 0.014, 1, 0.6],
+    [[[153, 8], [155, 2], [158, -4]], 0.018, 0.014, 1, 0.6], [[[-163, 14], [-166, 7], [-170, 0]], 0.018, 0.014, 1, 0.6],
+    [[[80, 19], [90, 19.5], [100, 20]], 0.016, 0.026, 1, 0.3], [[[-80, 21], [-90, 21.5], [-100, 22]], 0.016, 0.026, 1, 0.3]
+  ]) card(path, -0.004, lift, w, { hp: 1.2, cup, hd, to: tgrp, tip: 0.4 });
+  skinToBody(tgrp, HAIR_TUFT, 'hairTufts', H.skin);
+  skinToBody(grp, HAIR_CARD, 'hairCards', H.skin);
+  H.tips = tips;
+}
 function buildGear(){
   const pack = new T.Group(); pack.name = 'backpack';
   // main body (sheet C back view): ~3/4 of the back's width, top on the shoulder line so the high collar shows above it,
@@ -2674,6 +3427,7 @@ function buildGear(){
   });
   buildStraps();
   buildKneeGuards();
+  const hs = hairScalp(); buildHairCards(hs); buildHairWisps(hs);
   // re-parent to spine_03 keeping the bind-pose placement
   const bone = B.spine_03; hero.updateMatrixWorld(true); bone.updateWorldMatrix(true,false);
   const M = new T.Matrix4().copy(bone.matrixWorld).invert().multiply(hero.matrixWorld);
