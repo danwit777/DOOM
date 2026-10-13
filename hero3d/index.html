@@ -1733,11 +1733,13 @@ function addPlateRim(geo, mat){
   for (let i = 0; i < n; i++){ const w = weld[i]; rim[i] = pl[w] && dist[w] < 1e8 ? dist[w] : 0; }
 }
 // Classify the colour texture into material classes once (r = class/16, g = smoothed value offset within the class, b = smoothed value).
+const TEXELS = new WeakMap();                                         // texture -> its RGBA texels, from buildMatTex to repairSkin
 function buildMatTex(tex){
   const img = tex.image, w = img.width, h = img.height;
   const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
   const cx = cv.getContext('2d'); cx.drawImage(img, 0, 0);
   const src = cx.getImageData(0, 0, w, h).data, N = w*h;
+  TEXELS.set(tex, { src, w, h });                                     // (read once more by repairSkin, which then drops it)
   const cls = new Uint8Array(N), val = new Float32Array(N);
   for (let i = 0; i < N; i++){
     const r = src[i*4]/255, g = src[i*4+1]/255, b = src[i*4+2]/255;
@@ -2025,6 +2027,57 @@ function setBoneWorldQ(bone, qW, w){
   bone.parent.getWorldQuaternion(_q3); bone.quaternion.copy(_q3.invert().multiply(_q2));
   bone.updateWorldMatrix(false,true);
 }
+// neck_01 at share k of the way from the chest's (spine_03) rotation to the head's, both taken against their bind; the head keeps its
+// world rotation. (It replaces whatever neck rotation the clip had - the head's own world rotation is kept, but as neck_01 is its
+// parent the head's position moves with the new neck angle: <= 0.3 cm in walk, ~1 cm in run, ~2 cm in land.)
+const _qn = [new T.Quaternion(), new T.Quaternion(), new T.Quaternion(), new T.Quaternion()];
+function neckShare(k){
+  const [qs, qh, qhw, qn] = _qn;
+  B.head.updateWorldMatrix(true, false); B.head.getWorldQuaternion(qhw);
+  B.spine_03.getWorldQuaternion(qs).multiply(_q3.copy(BIND.spine_03.w).invert());
+  qh.copy(qhw).multiply(_q3.copy(BIND.head.w).invert());
+  qn.copy(qs).slerp(qh, k).multiply(BIND.neck_01.w);
+  setBoneWorldQ(B.neck_01, qn, 1); setBoneWorldQ(B.head, qhw, 1);
+}
+// The collar's helper bones follow the head's turn against the chest (its twist about the chest's up axis) asymmetrically, and only
+// past a soft free play (quadratic up to twice the play, then the full share): the clips alone twist the head against the chest by
+// up to ~0.4 rad (walk / run / land: the torso counter-turns under a level head), and that ordinary twist leaves the collar at rest
+// on the chest (spine_03), lying on the pauldrons' rims as in the T-pose; only a real look turn / nod moves it. The wall chain
+// (collarA -> collarB) of the side the head turns toward gives way once the jaw / beard reaches it (RIG.collarFree, then
+// collarTurn[0] of the turn), the other side's turns collarTurn[1], so it keeps covering the shoulder and the pauldron's rim; each
+// link carries half, so no weight blend spans more than half of it; both take collarNod of the nod / tilt past RIG.nodFree.
+// The lapel's inner half (collarL) goes round with the jaw toward its side past RIG.lapelFree (at most RIG.lapelMax, so on a big
+// turn its tip does not swing out past the chin) and half way (with the neck) away from it. In the T-pose they sit exactly at rest.
+const _cd = [new T.Quaternion(), new T.Quaternion(), new T.Quaternion(), new T.Quaternion(), new T.Quaternion(), new T.Vector3(), new T.Quaternion(), new T.Quaternion(), new T.Quaternion()];
+const freePlay = (a, c) => a < 2*c ? a*a/(4*c) : a - c;                 // a soft free play c of an angle a >= 0
+function collarDrive(){
+  if (!B.collarA_l) return;
+  if (S.tp >= 0.999){ for (const s of ['l','r']) for (const lv of ['A','B','L']) B['collar'+lv+'_'+s].quaternion.set(0, 0, 0, 1); return; }
+  const [qs, rel, tw, sw, h, up, ta, tb, nod] = _cd;
+  B.spine_03.updateWorldMatrix(true, false); B.spine_03.getWorldQuaternion(qs).multiply(_q3.copy(BIND.spine_03.w).invert());
+  B.head.getWorldQuaternion(rel).multiply(_q3.copy(BIND.head.w).invert()).multiply(_q3.copy(qs).invert());   // head against the chest (world)
+  up.set(0, 1, 0).applyQuaternion(qs);
+  const d = rel.x*up.x + rel.y*up.y + rel.z*up.z; tw.set(up.x*d, up.y*d, up.z*d, rel.w).normalize();
+  const turn = 2*Math.atan2(tw.x*up.x + tw.y*up.y + tw.z*up.z, tw.w); sw.copy(rel).multiply(_q3.copy(tw).invert());   // twist about the chest's up, the rest
+  // the nod / tilt past its free play (as a share of the swing: slerp toward it)
+  if (sw.w < 0) sw.set(-sw.x, -sw.y, -sw.z, -sw.w);
+  const sa = 2*Math.acos(Math.min(1, sw.w)), nk = sa > 1e-5 ? freePlay(sa, RIG.nodFree) / sa : 0;
+  const at = Math.abs(turn), sgn = Math.sign(turn), tow = sgn*RIG.collarTurn[0]*freePlay(at, RIG.collarFree);
+  const lt = freePlay(at, RIG.lapelFree), lm = RIG.lapelMax, ltow = sgn*RIG.lapelTurn[0]*lm*Math.tanh(lt/lm);
+  for (const [s, sg] of [['l', 1], ['r', -1]]){
+    const ang = turn*sg > 0 ? tow : RIG.collarTurn[1]*turn;
+    h.setFromAxisAngle(up, ang/2).premultiply(nod.identity().slerp(sw, nk*RIG.collarNod/2));   // each link: half
+    const a = B['collarA_'+s], b = B['collarB_'+s];
+    setBoneWorldQ(a, ta.copy(h).multiply(qs).multiply(BIND.spine_03.w), 1);
+    setBoneWorldQ(b, tb.copy(h).multiply(ta), 1);
+    // the lapel's inner half: round with the jaw toward its side; away from it half way (with the neck), but past RIG.lapelKnee
+    // the rest of the turn fully (on a big turn the jaw would leave the lapel standing across the front of the beard)
+    const kt = RIG.lapelKnee, kw = 0.2, ex = at - kt[0], knee = ex < -kw ? 0 : ex > kw ? ex : (ex + kw)*(ex + kw)/(4*kw);
+    h.setFromAxisAngle(up, turn*sg > 0 ? ltow : sgn*(RIG.lapelTurn[1]*lt + (kt[1] - RIG.lapelTurn[1])*knee))
+      .premultiply(nod.identity().slerp(sw, nk*RIG.lapelNod));
+    setBoneWorldQ(B['collarL_'+s], ta.copy(h).multiply(qs).multiply(BIND.spine_03.w), 1);
+  }
+}
 function limbIK(up, lo, ha, a, b, targetW, poleW, w){
   if (w <= 0.001) return;
   up.updateWorldMatrix(true,false); const Sp=up.getWorldPosition(new T.Vector3());
@@ -2294,6 +2347,11 @@ function update(dt){
     const hw = (1-S.tp)*(1-move*0.6), qb = new T.Quaternion().setFromAxisAngle(UP, by);
     setBoneWorldQ(B.neck_01, qb.clone().multiply(_q.copy(_qy).slerp(new T.Quaternion(), 0.4)).multiply(BIND.neck_01.w), hw);
     setBoneWorldQ(B.head, qb.multiply(_qy).multiply(BIND.head.w), hw);
+    // the neck carries a fixed share of the head's turn against the chest (whatever the clip, the stance's torso twist or the look
+    // did to it): the neck skin and the collar (repairSkin) blend spine_03 -> neck_01 -> head, so no blend spans more than that share.
+    // The head's own world rotation is kept exactly; only neck_01 (the neck / collar weights) moves.
+    if (S.tp < 0.999) neckShare(RIG.neckShare);
+    collarDrive();
   }
 
   const sling = AP ? AP.hands*air : 0;   // a clip that needs both hands: the weapon is slung, its arms follow the clip
@@ -2410,11 +2468,13 @@ function shirtSeams(dt){
     let sm = null; model.traverse(o => { if (o.isSkinnedMesh && !sm) sm = o; });
     const g = sm.geometry, P = g.attributes.position, SI = g.attributes.skinIndex, SW = g.attributes.skinWeight, bones = sm.skeleton.bones;
     // front-surface candidates on the body's own skin (no coat-panel or arm weights; the rig's thigh weights reach the chest)
+    // (when repairSkin ran, the test is on the weights the scan's own skin would have had here: COAT.coat0, from buildCoat - the
+    // probes stay on the vertices they were tuned on)
     const cand = [];
     for (let i = 0; i < P.count; i++){
       const x = P.getX(i), y = P.getY(i), z = P.getZ(i); if (z < 0 || Math.abs(x) > 0.2 || y < 1.0 || y > 1.35) continue;
       const ids = [SI.getX(i), SI.getY(i), SI.getZ(i), SI.getW(i)], ws = [SW.getX(i), SW.getY(i), SW.getZ(i), SW.getW(i)];
-      if (ids.every((j, k) => ws[k] === 0 || !/^coat_|arm_|hand_/.test(bones[j].name))) cand.push([i, x, y, z]);
+      if (COAT.coat0 ? !COAT.coat0[i] : ids.every((j, k) => ws[k] === 0 || !/^coat_|arm_|hand_/.test(bones[j].name))) cand.push([i, x, y, z]);
     }
     if (!cand.length){ SBS.probes = false; return; }
     // the body vertex at bind (x, y): the outermost (largest z) within 1.5 cm, else the nearest
@@ -2753,7 +2813,9 @@ function bodyCloud(skip, y0=1.0, y1=1.7){
   let sm = null; model.traverse(o=>{ if (o.isSkinnedMesh && !sm) sm = o; });
   hero.updateMatrixWorld(true); sm.skeleton.update();
   const toChar = new T.Matrix4().copy(hero.matrixWorld).invert().multiply(sm.matrixWorld), NM = new T.Matrix3().getNormalMatrix(toChar);
-  const bp = sm.geometry.attributes.position, bn = sm.geometry.attributes.normal, bi = sm.geometry.attributes.skinIndex, bw = sm.geometry.attributes.skinWeight, bones = sm.skeleton.bones;
+  // (the parts are picked by the scan's own dominant bone, from before repairSkin: the gear was fitted to that surface)
+  const sw0 = sm.geometry.userData.scanSkin || sm.geometry.attributes;
+  const bp = sm.geometry.attributes.position, bn = sm.geometry.attributes.normal, bi = sw0.skinIndex, bw = sw0.skinWeight, bones = sm.skeleton.bones;
   const P = [], N = [], v = new T.Vector3(), n = new T.Vector3(), all = new Float32Array(bp.count*3), keep = new Uint8Array(bp.count);
   for (let i=0;i<bp.count;i++){
     let top=0, tw=-1; for (let k=0;k<4;k++){ const w=[bw.getX(i),bw.getY(i),bw.getZ(i),bw.getW(i)][k]; if (w>tw){ tw=w; top=k; } }
@@ -2874,7 +2936,7 @@ function buildStraps(){
   // smooth weight field (many neighbours, gaussian falloff) without any arm / leg / head share: no kinks where the webbing passes
   // the armpit when the clavicles and upper arms move (aim, T-pose, run)
   const opt = { skip:/head|hand|arm|finger|thumb|index|middle|ring|pinky|thigh|calf|foot|ball/i, rigidBone:B.spine_03, K:32, sigma:0.05,
-    noWeight:/head|neck|hand|arm|finger|thumb|index|middle|ring|pinky|thigh|calf|foot|ball/i,
+    noWeight:/head|neck|collar|hand|arm|finger|thumb|index|middle|ring|pinky|thigh|calf|foot|ball/i,
     rigid:(x,y,z)=>Math.min(1, Math.max(0, (-0.07 - x)/0.06)) };
   skinToBody(straps, GEAR.strapS, 'shoulderStraps', opt); skinToBody(edges, GEAR.edgeS, 'strapEdges', opt); skinToBody(metal, GEAR.metalS, 'strapLocks', opt);
 }
@@ -3565,11 +3627,16 @@ function buildCoat(){
   const yc = [0, 1, 2].map(k => (COAT.Y[k]+COAT.Y[k+1])/2), AZ = COAT.AZ, gap = 2*Math.PI - 2*AZ[3];
   const chainOf = (sg, i) => COAT.chains[(sg > 0 ? 0 : 4) + i];
   const SI = new Uint16Array(n*4), SW = new Float32Array(n*4), amt = new Float32Array(n);
+  // (also the top four this re-weight gives the scan's own weights, from before repairSkin: shirtSeams keeps picking its probes by
+  // them, so they stay on the vertices they were tuned on - no coat panel, arm or hand among them)
+  const sk0 = geo.userData.scanSkin, coat0 = sk0 ? new Uint8Array(n) : null;
   for (let i = 0; i < n; i++){
-    const w = weld[i], cs = A[w], y = wp[w].y, hc = ss(1.07, 0.95, y), a = cs*hc, acc = new Map();
+    const w = weld[i], cs = A[w], y = wp[w].y, hc = ss(1.07, 0.95, y), a = cs*hc, acc = new Map(), acc0 = coat0 && new Map();
     amt[i] = a;
     const o = [[SIa.getX(i), SWa.getX(i)], [SIa.getY(i), SWa.getY(i)], [SIa.getZ(i), SWa.getZ(i)], [SIa.getW(i), SWa.getW(i)]];
     for (const [j, x] of o) if (x > 0) acc.set(j, (acc.get(j)||0) + x*(1-cs));
+    if (coat0){ const I0 = sk0.skinIndex, W0 = sk0.skinWeight;          // (the scan's attributes may be interleaved: by accessor)
+      for (const [j, x] of [[I0.getX(i), W0.getX(i)], [I0.getY(i), W0.getY(i)], [I0.getZ(i), W0.getZ(i)], [I0.getW(i), W0.getW(i)]]) if (x > 0) acc0.set(j, (acc0.get(j)||0) + x*(1-cs)); }
     if (cs*(1-hc) > 0.001) acc.set(pelI, (acc.get(pelI)||0) + cs*(1-hc));
     if (a > 0.001){
       const t = th[w], at = Math.abs(t), cw = [];
@@ -3587,12 +3654,14 @@ function buildCoat(){
       else { const k = y >= yc[1] ? 0 : 1, f = (yc[k] - y) / (yc[k] - yc[k+1]); hw.push([k, 1-f], [k+1, f]); }
       for (const [ch, x] of cw) for (const [k, y2] of hw) if (x*y2 > 0) acc.set(ch.bi[k], (acc.get(ch.bi[k])||0) + a*x*y2);
     }
+    if (coat0){ if (cs*(1-hc) > 0.001) acc0.set(pelI, (acc0.get(pelI)||0) + cs*(1-hc)); for (const [j, x] of acc) if (j >= nb0) acc0.set(j, x);
+      coat0[i] = [...acc0.entries()].sort((p, r) => r[1]-p[1]).slice(0, 4).some(e => e[1] > 0 && (e[0] >= nb0 || /arm_|hand_/.test(bones0[e[0]].name))) ? 1 : 0; }
     const top = [...acc.entries()].sort((p, r) => r[1]-p[1]).slice(0, 4), sum = top.reduce((s, e) => s + e[1], 0) || 1;
     for (let k = 0; k < 4; k++){ SI[i*4+k] = top[k] ? top[k][0] : 0; SW[i*4+k] = top[k] ? top[k][1]/sum : 0; }
   }
   geo.setAttribute('skinIndex', new T.BufferAttribute(SI, 4)); geo.setAttribute('skinWeight', new T.BufferAttribute(SW, 4));
   sm.bind(new T.Skeleton(bones0.concat(newB), inv0.concat(invs)), sm.bindMatrix);
-  COAT.mesh = sm; COAT.amt = amt;
+  COAT.mesh = sm; COAT.amt = amt; COAT.coat0 = coat0;
   // radial offset map: the outermost shell vertex per (side, around, down) bin, relative to the chains' heightfield
   const ov = new Float32Array(2 * OFF.nu * OFF.ns).fill(-9), ev = new Float32Array(2 * OFF.ns).fill(9), PPr = COAT.chains.map(ch => ch.rest), pv = new T.Vector3();
   for (let w = 0; w < u; w++){
@@ -4082,6 +4151,474 @@ function slimBody(mesh){
   }
   P.needsUpdate = true; g.computeBoundingSphere();
 }
+// ---------- Skin-weight repair: the scan's auto-rig weights made anatomically plausible (bind pose, once, before the gear / coat) ----------
+// Meshy's auto-rig left neck_01 and spine_03 without weight (no vertex above 5 %): the neck, the coat collar, the beard and the jaw were
+// shared between the head and the two clavicles, so every arm swing (walk, run, climb, aim) and every LOOK turn of the head pulled the
+// face and the beard down into the collar ("the head stretches"). It also bled the thighs up the coat to the chest, crossed the legs'
+// weights over the crotch, spread the clavicles down the chest and the sleeves, left the heels / soles on the shins and parked weight
+// on leaf bones at the finger / toe tips. repairSkin rebuilds the weights by anatomical part. The parts come from the bind T-pose
+// geometry (the pre-slim rest positions the rules were laid out on); the texture at the vertex only tells the light beard / hair /
+// skin from the dark neck shadow inside the head's ellipse, and the orange pauldron from the collar beside it:
+//   R0 side: an _l bone on the right half (and vice versa) fades out past the midline (2..7 cm; legs 4..20 cm) into its mirror bone.
+//      Leaf helpers hand their weight to the bone that moves them: Bone_035 / 036 (fingertips) and *HandMiddle4 -> middle_03,
+//      *Toe_End -> ball, headfront / HeadTop_End -> head.
+//   R1 HEAD (skull, face, hair, ears, beard) = head 1.0: rigid. Arm swing never reaches the head any more.
+//   R2 NECK skin: spine_03 -> neck_01 -> head up the neck (y 1.48 .. 1.60), at least as far round as the jaw that sweeps over it;
+//      kept as a strong prior through the R8 blend. (update() turns neck_01 RIG.neckShare of the way from the chest to the head.)
+//   R3 COLLAR (stand-up collar, lapels, the flaps over the shoulders), three layouts blended round the sides (RIG.lapelFront,
+//      RIG.flapScanX):
+//      (a) the LAPELS in front of the neck axis lie on the shoulders and the pauldrons' inner tops. They keep the scan's own layout:
+//      its clavicle share (0.6 .. 0.85) - the clips hold the shoulder girdle ~20 deg forward of the T-pose, and a lapel left on the
+//      chest lets the pauldron's inner face (skin-coloured scan texels) tip out from under it, a pale wedge beside the beard in
+//      walk / run - and its head share (0.1 low .. 0.45 at the top) moved to that side's lapel helper collarL (collarDrive: at
+//      rest through the clips' ordinary head-vs-chest twist, round with the jaw toward its side on a real turn, half way away).
+//      Their seam with the beard takes the head's share by surface distance from it (RIG.lapelSeam), like the throat beside it.
+//      (c) the FLAPS out on the shoulders: the scan's clavicle / upper arm layout too (the head's few % to spine_03).
+//      (b) the STAND-UP part (walls, the lip at the nape): the share f of the head's turn a vertex follows grows up the
+//      stand-up part (RIG.collarY) and next to the beard (the vertices the head's rim reaches when it turns: the sweep). It is
+//      taken along chains whose links never differ by more than half the turn: the lip at the nape spine_03 -> neck_01 -> head,
+//      the walls spine_03 -> collarA -> collarB (that side's helper chain: it only gives way once the jaw reaches it, and turns a
+//      fifth of the way when the head turns away, so the side the jaw leaves keeps covering the shoulder; collarDrive). The rest
+//      stays on spine_03, the clavicles only toward the shoulder ends, a little upper arm on the outermost flaps; the stand-up
+//      part's seam with the hair rides the head. Kept as a prior through R8.
+//   R3b where the collar meets the pauldron (R5) it starts from the pauldron's weights and eases into its rule over RIG.rimBlend of
+//      surface, so that crease never opens.
+//   R4 TORSO: the thighs fade out over the hip crease (none at the belt), the clavicles only on the upper chest / shoulders, no
+//      upper arm (from the T-pose bind every pose swings the arms 70+ degrees: any share on the lats tears the coat's sides), the
+//      sternum on the spine; the spine share spread along pelvis -> spine_01 -> spine_02 -> spine_03 by height (linear between the
+//      segments' mid-heights). The throat under the beard takes the head's share by the lapels' seam distance (R3 a).
+//   R5 SHOULDER (and the whole pauldron): only clavicle / upper arm / upper spine (the scan's head share on the pauldron's inner top,
+//      up to 0.4, goes to spine_03: it held that edge to the body, not to the arm).
+//   R6 / R7 limbs: each bone fades out a few cm past its joint (sleeve / forearm / hand, thigh / shin / foot); heel and sole ride the
+//      foot only; calf weight on the outer coat skirt above the knee goes to the thigh (buildCoat keeps a share of it).
+//   R8 every step left between neighbours (re-weighted next to kept, one part's rule next to another's, L1 > 0.25), the fade zones
+//      and a 5 cm band round the rigid head are re-solved as a screened harmonic blend over the (UV-seam welded) surface (each
+//      vertex pulled toward its rule weights with 1/4 of its neighbours' say, the neck 1x, the collar 1/2x; the neck skin and the
+//      throat ease to a free blend over the last 5 cm next to the head and may take head weight there), limited to the bones
+//      plausible for it, so no edge takes a step and the rules still hold away from the steps.
+//   R9 the pauldrons and the sleeves' tops get a light smoothing (RIG.finalSmooth sweeps) for the short edges the blends left.
+// Four influences per vertex, normalised. The rest shape does not change (weights only act once bones move; the collar bones rest in
+// the chest's frame). The scan's original weights stay in geometry.userData.scanSkin: bodyCloud keeps picking the gear's rest surface
+// by them, so straps / knee guards sit exactly where they were fitted. geometry.userData.skinRepair holds the part counts (a warning
+// is logged when they drift from the scan the rules were tuned on, e.g. after a texture repaint). Constants: hero.glb's bind pose
+// (+x = the character's left, +y up, +z front, metres).
+const RIG = {
+  // parts (bind y / |x| / z from the neck axis, m): the head above top, the neck / collar ring from collar up, the chin / jaw / nape
+  // splits, the skull behind above skull, the front past front; the head's ellipse round the neck axis [x, front z, back z, + back z
+  // growth, over y]; the shoulders (above shoulderY, past shoulderX) and the torso (above the hips) below it
+  headY:{ top:1.72, collar:1.46, chin:1.505, jaw:1.50, nape:1.48, skull:1.66, front:0.03 }, neckEll:[0.125, 0.17, 0.125, 0.05, 1.60, 1.68],
+  shoulderY:1.28, shoulderX:0.15, hipsY:0.96,
+  // the orange pauldron = shoulder from |x| front (in front of the neck axis) / side (down to backZ behind it) / back (below backTop)
+  pauldron:{ front:0.10, side:0.15, back:0.17, backZ:-0.06, backTop:1.58 },
+  sideFade:[0.02, 0.07],                                    // R0: a bone of the other side fades out past the midline (|x|, m)
+  legSideFade:[0.04, 0.20],                                 // R0: ... the legs' (the inner thighs meet at the crotch)
+  // R4: the spine bones' bands up the torso (fade in / out, y), the throat's neck_01, the clavicles on the chest (outer / inner)
+  spineBand:{ pelvis:[1.15, 1.25], spine_01:[0.90, 0.98, 1.42, 1.48], spine_02:[1.12, 1.20], spine_03:[1.24, 1.30], throat:[1.40, 1.45],
+    clavOut:[1.16, 1.28], clavIn:[1.20, 1.32] },
+  hipFade:[0.93, 1.08],                                     // R4: the thighs fade out over the hip crease (y)
+  spineAtY:[1.17, 1.29, 1.38],                              // R4 / R5: pelvis | spine_01 | spine_02 | spine_03 by height (what a dropped share goes to)
+  chestClav:{ y:[1.30, 1.50], x:0.15, cap:[0.1, 0.45, 0.12], toSpine01:1.22, upperToClav:1.33 },   // R4: the clavicles' cap on the
+                                                            // sternum (cap[0] + cap[1] ss(0, cap[2], |x|)); clavicle / upper arm hand-offs by height
+  elbowFade:[0.16, 0.06],                                   // R6: forearm on the upper arm / upper arm on the forearm, past the elbow (m)
+  neckShare:0.5,                                            // neck_01 turns this share of the head's turn against the chest (update)
+  neckH:[1.51, 1.60], neckSp:[1.53, 1.48],                  // R2: head ramp up the neck, spine_03 ramp down to the collar (y, m)
+  sweepA:1.35, sweepDY:0.012, sweepS:[-0.02, 0.01], sweepF:0.8,   // R3: the head's sweep (turn, rad; height slab, m; radius margin, m; max share)
+  collarF:1.0, collarY:[1.47, 1.54], collarX:[0.09, 0.15],  // R3: the stand-up collar's share of the turn by height; the sweep's |x| fade
+  collarFlapX:[0.17, 0.23],                                 // R3: ... none on the flaps lying on the shoulders (|x|, m): they go with the clavicles
+  collarBackF:0.6,                                          // R3: the lip behind follows this share of the head's turn (x f)
+  collarCl:0.55, collarClX:[0.05, 0.18], collarUa:0.25, collarUaX:[0.15, 0.25],   // R3 (b): clavicle / upper arm by |x| (on what stays)
+  lapelFront:[0.0, 0.04],                                   // R3: (a) the lapels' scan layout from this far in front of the neck axis (z, m) on
+  lapelSeam:0.03,                                           // R3 (a) / R4: the lapels' seam with the beard and the throat under it ease from the head over this much surface (m)
+  flapScanX:[0.15, 0.21],                                   // R3 (c): the flaps out on the shoulders keep the scan's clavicle / upper arm layout (|x|, m)
+  collarWall:0.6, collarWallA:[0.95, 1.65],                // R3: the side chain's share drops by this much from the lapel corners to the walls (azimuth, rad)
+  collarTurn:[1.0, 0.0], collarFree:0.4, collarNod:0.5,     // collarDrive, walls: share of the turn toward a side (past a soft free play, rad), away; of the nod
+  lapelTurn:[1.0, 0.5], lapelNod:0.75, lapelFree:0.4,       // collarDrive, the lapels' inner halves: share of the turn toward / away from their side; of the nod; free play (rad)
+  lapelMax:0.9, nodFree:0.3,                                // collarDrive: the lapel's turn toward its side saturates at this (rad); the nod's free play (rad)
+  lapelKnee:[0.7, 1.0],                                     // collarDrive, the lapels away: past this turn (rad, soft over +-0.2) at this share
+  lapelX:[0.09, 0.15, 0.13, 0.20], lapelOuter:0.5,          // R3: the lapel chain's reach from the opening (|x|, m: all of it / the outer corner, at this share)
+  rimBlend:0.05,                                            // R3b: the collar eases from the pauldron rim's weights into its rule over this much surface (m)
+  skirtR:0.12, skirtY:1.0,                                  // R7: outer coat skirt = farther than this from the leg bones, below skirtY
+  step:0.25, band:0.05, sweeps:20,                          // R8: seed steps (L1), band width (m), Gauss-Seidel sweeps (within 1e-3 by ~20)
+  bleedY:1.44, sweepTop:1.75,                               // R8: head weight may bleed into the neck / throat above this; R3: the sweep's head rim below this
+  finalSmooth:3, smoothParts:['shoulder', 'upper'],         // R9: smoothing sweeps over these parts (the collar keeps its rules' layout)
+  prior:0.25, neckPrior:1.0, collarPrior:0.5,              // R8: pull toward the rule weights (x the vertex's neighbour count)
+  expect:{ head:1371, neck:362, collar:711 } };             // part sizes (vertices) on hero.glb as tuned: a warning past +-15 %
+// Collar helper bones, per side: a two-link chain collarA_<s> (child of spine_03) -> collarB_<s> for the collar's wall, and collarL_<s>
+// (child of spine_03) for the inner half of the lapel beside the beard; all pivot on the neck axis at neck_01's joint and rest exactly
+// in the chest's frame (no vertex moves at rest). collarDrive turns them each frame.
+function addCollarBones(mesh){
+  if (B.collarA_l) return;
+  const sk = mesh.skeleton, add = [], piv = B.neck_01.getWorldPosition(new T.Vector3());
+  for (const s of ['l','r']){ let par = B.spine_03;
+    for (const lv of ['A','B','L']){ if (lv === 'L') par = B.spine_03;
+      const b = new T.Bone(); b.name = 'collar' + lv + '_' + s; par.add(b); b.position.copy(par.worldToLocal(piv.clone()));
+      b.updateMatrixWorld(true); B[b.name] = b; add.push(b); par = b; } }
+  const invs = add.map(b => new T.Matrix4().copy(b.matrixWorld).invert().multiply(mesh.matrixWorld));
+  mesh.bind(new T.Skeleton(sk.bones.concat(add), sk.boneInverses.concat(invs)), mesh.bindMatrix);
+}
+function repairSkin(mesh, rest){
+  const g = mesh.geometry, SIa = g.attributes.skinIndex, SWa = g.attributes.skinWeight, UV = g.attributes.uv, n = g.attributes.position.count;
+  const map = mesh.material.uniforms && mesh.material.uniforms.map.value, img = map && map.image;
+  let rgba = map && TEXELS.get(map);                                         // buildMatTex's copy of the texels (else read below), dropped
+  if (map) TEXELS.delete(map);                                               // here whether or not the repair runs
+  const has = new Set(mesh.skeleton.bones.map(b => b.name)), NEED = ['pelvis','spine_01','spine_02','spine_03','neck_01','head'].concat(...['l','r'].map(s =>
+    ['clavicle_','upperarm_','lowerarm_','hand_','middle_03_','thigh_','calf_','foot_','ball_'].map(b => b + s)));
+  if (!g.index || NEED.some(s => !has.has(s))) return false;                 // another rig: leave its weights alone
+  addCollarBones(mesh);
+  const sk = mesh.skeleton, bones = sk.bones, NB = bones.length, names = bones.map(b => b.name), BI = {};
+  names.forEach((s, i) => { BI[s] = i; });
+  const ss = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t*t*(3 - 2*t); };   // a > b: falling
+  const v = new T.Vector3(), bm = mesh.bindMatrix;
+  const J = bones.map((b, i) => new T.Vector3().setFromMatrixPosition(new T.Matrix4().copy(sk.boneInverses[i]).invert()));
+  const jp = s => J[BI[s]];
+  const X = new Float32Array(n*3);                                          // pre-slim rest positions, bind space
+  for (let i = 0; i < n; i++){ v.set(rest[3*i], rest[3*i+1], rest[3*i+2]).applyMatrix4(bm); X[3*i] = v.x; X[3*i+1] = v.y; X[3*i+2] = v.z; }
+  // bone families, sides (unsuffixed bones take their parent's), mirror bones, leaf helpers
+  const FAM = names.map(s => /^(head|headfront|mixamorigHeadTop_End)$/.test(s) ? 'head' : s === 'neck_01' ? 'neck' : /^(pelvis|spine_0[123])$/.test(s) ? 'spine'
+    : /^collar[ABL]_/.test(s) ? 'collar'
+    : /^clavicle_/.test(s) ? 'clav' : /^upperarm_/.test(s) ? 'upper' : /^lowerarm_/.test(s) ? 'fore' : /^thigh_/.test(s) ? 'thigh' : /^calf_/.test(s) ? 'calf'
+    : /^(foot_|ball_|mixamorig(Left|Right)Toe)/.test(s) ? 'foot' : 'hand');
+  const sideOfName = s => /_l$|^mixamorigLeft/.test(s) ? 1 : /_r$|^mixamorigRight/.test(s) ? -1 : 0;
+  const SIDE = bones.map(b => { for (let o = b; o && o.isBone; o = o.parent){ const sd = sideOfName(o.name); if (sd || FAM[BI[o.name]] === 'spine') return sd; } return 0; });
+  const mirror = b => { const s = names[b], m = /_l$/.test(s) ? s.slice(0, -2) + '_r' : /_r$/.test(s) ? s.slice(0, -2) + '_l'
+    : s.replace(/Left|Right/, w => w === 'Left' ? 'Right' : 'Left'); return BI[m] !== undefined ? BI[m] : b; };
+  const redirect = names.map((s, b) => { const S = SIDE[b] > 0 ? 'l' : 'r';
+    if (s === 'headfront' || s === 'mixamorigHeadTop_End') return BI.head;
+    if (/^Bone_03[56]$/.test(s) || /HandMiddle4$/.test(s)) return BI['middle_03_' + S];
+    if (/Toe_End$/.test(s)) return BI['ball_' + S];
+    return b; });
+  // anatomical segment of each bone (head -> its anatomical child; a leaf is a point): the nearest plausible bone of a vertex
+  const SEGC = { pelvis:'spine_01', spine_01:'spine_02', spine_02:'spine_03', spine_03:'neck_01', neck_01:'head' };
+  for (const s of ['l','r']) Object.assign(SEGC, { ['clavicle_'+s]:'upperarm_'+s, ['upperarm_'+s]:'lowerarm_'+s, ['lowerarm_'+s]:'hand_'+s,
+    ['hand_'+s]:'middle_01_'+s, ['middle_01_'+s]:'middle_02_'+s, ['middle_02_'+s]:'middle_03_'+s, ['thigh_'+s]:'calf_'+s, ['calf_'+s]:'foot_'+s, ['foot_'+s]:'ball_'+s });
+  const segB = names.map(s => SEGC[s] && BI[SEGC[s]] !== undefined ? jp(SEGC[s]) : J[BI[s]]);
+  const segDist = (i, b) => { const a = J[b], c = segB[b], abx = c.x - a.x, aby = c.y - a.y, abz = c.z - a.z, L = abx*abx + aby*aby + abz*abz;
+    const px = X[3*i] - a.x, py = X[3*i+1] - a.y, pz = X[3*i+2] - a.z, t = L > 1e-10 ? Math.min(1, Math.max(0, (px*abx + py*aby + pz*abz) / L)) : 0;
+    return Math.hypot(px - t*abx, py - t*aby, pz - t*abz); };
+  // UV seams welded (same rest position = one surface vertex), welded adjacency
+  const weld = new Int32Array(n), key = new Map(), rep = [];
+  for (let i = 0; i < n; i++){ const k = Math.round(rest[3*i]*2e4) + ',' + Math.round(rest[3*i+1]*2e4) + ',' + Math.round(rest[3*i+2]*2e4);
+    let w = key.get(k); if (w === undefined){ w = rep.length; key.set(k, w); rep.push(i); } weld[i] = w; }
+  const NW = rep.length, idx = g.index.array, nbS = Array.from({ length:NW }, () => new Set());
+  for (let f = 0; f < idx.length; f += 3) for (let e = 0; e < 3; e++){ const a = weld[idx[f+e]], b = weld[idx[f+(e+1)%3]]; if (a !== b){ nbS[a].add(b); nbS[b].add(a); } }
+  const nb = nbS.map(s => Int32Array.from(s));
+  // texture at each vertex (3x3 texels): light = beard / hair grey, skin or eye (welded 1-ring vote), orange = the pauldron (2-ring)
+  const lite = new Uint8Array(NW), orng = new Uint8Array(NW);
+  if (!rgba && img && img.width){ const cv = document.createElement('canvas'); cv.width = img.width; cv.height = img.height;
+    const cx = cv.getContext('2d'); cx.drawImage(img, 0, 0); rgba = { src:cx.getImageData(0, 0, img.width, img.height).data, w:img.width, h:img.height }; }
+  if (rgba && UV){
+    const D = rgba.src, W = rgba.w, Hh = rgba.h;
+    const lv = new Float32Array(NW), ov = new Float32Array(NW), lc = new Float32Array(NW);
+    for (let i = 0; i < n; i++){
+      let u = UV.getX(i), t = UV.getY(i); u -= Math.floor(u); t -= Math.floor(t);
+      const px = Math.floor(u*W), py = Math.floor((map.flipY ? 1 - t : t)*Hh); let r = 0, gg = 0, bb = 0;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++){
+        const o = (Math.min(Hh-1, Math.max(0, py+dy))*W + Math.min(W-1, Math.max(0, px+dx)))*4; r += D[o]; gg += D[o+1]; bb += D[o+2]; }
+      r /= 2295; gg /= 2295; bb /= 2295;
+      const mx = Math.max(r, gg, bb), dl = mx - Math.min(r, gg, bb), s = mx > 0 ? dl/mx : 0, val = 0.299*r + 0.587*gg + 0.114*bb;
+      const hue = dl > 1e-4 ? (mx === r ? (((gg-bb)/dl)%6+6)%6*60 : mx === gg ? ((bb-r)/dl+2)*60 : ((r-gg)/dl+4)*60) : 0;
+      const eye = r > 0.5 && gg < 0.22 && bb < 0.22 && s > 0.65, orange = !eye && (hue < 45 || hue > 345) && s > 0.58 && mx > 0.42;
+      const skin = !eye && !orange && (hue < 45 || hue > 340) && s > 0.16 && mx > 0.3, w = weld[i];
+      lc[w]++; if ((val >= 0.30 && s < 0.25) || skin || eye) lv[w]++; if (orange) ov[w]++;
+    }
+    for (let w = 0; w < NW; w++){
+      let a = 2*lv[w], c = 2*lc[w], oa = 2*ov[w], oc = 2*lc[w];
+      for (const q of nb[w]){ a += lv[q]; c += lc[q]; oa += ov[q]; oc += lc[q]; for (const q2 of nb[q]){ oa += 0.5*ov[q2]; oc += 0.5*lc[q2]; } }
+      lite[w] = a / c > 0.5 ? 1 : 0; orng[w] = oa / oc > 0.4 ? 1 : 0;
+    }
+  }
+  // ---- anatomical part per vertex
+  const PARTS = ['head', 'neck', 'collar', 'torso', 'shoulder', 'upper', 'fore', 'hand', 'thigh', 'calf', 'foot'], PI = {};
+  PARTS.forEach((p, k) => { PI[p] = k; });
+  const part = new Uint8Array(n), pside = new Int8Array(n), skirt = new Uint8Array(n);
+  const hj = jp('head'), cxN = hj.x, czN = hj.z + 0.02;
+  const AL = {}; for (const s of ['l','r']) AL[s] = { ua:jp('upperarm_'+s), la:jp('lowerarm_'+s), ha:jp('hand_'+s), th:jp('thigh_'+s), ca:jp('calf_'+s), fo:jp('foot_'+s) };
+  const classify = i => {
+    const x = X[3*i], y = X[3*i+1], z = X[3*i+2], s = x >= 0 ? 'l' : 'r', sx = Math.abs(x), a = AL[s], w = weld[i], uaX = Math.abs(a.ua.x);
+    if (y > 1.2 && sx > uaX + 0.02 && Math.hypot(y - a.ua.y, z - a.ua.z) < 0.16)          // the arm (horizontal in the T-pose), by the joint it is past
+      return sx < Math.abs(a.la.x) ? 'upper' : sx < Math.abs(a.ha.x) ? 'fore' : 'hand';
+    // head / neck / collar: an ellipse round the neck axis that grows into the skull above 1.60; the texture only separates the light
+    // beard / hair / skin from the dark coat where both sit at the same place
+    const H = RIG.headY, E = RIG.neckEll, dx = x - cxN, dz = z - czN, azB = E[2] + E[3]*ss(E[4], E[5], y), rho = Math.hypot(dx/E[0], dz/(dz > 0 ? E[1] : azB));
+    if (y >= H.top) return 'head';
+    // the pauldron (orange) rides the shoulder: in front up to its rim under the lapel (so a lapel turning away with the beard does
+    // not drag the rim off the shoulder), behind only past the collar's wall
+    const PD = RIG.pauldron;
+    if (orng[w] && y >= RIG.shoulderY && (dz > H.front ? sx >= PD.front : dz > PD.backZ ? sx >= PD.side : sx >= PD.back && y < PD.backTop)) return 'shoulder';
+    if (y >= H.collar && sx < uaX + 0.02){
+      const L = lite[w];
+      if (dz > H.front){                                                    // front: face, beard / shirt neckline, lapels
+        if (rho < 1) return y >= H.chin ? 'head' : 'torso';
+        return 'collar';                                                     // (light there: the collar's own highlights)
+      }
+      if (y >= H.skull) return 'head';                                       // back / sides: skull and hair
+      if (rho < 1) return (y >= H.jaw && L) ? 'head' : y >= H.nape ? 'neck' : 'collar';   // jaw / beard sides, nape hair; neck skin
+      return 'collar';
+    }
+    if (y >= RIG.shoulderY && sx >= RIG.shoulderX) return 'shoulder';
+    if (y >= RIG.hipsY) return 'torso';
+    return y > a.ca.y ? 'thigh' : y > a.fo.y ? 'calf' : 'foot';
+  };
+  const legAx = i => { let d = 9; for (const s of ['l','r']) for (const b of ['thigh_'+s, 'calf_'+s]) d = Math.min(d, segDist(i, BI[b])); return d; };
+  for (let i = 0; i < n; i++){ part[i] = PI[classify(i)]; pside[i] = X[3*i] >= 0 ? 1 : -1;
+    if (part[i] === PI.thigh && X[3*i+1] < RIG.skirtY && legAx(i) > RIG.skirtR) skirt[i] = 1; }
+  // ---- plausibility: the share of bone b's weight vertex i may keep (1 = plausible, 0 = not, between = a fade zone past a joint)
+  const sideKeep = (i, b) => { const bs = SIDE[b]; if (bs === 0 || bs === pside[i]) return 1; const f = FAM[b], sx = Math.abs(X[3*i]);
+    const L = (f === 'thigh' || f === 'calf') ? RIG.legSideFade : RIG.sideFade; return 1 - ss(L[0], L[1], sx); };   // (the inner thighs
+    // meet at the crotch: a narrower fade below it was tried - the opposite leg's share gone from the inner thighs - and measured worse,
+    // the crotch then folds against the inner thighs' rigid surfaces: 5 cm patches +0.6 .. 1.5 cm in walk / run / jump)
+  const keepPart = (i, b) => {
+    const nm = names[b], f = FAM[b], P = PARTS[part[i]], y = X[3*i+1], sx = Math.abs(X[3*i]), a = pside[i] > 0 ? AL.l : AL.r;
+    const uaX = Math.abs(a.ua.x), laX = Math.abs(a.la.x), haX = Math.abs(a.ha.x);
+    switch (P){
+      case 'head': return f === 'head' ? 1 : 0;
+      case 'neck': return (f === 'head' || nm === 'neck_01' || nm === 'spine_03') ? 1 : 0;
+      case 'collar': return (nm === 'spine_03' || nm === 'spine_02' || nm === 'neck_01' || f === 'clav' || f === 'collar') ? 1 : f === 'upper' ? ss(0.17, 0.24, sx) : 0;
+      case 'shoulder': return (f === 'clav' || f === 'upper' || nm === 'spine_03' || nm === 'spine_02') ? 1 : nm === 'spine_01' ? 1 - ss(1.38, 1.44, y) : 0;
+      case 'torso':
+        const SB = RIG.spineBand;
+        if (nm === 'pelvis') return 1 - ss(SB.pelvis[0], SB.pelvis[1], y);       // (the hips twist ~20 deg against the chest in the run)
+        if (nm === 'spine_01') return ss(SB.spine_01[0], SB.spine_01[1], y) * (1 - ss(SB.spine_01[2], SB.spine_01[3], y));
+        if (nm === 'spine_02') return ss(SB.spine_02[0], SB.spine_02[1], y);
+        if (nm === 'spine_03') return ss(SB.spine_03[0], SB.spine_03[1], y);
+        if (nm === 'neck_01') return X[3*i+2] - czN > RIG.headY.front ? ss(SB.throat[0], SB.throat[1], y) : 0;   // the throat under the beard, not the upper back
+        if (f === 'clav') return sx > RIG.shoulderX ? ss(SB.clavOut[0], SB.clavOut[1], y) : ss(SB.clavIn[0], SB.clavIn[1], y);   // (no upper arm: from
+                                                                                    // the T-pose bind every pose swings it 70+ deg, any share on the lats tears the coat side)
+        if (f === 'thigh') return 1 - ss(RIG.hipFade[0], RIG.hipFade[1], y);    // over the hip crease (hips at 0.957), none at the belt
+          // (fading them lower at the midline, where both thighs fold the fly's front 15-20x in jump, was tried: it moves the fold to
+          // the torso / thigh border and run / climb / land fold 1.5-3x more)
+        return 0;
+      case 'upper':
+        if (f === 'upper') return 1;
+        if (f === 'clav') return Math.max(ss(0.16, 0.09, sx - uaX), ss(a.ua.y + 0.04, a.ua.y + 0.11, y));   // shoulder top / pauldron: yes
+        if (f === 'fore') return ss(RIG.elbowFade[0], RIG.elbowFade[1], laX - sx);
+        if (nm === 'spine_03' || nm === 'spine_02') return ss(0.06, 0.02, sx - uaX);
+        return 0;
+      case 'fore': return f === 'fore' ? 1 : f === 'upper' ? ss(RIG.elbowFade[0], RIG.elbowFade[1], sx - laX) : f === 'hand' ? ss(0.10, 0.04, haX - sx) : 0;
+      case 'hand': return f === 'hand' ? 1 : f === 'fore' ? ss(0.08, 0.04, sx - haX) : 0;
+      case 'thigh': return f === 'thigh' ? 1 : nm === 'pelvis' ? ss(a.th.y - 0.15, a.th.y - 0.08, y) : f === 'calf' ? ss(a.ca.y + 0.10, a.ca.y + 0.05, y) : 0;
+      case 'calf': return f === 'calf' ? 1 : f === 'thigh' ? ss(a.ca.y - 0.16, a.ca.y - 0.04, y) : f === 'foot' ? ss(a.fo.y + 0.07, a.fo.y + 0.03, y) : 0;
+      case 'foot': return f === 'foot' ? 1 : f === 'calf' ? ss(a.fo.y - 0.06, a.fo.y - 0.02, y) : 0;   // heel / sole: the foot only
+    }
+    return 1;
+  };
+  // ---- follow: the share of the head's turn against the chest each collar / neck vertex takes (R2 / R3).
+  // The head's sweep: turning (LOOK up to RIG.sweepA either way) the head carries its rim (beard, jaw, hair) round the neck axis. A
+  // collar / neck vertex its own height (+-sweepDY) that some head vertex within that angle reaches at a radius beyond its own (by s
+  // m) is in the way: it follows, sweepF * ss(sweepS, s), in front only and fading out by |x| (collarX) - so the lapels next to the
+  // beard turn with it instead of being cut through, while the collar the head only slides past (the round back of the skull) does
+  // not. The stand-up collar also follows by height (collarF over collarY), except the flaps lying on the shoulders (collarFlapX),
+  // which stay with the clavicles. Then a 2 cm mean, so the collar's inside and outside faces turn alike.
+  const follow = new Float32Array(n), HB = new Map(), hb = y => Math.floor(y / RIG.sweepDY);
+  for (let i = 0; i < n; i++) if (part[i] === PI.head && X[3*i+1] < RIG.sweepTop){ const k = hb(X[3*i+1]), dx = X[3*i] - cxN, dz = X[3*i+2] - czN;
+    if (!HB.has(k)) HB.set(k, []); HB.get(k).push(Math.atan2(dx, dz), Math.hypot(dx, dz)); }
+  for (let i = 0; i < n; i++){
+    if (part[i] !== PI.collar && part[i] !== PI.neck) continue;
+    const y = X[3*i+1], dx = X[3*i] - cxN, dz = X[3*i+2] - czN, a = Math.atan2(dx, dz), r = Math.hypot(dx, dz); let s = -9;
+    for (let k = hb(y) - 1; k <= hb(y) + 1; k++){ const L = HB.get(k); if (!L) continue;
+      for (let j = 0; j < L.length; j += 2){ let da = Math.abs(L[j] - a); if (da > Math.PI) da = 2*Math.PI - da; if (da <= RIG.sweepA && L[j+1] - r > s) s = L[j+1] - r; } }
+    follow[i] = RIG.sweepF*ss(RIG.sweepS[0], RIG.sweepS[1], s)*ss(0, 0.03, dz)*(1 - ss(RIG.collarX[0], RIG.collarX[1], Math.abs(X[3*i])));
+    if (part[i] === PI.collar)                                               // the stand-up collar turns with the head by height
+      follow[i] = Math.max(follow[i], RIG.collarF*ss(RIG.collarY[0], RIG.collarY[1], y)*(1 - ss(RIG.collarFlapX[0], RIG.collarFlapX[1], Math.abs(X[3*i]))));
+  }
+  { // (the collar is a sheet with an inside and an outside)
+    const ids = []; for (let i = 0; i < n; i++) if (part[i] === PI.collar || part[i] === PI.neck) ids.push(i);
+    const f2 = new Float32Array(n);
+    for (const i of ids){ let s = 0, c = 0; for (const j of ids){ const dx = X[3*i] - X[3*j], dy = X[3*i+1] - X[3*j+1], dz = X[3*i+2] - X[3*j+2];
+      if (dx*dx + dy*dy + dz*dz < 4e-4 && part[j] === part[i]){ s += follow[j]; c++; } } f2[i] = s / c; }
+    for (const i of ids) follow[i] = f2[i];
+  }
+  // the collar's seam with the head: the scan fused the lapels' inner edges to the beard and the lip at the nape to the hair with a
+  // few triangles; the collar vertices on them (and, half, the next ring) ride the head so those triangles never stretch across
+  const seam = new Float32Array(NW);
+  for (let w = 0; w < NW; w++) if (part[rep[w]] === PI.collar && nb[w].some(a => part[rep[a]] === PI.head)) seam[w] = 1;
+  const seam1 = seam.slice(); for (let w = 0; w < NW; w++) if (part[rep[w]] === PI.collar && !seam1[w] && nb[w].some(a => seam1[a] === 1)) seam[w] = 0.5;
+  // (the lapels' seam with the beard eases over RIG.lapelSeam of surface instead: surface distance from the head through the collar
+  // and the throat under the beard, which takes head weight in R8 - so the lapels' inner edges match it where they meet)
+  const heap = [];
+  const push = (d, w) => { heap.push([d, w]); let k = heap.length - 1; while (k > 0){ const p = (k - 1) >> 1; if (heap[p][0] <= heap[k][0]) break; [heap[p], heap[k]] = [heap[k], heap[p]]; k = p; } };
+  const pop = () => { const top = heap[0], last = heap.pop(); if (heap.length){ heap[0] = last; let k = 0;
+    for (;;){ const l = 2*k + 1, r = l + 1; let m = k; if (l < heap.length && heap[l][0] < heap[m][0]) m = l; if (r < heap.length && heap[r][0] < heap[m][0]) m = r;
+      if (m === k) break; [heap[m], heap[k]] = [heap[k], heap[m]]; k = m; } } return top; };
+  const elen = (a, b) => { const i = rep[a], j = rep[b]; return Math.hypot(X[3*i] - X[3*j], X[3*i+1] - X[3*j+1], X[3*i+2] - X[3*j+2]); };
+  const dSeam = new Float32Array(NW).fill(9);
+  for (let w = 0; w < NW; w++) if (part[rep[w]] === PI.head && nb[w].some(a => part[rep[a]] === PI.collar)){ dSeam[w] = 0; push(0, w); }
+  while (heap.length){ const [d, w] = pop(); if (d > dSeam[w]) continue;
+    for (const a of nb[w]){ const pa = part[rep[a]], ia = rep[a];
+      if (pa !== PI.collar && !(pa === PI.torso && X[3*ia+1] > RIG.bleedY && X[3*ia+2] - czN > RIG.headY.front)) continue;
+      const nd = d + elen(w, a); if (nd < dSeam[a] && nd < RIG.lapelSeam){ dSeam[a] = nd; push(nd, a); } } }
+  // a share f of the head's turn as weights along the chain spine_03 (0) -> neck_01 (RIG.neckShare) -> head (1): [head, neck_01, spine_03]
+  const chain = f => { const k = RIG.neckShare; if (f <= k) return [0, f / k, 1 - f / k]; const h = (f - k) / (1 - k); return [h, 1 - h, 0]; };
+  // ---- R0 .. R7: per-vertex weight maps {bone: w}
+  const orig = [], maps = [], add = (m, b, w) => { if (w > 1e-6) m.set(b, (m.get(b) || 0) + w); };
+  const comp = [SIa.getX, SIa.getY, SIa.getZ, SIa.getW], compW = [SWa.getX, SWa.getY, SWa.getZ, SWa.getW];
+  for (let i = 0; i < n; i++){ const o = new Map(), m = new Map();
+    for (let k = 0; k < 4; k++){ const b = comp[k].call(SIa, i), w = compW[k].call(SWa, i); if (w > 0){ add(o, b, w); add(m, redirect[b], w); } }
+    orig.push(o); maps.push(m); }
+  const fade = (i, m, dest) => { for (const [b, w] of [...m]){ const k = keepPart(i, b); if (k >= 0.999) continue;
+    if (w*k > 1e-6) m.set(b, w*k); else m.delete(b); add(m, dest(b), w*(1 - k)); } };
+  const SAY = RIG.spineAtY, spineAt = y => BI[y < SAY[0] ? 'pelvis' : y < SAY[1] ? 'spine_01' : y < SAY[2] ? 'spine_02' : 'spine_03'];
+  const SPN = ['pelvis', 'spine_01', 'spine_02', 'spine_03'].map(s => BI[s]), SPY = SPN.map((b, k) => (J[b].y + (k < 3 ? J[SPN[k+1]].y : jp('neck_01').y)) / 2);   // segment mids
+  const prior = new Array(n).fill(null), priorK = new Float32Array(n);     // R2 / R3 profiles, kept (softly) through R8
+  const rule3 = new Array(n).fill(null), seamK = new Float32Array(n), keepRule = new Uint8Array(n);        // R3's rule before the seam with the head, the seam's share (R3b)
+  for (let i = 0; i < n; i++){
+    const m = maps[i], P = PARTS[part[i]], x = X[3*i], y = X[3*i+1], sx = Math.abs(x), S = pside[i] > 0 ? 'l' : 'r';
+    for (const [b, w] of [...m]){ const k = sideKeep(i, b); if (k < 0.999){ if (w*k > 1e-6) m.set(b, w*k); else m.delete(b); add(m, mirror(b), w*(1 - k)); } }   // R0
+    if (P === 'head'){ m.clear(); m.set(BI.head, 1); }                                                                                   // R1
+    else if (P === 'neck'){                                                                                                              // R2
+      let h = ss(RIG.neckH[0], RIG.neckH[1], y), sp = ss(RIG.neckSp[0], RIG.neckSp[1], y)*(1 - h), nk = 1 - h - sp;
+      if (follow[i] > RIG.neckShare*nk + h) [h, nk, sp] = chain(follow[i]);    // under the jaw's sweep: at least as far round as it
+      m.clear(); add(m, BI.head, h); add(m, BI.spine_03, sp); add(m, BI.neck_01, nk); prior[i] = new Map(m); priorK[i] = RIG.neckPrior;
+    }
+    else if (P === 'collar'){                                                                                                            // R3
+      // (a) the lapels (in front of the neck axis) lie on the shoulders and the pauldrons' inner tops: they keep the scan's own layout,
+      // its clavicle share (0.6 .. 0.85, after R0) and its head share (0.1 low .. 0.45 at the top), which goes to that side's lapel
+      // helper collarL (collarDrive: at rest through the clips' ordinary head-vs-chest twist, round with the jaw on a real turn);
+      // upper arm -> clavicle (only the left one had any). The clips hold the shoulder girdle ~20 deg forward of the T-pose: a lapel
+      // left on the chest lets the pauldron's inner face (skin-coloured scan texels) tip out from under it.
+      const mF = new Map(), mO = new Map(); for (const [b, w] of m){ const fm = FAM[b];
+        add(mF, fm === 'head' || fm === 'neck' ? BI['collarL_' + S] : fm === 'upper' ? BI['clavicle_' + S] : (fm === 'clav' || fm === 'spine') ? b : BI.spine_03, w);
+        add(mO, (fm === 'clav' || fm === 'upper' || fm === 'spine') ? b : BI.spine_03, w); }   // (c) the flaps lying on the shoulders: the same, with the arm
+      // (b) the stand-up collar (walls, the lip at the nape); round the front it hands over to (a), out on the shoulders to (c).
+      const cl = RIG.collarCl*ss(RIG.collarClX[0], RIG.collarClX[1], sx), ua = RIG.collarUa*ss(RIG.collarUaX[0], RIG.collarUaX[1], sx);
+      // f = the share of the head's turn this vertex follows: toward the front along spine_03 -> neck_01 -> collarL, at the nape along
+      // spine_03 -> neck_01 -> head, on the walls along that side's spine_03 -> collarA -> collarB, less on the walls than toward the
+      // lapels' corners (collarDrive turns the helpers)
+      const f = follow[i], dzN = X[3*i+2] - czN;
+      const lx = 1 - ss(RIG.lapelX[0], RIG.lapelX[1], sx), lo = 1 - ss(RIG.lapelX[2], RIG.lapelX[3], sx);   // the lapel / its outer corner
+      const wF = ss(0.0, 0.04, dzN)*(lx + (lo - lx)*RIG.lapelOuter), wB = ss(0.0, -0.06, dzN)*(1 - ss(0.05, 0.11, sx)), wS = Math.max(0, 1 - wF - wB);
+      const cF = chain(f), cB = chain(f*RIG.collarBackF);
+      const fS = f*(1 - RIG.collarWall*ss(RIG.collarWallA[0], RIG.collarWallA[1], Math.atan2(sx, dzN)));   // the walls: less than the lapels' corners
+      const A = fS <= 0.5 ? 2*fS : 2 - 2*fS, Bw = fS <= 0.5 ? 0 : 2*fS - 1, wl = ss(-0.03, 0.03, x);
+      m.clear(); add(m, BI.head, wB*cB[0]); add(m, BI.neck_01, wF*cF[1] + wB*cB[1]);
+      for (const [s2, k] of [['l', wl], ['r', 1 - wl]]){ add(m, BI['collarL_' + s2], wF*cF[0]*k); add(m, BI['collarA_' + s2], wS*A*k); add(m, BI['collarB_' + s2], wS*Bw*k); }
+      const sr = wF*cF[2] + wB*cB[2] + wS*(1 - A - Bw);
+      add(m, BI['clavicle_' + S], cl*sr); add(m, BI['upperarm_' + S], ua*sr); add(m, BI.spine_03, sr*(1 - cl - ua));
+      const gF = ss(RIG.lapelFront[0], RIG.lapelFront[1], dzN), gO = (1 - gF)*ss(RIG.flapScanX[0], RIG.flapScanX[1], sx);   // (a) in front,
+      for (const [b, w] of m) m.set(b, w*(1 - gF - gO)); for (const [b, w] of mF) add(m, b, w*gF); for (const [b, w] of mO) add(m, b, w*gO);   // (c) out on the
+      // shoulders, (b) the rest, blended round the sides
+      rule3[i] = new Map(m);
+      const hs = seamK[i] = seam[weld[i]]*(1 - gF) + gF*(1 - ss(0, RIG.lapelSeam, dSeam[weld[i]])); if (hs > 0){ for (const [b, w] of m) m.set(b, w*(1 - hs)); add(m, BI.head, hs); }   // on the seam with the head
+      prior[i] = new Map(m); priorK[i] = RIG.collarPrior + (0.1 - RIG.collarPrior)*ss(0.12, 0.22, sx)*(1 - Math.min(1, follow[i]));   // (the flaps: loose, under the pauldron)
+    }
+    else if (P === 'torso'){                                                                                                             // R4
+      const CC = RIG.chestClav;
+      fade(i, m, b => { const f = FAM[b]; if (f === 'clav') return BI[y < CC.toSpine01 ? 'spine_01' : 'spine_02'];
+        if (f === 'upper') return y > CC.upperToClav ? BI['clavicle_' + S] : BI.spine_02; return spineAt(y); });
+      if (y > CC.y[0] && y < CC.y[1] && sx < CC.x) for (const c of ['clavicle_l', 'clavicle_r']){ const cap = CC.cap[0] + CC.cap[1]*ss(0, CC.cap[2], sx), w = m.get(BI[c]) || 0;
+        if (w > cap){ m.set(BI[c], cap); add(m, BI[y > SAY[2] ? 'spine_03' : 'spine_02'], w - cap); } }   // the sternum: on the spine
+      let st = 0; for (const b of SPN){ st += m.get(b) || 0; m.delete(b); }                // the spine share: along the chain by height
+      const k = Math.max(0, SPY.findIndex(h => h > y)), u = k === 0 ? 0 : SPY[k] > y ? (y - SPY[k-1]) / (SPY[k] - SPY[k-1]) : 1;
+      if (SPY[0] >= y) add(m, SPN[0], st); else if (SPY[SPY.length-1] <= y) add(m, SPN[SPN.length-1], st);
+      else { add(m, SPN[k-1], st*(1 - u)); add(m, SPN[k], st*u); }
+      // the throat under the beard: the head's share by the same surface distance as the lapels' seam (R3 a), so the two match where
+      // they meet; kept through R8 (no free blend: the lapels beside it hold their rule)
+      const wi = weld[i], ht = dSeam[wi] < RIG.lapelSeam ? 1 - ss(0, RIG.lapelSeam, dSeam[wi]) : 0;
+      if (ht > 0){ for (const [b, w] of m) m.set(b, w*(1 - ht)); add(m, BI.head, ht); prior[i] = new Map(m); priorK[i] = RIG.collarPrior; keepRule[i] = 1; }
+    }
+    else if (P === 'shoulder') fade(i, m, b => /^(thigh|spine|calf|head|neck)$/.test(FAM[b]) ? BI[y < SAY[2] ? 'spine_02' : 'spine_03']   // R5
+      : BI[(sx < 0.2 ? 'clavicle_' : 'upperarm_') + S]);   // (the scan's head share on the pauldron's inner top, up to 0.4, held it to the
+                                                           // chest: it goes to spine_03, not to the clavicle, or the arm swing tips the
+                                                           // pauldron's inner face - skin-coloured scan texels - out from under the lapel)
+    else {                                                                                                                               // R6 / R7
+      if (skirt[i]) for (const [b, w] of [...m]) if (FAM[b] === 'calf'){ m.delete(b); add(m, BI['thigh_' + S], w); }
+      let home = -1, hw = -1; for (const [b, w] of m) if (keepPart(i, b) >= 0.999 && w > hw){ hw = w; home = b; }
+      if (home < 0){ let bd = 9; for (let b = 0; b < NB; b++) if (redirect[b] === b && keepPart(i, b) >= 0.999 && sideKeep(i, b) >= 0.999){ const d = segDist(i, b); if (d < bd){ bd = d; home = b; } } }
+      fade(i, m, () => home);
+    }
+  }
+  // ---- R3b: where the collar (lapels, walls, flaps) meets the pauldron (R5) it starts from the pauldron's own weights and eases into
+  // its R3 rule over RIG.rimBlend of surface (Dijkstra inside the collar from the pauldron's rim, carrying the nearest rim vertex's
+  // weights): the crease between the cloth and the pauldron's rim never opens when the shoulder moves against the chest (the scan's
+  // hidden, skin-coloured texels in it stay hidden); the lapel's dark cloth takes the difference instead and the pauldron stays rigid
+  { const dR = new Float32Array(NW).fill(9), src = new Int32Array(NW).fill(-1);
+    for (let w = 0; w < NW; w++) if (part[rep[w]] === PI.shoulder && nb[w].some(a => part[rep[a]] === PI.collar)){ dR[w] = 0; src[w] = rep[w]; push(0, w); }
+    while (heap.length){ const [d, w] = pop(); if (d > dR[w]) continue;
+      for (const a of nb[w]){ if (part[rep[a]] !== PI.collar) continue;
+        const nd = d + elen(w, a); if (nd < dR[a] && nd < RIG.rimBlend){ dR[a] = nd; src[a] = src[w]; push(nd, a); } } }
+    for (let i = 0; i < n; i++){ const w = weld[i]; if (part[i] !== PI.collar || src[w] < 0) continue;
+      const t = ss(0, RIG.rimBlend, dR[w]), m = new Map(), hs = seamK[i];
+      for (const [b, x] of rule3[i]) add(m, b, x*t); for (const [b, x] of maps[src[w]]) add(m, b, x*(1 - t));
+      if (hs > 0){ for (const [b, x] of m) m.set(b, x*(1 - hs)); add(m, BI.head, hs); }
+      maps[i] = m; prior[i] = new Map(m); } }
+  // ---- R8: harmonic blend over the transition band (welded surface): Dijkstra distance from every border between re-weighted and kept
+  // vertices and round the rigid head, plus the fade zones; the head itself is fixed
+  const l1 = (A, Bm) => { let d = 0; for (const [b, x] of A) d += Math.abs(x - (Bm.get(b) || 0)); for (const [b, x] of Bm) if (!A.has(b)) d += x; return d; };
+  const wch = new Uint8Array(NW), isHead = new Uint8Array(NW), fadeZ = new Uint8Array(NW);
+  for (let i = 0; i < n; i++){ const w = weld[i]; if (l1(orig[i], maps[i]) > 0.02) wch[w] = 1; if (part[i] === PI.head) isHead[w] = 1;
+    for (const b of orig[i].keys()){ const k = keepPart(i, redirect[b])*sideKeep(i, b); if (k > 0.001 && k < 0.999) fadeZ[w] = 1; } }
+  const geod = seed => { const dist = new Float32Array(NW).fill(9);           // surface distance (up to RIG.band) from the seed vertices
+    for (let w = 0; w < NW; w++) if (seed(w)){ dist[w] = 0; push(0, w); }
+    while (heap.length){ const [d, w] = pop(); if (d > dist[w] || d > RIG.band) continue;
+      for (const a of nb[w]){ const nd = d + elen(w, a); if (nd < dist[a]){ dist[a] = nd; push(nd, a); } } }
+    return dist; };
+  const wmap = w => maps[rep[w]];
+  const dist = geod(w => nb[w].some(a => wch[a] !== wch[w] || isHead[a] !== isHead[w] || l1(wmap(a), wmap(w)) > RIG.step));
+  const dHead = geod(w => !isHead[w] && nb[w].some(a => isHead[a]));        // next to the rigid head: the rules give way there
+  const free = []; for (let w = 0; w < NW; w++) if ((dist[w] < RIG.band || fadeZ[w]) && !isHead[w] && nb[w].length) free.push(w);
+  // per free vertex: the bones it may take (a compact list). Head weight may bleed into the neck skin and the throat; the collar takes
+  // the head (and neck_01) only as its sweep rule gave them, and keeps that rule all the way to the head (no free blend there: the
+  // collar is a separate sheet beside the beard, not its continuation)
+  // (the bones a part's rules can give any weight at all, ascending: keepPart / sideKeep are only asked about those)
+  const PFAM = { head:'head', neck:'head neck spine', collar:'head neck spine clav upper collar', torso:'head neck spine clav thigh',
+    shoulder:'spine clav upper', upper:'spine clav upper fore', fore:'upper fore hand', hand:'fore hand', thigh:'spine thigh calf',
+    calf:'thigh calf foot', foot:'calf foot' };
+  const CAND = PARTS.map(p => { const fs = PFAM[p].split(' '); const L = []; for (let b = 0; b < NB; b++) if (redirect[b] === b && fs.includes(FAM[b])) L.push(b); return L; });
+  const Wt = new Float32Array(NW*NB), lam = new Float32Array(free.length), aOff = new Int32Array(free.length + 1), aL = [], pL = [];
+  for (let w = 0; w < NW; w++) for (const [b, x] of maps[rep[w]]) Wt[w*NB + b] = x;
+  free.forEach((w, f) => { const i = rep[w], y = X[3*i+1], P = PARTS[part[i]], front = X[3*i+2] - czN > 0.03, pr = prior[i] || maps[i];
+    const bleed = y > RIG.bleedY && (P === 'neck' || (P === 'torso' && front)), col = P === 'collar';
+    aOff[f] = aL.length;
+    for (const b of CAND[part[i]]){
+      let ok = keepPart(i, b) > 0 && sideKeep(i, b) > 0;
+      if ((bleed || col) && b === BI.neck_01) ok = true;
+      if (b === BI.head) ok = bleed || (col && pr.has(b));
+      else if (col && pr.has(b)) ok = true;                                  // (R3b: the pauldron's rim weights, upper arm too)
+      if (ok){ aL.push(b); pL.push(pr.get(b) || 0); }
+    }
+    lam[f] = (prior[i] ? priorK[i] : RIG.prior)*nb[w].length*(col || keepRule[i] ? 1 : ss(0, RIG.band, dHead[w]));   // screened: the rules stay, the steps go
+    const q = w*NB; let t = 0;                                               // start: the rule weights restricted to that list
+    for (let b = 0, k = aOff[f]; b < NB; b++){ if (aL[k] === b && k < aL.length){ t += Wt[q + b]; k++; } else Wt[q + b] = 0; }
+    if (t > 1e-6) for (let b = 0; b < NB; b++) Wt[q + b] /= t;
+  });
+  aOff[free.length] = aL.length;
+  const AL_ = Int16Array.from(aL), PL = Float32Array.from(pL), acc = new Float32Array(NB);
+  for (let it = 0; it < RIG.sweeps; it++) for (let f = 0; f < free.length; f++){   // Gauss-Seidel on the restricted, normalised weights
+    const w = free[f], ns = nb[w], k0 = aOff[f], k1 = aOff[f+1], q = w*NB; let t = 0;
+    for (let k = k0; k < k1; k++){ const b = AL_[k]; let x = lam[f]*PL[k]; for (let j = 0; j < ns.length; j++) x += Wt[ns[j]*NB + b]; acc[k - k0] = x; t += x; }
+    if (t > 1e-6) for (let k = k0; k < k1; k++) Wt[q + AL_[k]] = acc[k - k0] / t;
+  }
+  const isFree = new Uint8Array(NW); free.forEach(w => { isFree[w] = 1; });
+  // ---- R9: a light smoothing of the cloth / plates round the shoulders (collar, pauldron, sleeve tops): RIG.finalSmooth sweeps, each
+  // vertex half way to its neighbours' mean (the rigid head neither moves nor pulls), so no short edge keeps a step the rules' blends
+  // left (a 4 mm edge with 0.1 more upper arm opens 4x in the run's arm swing)
+  if (RIG.finalSmooth > 0){
+    const SMP = RIG.smoothParts.map(p => PI[p]), sel = []; for (let w = 0; w < NW; w++) if (SMP.includes(part[rep[w]])) sel.push(w);
+    const acc2 = new Float32Array(NB);
+    for (let it = 0; it < RIG.finalSmooth; it++) for (const w of sel){ let c = 0; acc2.fill(0);
+      for (const a of nb[w]){ if (isHead[a]) continue; c++; for (let b = 0; b < NB; b++) acc2[b] += Wt[a*NB + b]; }
+      if (c) for (let b = 0; b < NB; b++) Wt[w*NB + b] = 0.5*Wt[w*NB + b] + 0.5*acc2[b]/c; }
+    for (const w of sel) isFree[w] = 1;
+  }
+  // ---- top 4, normalised
+  const SI = new Uint16Array(n*4), SW = new Float32Array(n*4), top = [];
+  for (let i = 0; i < n; i++){
+    top.length = 0; const w = weld[i];
+    if (isFree[w]){ for (let b = 0; b < NB; b++) if (Wt[w*NB + b] > 1e-3) top.push([b, Wt[w*NB + b]]); }
+    else for (const [b, x] of maps[i]) if (x > 1e-3) top.push([b, x]);
+    top.sort((p, q) => q[1] - p[1]); if (top.length > 4) top.length = 4;
+    const t = top.reduce((s, e) => s + e[1], 0) || 1;
+    for (let k = 0; k < 4; k++){ SI[i*4+k] = top[k] ? top[k][0] : 0; SW[i*4+k] = top[k] ? top[k][1] / t : 0; }
+  }
+  g.userData.scanSkin = { skinIndex:SIa, skinWeight:SWa };
+  g.setAttribute('skinIndex', new T.Uint16BufferAttribute(SI, 4)); g.setAttribute('skinWeight', new T.Float32BufferAttribute(SW, 4));
+  // the parts' sizes, checked against the scan the rules were tuned on (a repainted texture or another mesh shifts them)
+  const cnt = {}; PARTS.forEach(p => { cnt[p] = 0; }); for (let i = 0; i < n; i++) cnt[PARTS[part[i]]]++;
+  g.userData.skinRepair = { parts:cnt, changed:wch.reduce((s, x) => s + x, 0), free:free.length };
+  if (Object.entries(RIG.expect).some(([p, c]) => Math.abs(cnt[p] - c) > 0.15*c))
+    console.warn('[repairSkin] part sizes off the scan the rules were tuned on (expected ~' + JSON.stringify(RIG.expect) + '):', JSON.stringify(cnt));
+  return g.userData.skinRepair;
+}
 
 loadModel(gltf => {
   model = gltf.scene; model.rotation.y = Math.PI/2;          // the mesh faces +Z; the rig convention here is +X forward
@@ -4095,7 +4632,12 @@ loadModel(gltf => {
     if (o.isBone) B[o.name] = o;
   });
   model.updateMatrixWorld(true);
+  // the body's rest positions before slimming (repairSkin's parts are laid out on them), then slim, then repair the body's weights
+  let body = null; model.traverse(o => { if (o.isSkinnedMesh && !body) body = o; });
+  const bp0 = body && body.geometry.attributes.position, rest0 = bp0 && new Float32Array(bp0.count*3);
+  if (bp0) for (let i = 0; i < bp0.count; i++){ rest0[3*i] = bp0.getX(i); rest0[3*i+1] = bp0.getY(i); rest0[3*i+2] = bp0.getZ(i); }
   model.traverse(o => { if (o.isSkinnedMesh) slimBody(o); });
+  if (body) repairSkin(body, rest0);
   model.traverse(o => { if (o.geometry && o.geometry.attributes.sNormal) addPlateRim(o.geometry, o.material.uniforms.uMat.value); });   // on the slimmed bind pose
   for (const n in B) BIND[n] = { p:B[n].position.clone(), q:B[n].quaternion.clone(), w:B[n].getWorldQuaternion(new T.Quaternion()), wp:B[n].getWorldPosition(new T.Vector3()) };
   const wp = n => B[n].getWorldPosition(new T.Vector3());
