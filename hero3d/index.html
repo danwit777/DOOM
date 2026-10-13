@@ -67,8 +67,8 @@ kbd{font-family:var(--f-display);font-size:10px;color:var(--muted);margin-left:4
       <div class="label">Wysokość postaci w pikselach</div>
       <div class="row" id="res">
         <button id="r-48" data-px="48" aria-pressed="false">48</button>
-        <button id="r-64" data-px="64" aria-pressed="true">64</button>
-        <button id="r-96" data-px="96" aria-pressed="false">96</button>
+        <button id="r-64" data-px="64" aria-pressed="false">64</button>
+        <button id="r-96" data-px="96" aria-pressed="true">96</button>
         <button id="r-128" data-px="128" aria-pressed="false">128</button>
         <button id="r-0" data-px="0" aria-pressed="false">HD</button>
       </div>
@@ -1898,7 +1898,7 @@ const postScene = new T.Scene(); postScene.add(new T.Mesh(new T.PlaneGeometry(2,
 const postCam = new T.Camera();
 
 const SIDE_YAW = 0.9;
-const S = { anim:'idle', weapon:'none', pxChar:64, yaw:SIDE_YAW, spin:false, outline:true,
+const S = { anim:'idle', weapon:'none', pxChar:96, yaw:SIDE_YAW, spin:false, outline:true,
   t:0, walk:0, run:0, aim:0, tp:0, shotT:9, dragging:false,
   // platformer clips: clip start (S.t), layer weight, current / cross-fade-from pose and switch time, the sprite view the climb faces
   // into (the exporter sets it with the camera yaw), the jump arc the coat feels (vertical speed / acceleration, flutter, its period)
