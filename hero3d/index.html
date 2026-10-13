@@ -3089,6 +3089,7 @@ function buildSole(){
 }
 // Rigid gear on the floor (MOVES floor: a one-shot that goes down onto it - the roll): the bake keeps the skinned mesh off the floor,
 // but the backpack is built here; where its lowest point would go under the floor (rolling over the back), the hips are raised by that.
+// (PACKV: its vertices in pack space; packLow reads the pack where it hangs now - on its bone, swung as packStep left it)
 const PACKV = [];
 function buildPackV(){
   const pk = B.spine_03 && B.spine_03.getObjectByName('backpack'); if (!pk) return;
@@ -3185,6 +3186,7 @@ function clockBack(){
   if (S.seq) S.seq.t0 -= back;
   if (S.tSw !== undefined) S.tSw -= back;
   S.tLast = S.t;
+  PACK_DYN.init = false;   // (the backpack restarts from its rest hang: a tool's runs are reproducible, whichever call saw the reset)
   return true;
 }
 function update(dt){
@@ -3236,6 +3238,8 @@ function update(dt){
   const free = Math.max(0, 1 - air - mg);
   // the jump arc the clip stands for, as the coat feels it (0 for the other anims)
   S.airV = AP ? AP.vy*air : 0; S.airA = AP ? AP.ay*air : 0; S.airF = AP ? AP.fl*air : 0;
+  // (as the backpack feels it: the fall's keys hold no acceleration - the coat reads its speed - but he is in free flight there too)
+  S.airPk = AP ? lerp(AP.ay, -9.8, Math.min(1, AP.fl))*air : 0;
   const move = Math.min(1, S.walk+S.run);
   const pistol = S.weapon==='pistol';
 
@@ -3244,13 +3248,18 @@ function update(dt){
   ACT.walk.setEffectiveWeight(S.walk); ACT.run.setEffectiveWeight(S.run);
   ACT.walk.time = (t*1.0) % ACT.walk.getClip().duration; ACT.run.time = (t*1.0) % ACT.run.getClip().duration;
   moveTimes(t, msc);
-  if (mg > 1e-3) mixerForceWrite();
+  // (every frame, not only under a move: the bones were just reset to the bind, and the mixer skips a track whose value has not changed
+  // since its last write - the walk / run hold their last key over the clip's final ~1/30 s, so without this their spine snapped to
+  // the bind for 2 frames a cycle at 60 fps, a 9 cm jerk of the chest that kicked the pack)
+  mixerForceWrite();
   mixer.update(0);
   model.updateMatrixWorld(true);
   if (mg > 1e-3) moveBody(mg, lift, t);
-  // (MOVES floor: the backpack kept above the floor, PACKV)
+  // (MOVES floor: the backpack kept above the floor, PACKV - the swinging pack as it hangs now, last frame's swing; packStep keeps
+  // this frame's above it)
   { let fw = 0; for (const m in MV) if (MV[m].w && MV[m].d.floor) fw += MV[m].w;
-    if (fw > 1e-3){ const d = lift.y + 0.008 - packLow(); if (d > 0){ B.pelvis.position.y += d*Math.min(1, fw); model.updateMatrixWorld(true); } } }
+    S.mvFloor = fw;
+    if (fw > 1e-3){ const d = lift.y + PACK_DYN.floorPad - packLow(); if (d > 0){ B.pelvis.position.y += d*Math.min(1, fw); model.updateMatrixWorld(true); } } }
   // run: cap the knee bend so the rear heel stays under the coat hem instead of kicking up to hip height
   if (S.run > 0.01){
     for (const s of ['l','r']){
@@ -3420,6 +3429,8 @@ function update(dt){
   COAT.free.r = !armed || sling > 0.5; COAT.free.l = !armed || sling > 0.5 || !!weapons[S.weapon].userData.freeHand;
   S.mvG = mg; S.mvFl = lift.y;   // (the ground under a move: its offset - the top after a climb)
   S.coatDamp = S.airWall ? 0.6*air : 0;
+  packStep(dt);     // the backpack's swing on its bone (the chest's pose is final here; before the coat, which may reset it)
+  if (PACK_DYN.under > 0){ B.pelvis.position.y += PACK_DYN.under; model.updateMatrixWorld(true); }   // (MOVES floor: the pack as it swung)
   coatStep(dt);
   // camera orbit
   if (S.spin && !S.dragging) S.yaw += dt*0.6;
@@ -3753,9 +3764,10 @@ setWeapon(S.weapon);   // sync the aim/fire buttons with the default (unarmed)
 requestAnimationFrame(loop);
 
 // ---------- Gear: backpack (sheet C back view, owner's sprites) + shoulder straps + knee guards ----------
-// Built in character space at the rest pose (+X forward, +Y up, +Z = character's right). The pack is rigid and re-parented
-// to spine_03, so it follows the torso through every pose, the walk / run clips and the IK; the straps are skinned to the body,
-// the knee guards ride rigidly on the calves.
+// Built in character space at the rest pose (+X forward, +Y up, +Z = character's right). The pack is rigid and hangs on its own bone
+// (PACK_DYN.bone: a child of spine_03 at the harness' anchor, the top of the pack between the shoulder straps), which packStep swings
+// and lifts with a damped spring against the chest (Backpack dynamics, below); the straps are skinned to the body, their pack ends to
+// the pack's bone, the knee guards ride rigidly on the calves.
 const GEAR = {
   body:  charMat({color:'#38361b', full:true}),     // olive canvas: oliveL lit / oliveM mid / oliveD shade (one step above the coat)
   flap:  charMat({color:'#4a4720', full:true}),     // lid, pockets: oliveL on the lit and mid faces
@@ -3794,10 +3806,12 @@ function gearStrap(parent, mat, pts, w, t, wDir=new T.Vector3(0,0,1)){
 // merge a group of rest-pose character-space meshes into one SkinnedMesh on the body's skeleton:
 // weights from the nearest body vertices (rest pose), positions moved back to the bind pose by the inverse skin matrix;
 // a child mesh with userData.bone rides rigidly on that one bone instead (no nearest-vertex weights at all); opt.uv keeps the parts' uv;
-// opt.only (a set of body vertex indices) limits the nearest vertices to those, e.g. the trousers right under a strap (not the coat)
+// opt.only (a set of body vertex indices) limits the nearest vertices to those, e.g. the trousers right under a strap (not the coat);
+// opt.sk: a skeleton that extends the body's (its bones first, in the same order) to bind to instead - the harness': + the pack's bone
 function skinToBody(group, mat, name, opt={}){
   let sm = null; model.traverse(o=>{ if (o.isSkinnedMesh && !sm) sm = o; });
   hero.updateMatrixWorld(true); sm.skeleton.update();
+  const sk = opt.sk || sm.skeleton;
   const toLocal = new T.Matrix4().copy(sm.matrixWorld).invert().multiply(hero.matrixWorld);
   const P=[], N=[], I=[], R=[], RB=[], UV=[], v=new T.Vector3(), n=new T.Vector3();
   group.children.forEach(m=>{
@@ -3810,7 +3824,7 @@ function skinToBody(group, mat, name, opt={}){
     if (opt.rigid) for (let i=0;i<gp.count;i++){ v.fromBufferAttribute(gp,i).applyMatrix4(m.matrix); R.push(v.x,v.y,v.z); }
   });
   // body vertices in the rest pose (candidates: not head / hands / forearms)
-  const bp = sm.geometry.attributes.position, bi = sm.geometry.attributes.skinIndex, bw = sm.geometry.attributes.skinWeight, bones = sm.skeleton.bones;
+  const bp = sm.geometry.attributes.position, bi = sm.geometry.attributes.skinIndex, bw = sm.geometry.attributes.skinWeight, bones = sk.bones;
   const skip = opt.skip || /head|hand|lowerarm|finger|thumb|index|middle|ring|pinky/i, cand = [];
   for (let i=0;i<bp.count;i++){
     let top=0, tw=-1; for (let k=0;k<4;k++){ const w=[bw.getX(i),bw.getY(i),bw.getZ(i),bw.getW(i)][k]; if (w>tw){ tw=w; top=k; } }
@@ -3818,7 +3832,7 @@ function skinToBody(group, mat, name, opt={}){
     if (opt.only && !opt.only.has(i)) continue;
     v.fromBufferAttribute(bp,i); sm.boneTransform(i,v); cand.push(i, v.x, v.y, v.z);
   }
-  const boneM = bones.map((b,j)=>new T.Matrix4().multiplyMatrices(sm.bindMatrixInverse, new T.Matrix4().multiplyMatrices(b.matrixWorld, sm.skeleton.boneInverses[j])).multiply(sm.bindMatrix));
+  const boneM = bones.map((b,j)=>new T.Matrix4().multiplyMatrices(sm.bindMatrixInverse, new T.Matrix4().multiplyMatrices(b.matrixWorld, sk.boneInverses[j])).multiply(sm.bindMatrix));
   const SI=[], SW=[], K=opt.K||4, nV=P.length/3, Sk=new T.Matrix4(), sg=opt.sigma||0, noW=opt.noWeight||null;   // sigma: gaussian falloff (smooth weight field), noWeight: bones never used
   for (let a=0;a<nV;a++){
     const x=P[3*a], y=P[3*a+1], z=P[3*a+2], best=[];
@@ -3831,11 +3845,14 @@ function skinToBody(group, mat, name, opt={}){
       for (let k=0;k<4;k++) if (ws[k]>0 && !(noW && noW.test(bones[ids[k]].name))) acc.set(ids[k], (acc.get(ids[k])||0)+ws[k]*f); }
     if (RB[a]) acc.set(bones.indexOf(RB[a]), 1);
     if (!acc.size) acc.set(bones.indexOf(B.spine_03), 1);
-    // optional rigid share (0..1, from the rest-pose character-space position) on one bone, e.g. the pack's spine_03
-    // (opt.rigidBone: the bone, or a function of the same position that picks it, e.g. the nearer calf)
+    // optional rigid share (0..1, from the rest-pose character-space position) on one bone, e.g. the chest's spine_03
+    // (opt.rigidBone: the bone, or a function of the same position that picks it, e.g. the nearer calf); opt.pack (0..1, of the same
+    // position): how much of that share rides opt.packBone instead (the harness' ends on the swinging pack)
     if (opt.rigid && !RB[a]){ const r = opt.rigid(R[3*a],R[3*a+1],R[3*a+2]); if (r>0){ const tot=[...acc.values()].reduce((s,w)=>s+w,0),
-      j=bones.indexOf(typeof opt.rigidBone === 'function' ? opt.rigidBone(R[3*a],R[3*a+1],R[3*a+2]) : opt.rigidBone);
-      for (const k of acc.keys()) acc.set(k, acc.get(k)*(1-r)); acc.set(j, (acc.get(j)||0)+tot*r); } }
+      j=bones.indexOf(typeof opt.rigidBone === 'function' ? opt.rigidBone(R[3*a],R[3*a+1],R[3*a+2]) : opt.rigidBone),
+      kp = opt.pack ? opt.pack(R[3*a],R[3*a+1],R[3*a+2]) : 0;
+      for (const k of acc.keys()) acc.set(k, acc.get(k)*(1-r)); acc.set(j, (acc.get(j)||0)+tot*r*(1-kp));
+      if (kp > 0){ const jp = bones.indexOf(opt.packBone); acc.set(jp, (acc.get(jp)||0)+tot*r*kp); } } }
     const top = [...acc.entries()].sort((p,q)=>q[1]-p[1]).slice(0,4); const sum = top.reduce((s,e)=>s+e[1],0);
     while (top.length<4) top.push([0,0]);
     top.forEach(([j,w])=>{ SI.push(j); SW.push(w/sum); });
@@ -3851,7 +3868,7 @@ function skinToBody(group, mat, name, opt={}){
   if (opt.uv) geo.setAttribute('uv', new T.Float32BufferAttribute(UV,2));
   const skm = new T.SkinnedMesh(geo, mat); skm.name = name; skm.frustumCulled = false;
   skm.position.copy(sm.position); skm.quaternion.copy(sm.quaternion); skm.scale.copy(sm.scale); sm.parent.add(skm);
-  skm.bind(sm.skeleton, sm.bindMatrix);
+  skm.bind(sk, sm.bindMatrix);
   return skm;
 }
 // ---- harness: padded shoulder straps over the shoulders and down the chest, webbing back under the armpits to the pack's lower
@@ -3985,10 +4002,15 @@ function buildStraps(){
   const c = Math.floor(SF.P.length/2);
   obox(metal, SF.P[c].clone().addScaledVector(SF.Nn[c], 0.004), SF.Tn[c], SF.Nn[c], SF.Bn[c], 0.045, WEBT*2, WEB*1.15);
   // smooth weight field (many neighbours, gaussian falloff) without any arm / leg / head share: no kinks where the webbing passes
-  // the armpit when the clavicles and upper arms move (aim, T-pose, run)
+  // the armpit when the clavicles and upper arms move (aim, T-pose, run). Behind the back the rigid share on the chest (spine_03) goes
+  // over to the pack's own bone (PACK_DYN.bone) along the strap - from where it leaves the shoulder / the side of the ribs (x -0.07)
+  // to just inside the pack (x -0.16): the shoulder straps' pack ends and the webbing's lower corners ride the swinging pack, the
+  // rest of the run eases from it onto the body over ~8 cm, so nothing tears; the stretch is the webbing pulled taut as the pack
+  // swings out, spread along it
   const opt = { skip:/head|hand|arm|finger|thumb|index|middle|ring|pinky|thigh|calf|foot|ball/i, rigidBone:B.spine_03, K:32, sigma:0.05,
     noWeight:/head|neck|collar|hand|arm|finger|thumb|index|middle|ring|pinky|thigh|calf|foot|ball/i,
-    rigid:(x,y,z)=>Math.min(1, Math.max(0, (-0.07 - x)/0.06)) };
+    rigid:(x,y,z)=>Math.min(1, Math.max(0, (-0.07 - x)/0.06)),
+    sk:PACK_DYN.sk, packBone:PACK_DYN.bone, pack:(x,y,z)=>smooth01((-0.07 - x)/0.09) };
   skinToBody(straps, GEAR.strapS, 'shoulderStraps', opt); skinToBody(edges, GEAR.edgeS, 'strapEdges', opt); skinToBody(metal, GEAR.metalS, 'strapLocks', opt);
 }
 // ---- knee guards: power-armour knee plates in the canonical sheet's look (a dark steel frame round a smaller, raised, lighter square
@@ -4799,15 +4821,294 @@ function buildGear(){
     for (let i=0;i<gp.count;i++){ const y = gp.getY(i); gp.setX(i, gp.getX(i) + packBackX(y)); }
     m.geometry.computeVertexNormals();
   });
+  // hang it on its own bone at the anchor (a child of spine_03, keeping the bind-pose placement; the harness binds to it too)
+  packBone(pack);
   buildStraps();
   buildKneeGuards();
   const hs = hairScalp(); buildHairCards(hs); buildHairWisps(hs);
-  // re-parent to spine_03 keeping the bind-pose placement
-  const bone = B.spine_03; hero.updateMatrixWorld(true); bone.updateWorldMatrix(true,false);
-  const M = new T.Matrix4().copy(bone.matrixWorld).invert().multiply(hero.matrixWorld);
-  M.decompose(pack.position, pack.quaternion, pack.scale);
-  bone.add(pack);
   return pack;
+}
+
+// ---------- Backpack dynamics: the pack as its own body, hung from the shoulder straps ----------
+// The pack hangs on its own bone (PACK_DYN.bone, a child of spine_03) at the harness' anchor - the top of its body on the front
+// face's centre line, under the lid, between the shoulder straps - and swings about it like a loaded canvas pack strapped on (a
+// pendulum held in at the bottom by the webbing): it pitches out from the back (p: the bottom away, +), rolls side to side (r: the
+// bottom toward his left, +) and slides a little along the back (s: the straps give; along the back's curve where the pack's upper
+// front face lies on it - the shoulder blades - so sliding down the pack rides out over them instead of into them). packStep()
+// simulates the three in the chest's frame (the pack's rest hang against spine_03, the pose it was built in): damped springs back to
+// that hang, driven by what the pack's centre of mass feels there - the opposite of its attachment point's acceleration (the chest's
+// own motion: the run's bob, a turn, the roll; smoothed and clamped), the jump arc a platformer clip stands for (S.airPk: weightless
+// in the air it rides up on the slack straps; the landing's 3 g drops it and slams it in), the travel the in-place clips stand for
+// (their speed's change, as the coat feels it: it lags out as he sets off, swings in as he stops) and gravity turning against the
+// chest (gK of it: a chest leaning forward - the run, the crouch, the ladder - lays it onto the back, one leaning back lets it hang
+// off, upside down in the roll it swings out over him). Past its limits the webbing goes taut: a stiff spring (stop) with a hard end
+// a little further on.
+// Contact, one-sided: it never swings into the back. The torso's back behind it - probes: the backmost scan vertex (pelvis / spine)
+// per 'cell' of the pack's footprint, at rest at least 'lever' below the anchor (nearer it a swing cannot clear anything: there the
+// lift's axis along the back keeps the face on it); a fixed set picked at load, all of them used every frame (none switches in or
+// out), skinned every frame - keeps min(gap, its rest clearance) in front of the pack's front face (a heightfield of the pack, ray
+// cast at load). Every sub-step solves the lowest pitch that needs (the probes moved on from last frame's to this frame's), the pack
+// is held there and, coming in faster than the back moves out, takes the back's own speed (the same pitch solve at last frame's
+// back, the swing unchanged: how fast the binding probe moves) with a small bounce (a landing's thump). The collar above the lid
+// caps the lift the same way (packLift: sliding up, the lid's rounded front runs into it). (Not probes: the shoulder blades /
+// clavicles and the arms - next to the anchor or beside the pack, where a swing cannot move it away; they overlap its top corners
+// at rest already, hidden under it.)
+// Floor (a move that goes down onto it, MOVES floor): the floor presses the swung-out pack back onto his back (its pitch toward the
+// contact's), then its roll / lift back toward last frame's, until its lowest point is above it; what that cannot clear lifts his
+// hips at once (PACK_DYN.under; the hips' guard before the step, packLow, reads the live pack as last frame left it).
+// Deterministic: fixed sub-steps from dt; reset to the rest hang's static equilibrium (no velocity) with the coat (COAT.init: a cut),
+// when the clock is put back (clockBack: a tool's S.t = 0) and on a dt over 0.2 s. The T-pose blends it out (the bind shape).
+const PACK_DYN = {
+  pivotY: 1.545, comY: 1.30,        // pack space (the character's rest): the anchor's height (x on the front face's centre line), the
+                                    // centre of mass' (the body's middle, a little low: a loaded pack)
+  slopeY: 1.465,                    // the lift's axis: the back's curve (packBackX) at this height - the shoulder blades under the pack
+  pitch: [2.0, 0.4, -0.06, 0.26, 0.08],     // [natural frequency Hz, damping ratio, min, max, give rad] - the bottom out (+)
+  roll:  [3.0, 0.5, 0.06, 0.03],            // [Hz, damping ratio, |max|, give rad]
+  lift:  [3.8, 0.28, -0.022, 0.010, 0.006], // [Hz, damping ratio, min, max, give m] along the back (up: the lid under the collar)
+  stop:  [9, 0.35],                 // past max / min: the webbing taut - a spring this stiff (Hz, on top) and its damping; hard at +give
+  accK: 1,                          // share of the chest's own acceleration it feels (all: the straps hold it to the chest)
+  vMax: 3,                          // (m/s) a faster jump of the attachment point in one frame is a cut / pop, not motion: no acceleration
+  gK: 0.5,                          // share of gravity's turn against the chest it feels (the rest hang is the upright chest's)
+  speedK: 0.15,                     // share of the in-place clips' change of speed (their 1/8 s blend is no real start / stop)
+  airK: 1,                          // share of the jump arc's vertical acceleration (S.airPk: S.airA, free flight in the fall)
+  accMax: 40, accRate: 25,          // the attachment point's acceleration: clamp (m/s^2) and smoothing rate (1/s: cuts, IK pops; and
+                                    // 40 ms, more than a frame at 30 fps, so the frame rate hardly changes what it feels)
+  gap: 0.002, lever: 0.1, bounce: 0.15, push: 3,   // contact: gap (m), probes this far below the anchor (rest), restitution, top
+                                    // speed of the back pushing it out (rad/s)
+  lvMin: 0.06,                      // (a probe's lever in the pitch solve never under this: the lift moves them a few cm at most)
+  liftRelief: 0.003, deep: 0.015, pushS: 0.5,   // the lift's probes: the least change of clearance over the lift's travel that lets
+                                    // one cap it (m; full at 2x), left out when buried deeper than this at rest (m), top speed of the
+                                    // collar pushing the pack down (m/s)
+  cell: 0.005, cellU: 0.01,         // probes: the backmost torso vertex per cell this size (5 mm: the scan's back is coarse - ~ every
+                                    // vertex there, 40 of them; the lift's: 1 cm)
+  floorPad: 0.008,                  // (MOVES floor: the pack's lowest point this far above the floor, as the hips' guard keeps it)
+  h: 1/240,                         // sub-step (s)
+  init: false, p: 0, r: 0, s: 0, vp: 0, vr: 0, vs: 0, pMin: 0, sMax: 0, under: 0 };
+const _pk = { q: new T.Quaternion(), q2: new T.Quaternion(), q3: new T.Quaternion(), qi: new T.Quaternion(), Ri: new T.Quaternion(),
+  v: new T.Vector3(), v2: new T.Vector3(), w: new T.Vector3(), cw: new T.Vector3(), hd: new T.Vector3(), A: new T.Vector3(),
+  f: new T.Vector3(), a: new T.Vector3(), vel: new T.Vector3(), m: new T.Matrix4(), m2: new T.Matrix4(), Wr: new T.Matrix4(),
+  Wi: new T.Matrix4(), X: new T.Vector3(1, 0, 0), NZ: new T.Vector3(0, 0, -1), G: new T.Vector3(0, -9.8, 0) };
+// hang the pack (built in pack space = the character's rest space) on its bone at the anchor, a child of spine_03 (the bind pose);
+// the harness' skeleton: the body's bones + the pack's (skinToBody opt.sk)
+function packBone(pack){
+  const P = PACK_DYN, sp = B.spine_03; hero.updateMatrixWorld(true); sp.updateWorldMatrix(true, false);
+  const a = P.a = new T.Vector3(PACK.X0 + packBackX(P.pivotY) - 0.004, P.pivotY, 0);
+  P.c = new T.Vector3(PACK.X0 - PACK.D/2 + packBackX(P.comY), P.comY, 0);
+  const ca = P.c.clone().sub(a); P.L = ca.length();
+  P.ep = new T.Vector3(ca.y, -ca.x, 0).divideScalar(P.L);     // the centre of mass' path as the pitch grows (back and up)
+  P.er = new T.Vector3(0, -ca.z, ca.y).divideScalar(P.L);     // ... as the roll grows (toward his left)
+  const e = 0.01; P.ls = new T.Vector3((packBackX(P.slopeY + e) - packBackX(P.slopeY - e))/(2*e), 1, 0).normalize();   // the lift's axis
+  P.M = new T.Matrix4().copy(sp.matrixWorld).invert().multiply(hero.matrixWorld);   // pack space -> spine_03's
+  const bone = P.bone = new T.Bone(); bone.name = 'pack';
+  P.M.clone().multiply(new T.Matrix4().makeTranslation(a.x, a.y, a.z)).decompose(bone.position, bone.quaternion, bone.scale);
+  P.p0 = bone.position.clone(); P.q0 = bone.quaternion.clone();
+  P.up0 = P.ls.clone().applyMatrix3(new T.Matrix3().setFromMatrix4(P.M));   // the lift's axis in spine_03's
+  P.cPrev = new T.Vector3(); P.vPrev = new T.Vector3(); P.aS = new T.Vector3();
+  sp.add(bone); pack.position.copy(a).negate(); bone.add(pack); P.pack = pack;
+  hero.updateMatrixWorld(true);
+  let sm = null; model.traverse(o => { if (o.isSkinnedMesh && !sm) sm = o; });
+  P.sk = new T.Skeleton(sm.skeleton.bones.concat([bone]), sm.skeleton.boneInverses.concat([new T.Matrix4().copy(bone.matrixWorld).invert().multiply(sm.matrixWorld)]));
+}
+// the pack bone's local position / rotation for a swing (pitch p, roll r, lift s) - quat must not be _pk.q / _pk.q2
+function packLocal(p, r, s, pos, quat){
+  const P = PACK_DYN;
+  _pk.q.setFromAxisAngle(_pk.X, r).multiply(_pk.q2.setFromAxisAngle(_pk.NZ, p));
+  quat.copy(P.q0).multiply(_pk.q); pos.copy(P.up0).multiplyScalar(s).add(P.p0);
+}
+// the pack's front face, pack space: x at (y, z) (bilinear on the load's heightfield; NaN off the pack)
+function packFront(y, z){
+  const F = PACK_DYN.hf, u = (y - F.y0)/F.cell, w = (z - F.z0)/F.cell, i = Math.floor(u), j = Math.floor(w);
+  if (i < 0 || j < 0 || i >= F.ny - 1 || j >= F.nz - 1) return NaN;
+  const fu = u - i, fw = w - j, X = F.x, k = i*F.nz + j, a = X[k], b = X[k+1], c = X[k+F.nz], d = X[k+F.nz+1];
+  if (a === a && b === b && c === c && d === d) return (a*(1-fw) + b*fw)*(1-fu) + (c*(1-fw) + d*fw)*fu;
+  const n = X[(fu < 0.5 ? i : i+1)*F.nz + (fw < 0.5 ? j : j+1)]; return n;
+}
+// load (after the coat: the probes are skinned on its skeleton): the front heightfield, the back's probes and their rest clearance
+function buildPackDyn(){
+  const P = PACK_DYN, pack = P.pack; if (!pack || !COAT.mesh) return;
+  hero.updateMatrixWorld(true);
+  // the heightfield: rays from the front (pack space -x), only at the parts that reach the front face (not the back's details)
+  const W = pack.matrixWorld, Wi = new T.Matrix4().copy(W).invert(), rc = new T.Raycaster(), meshes = pack.children.filter(m => {
+    if (!m.isMesh) return false; m.geometry.computeBoundingBox(); return m.geometry.boundingBox.max.x > PACK.X0 - 0.1; });
+  const cell = 0.01, y0 = PACK.Y0 - 0.04, z0 = -(PACK.HW + 0.08), ny = Math.ceil((PACK.Y1 + 0.1 - y0)/cell) + 1, nz = Math.ceil(-2*z0/cell) + 1;
+  const X = new Float32Array(ny*nz).fill(NaN), dir = new T.Vector3(-1, 0, 0).transformDirection(W), o = new T.Vector3();
+  for (let i = 0; i < ny; i++) for (let j = 0; j < nz; j++){
+    rc.set(o.set(0.2, y0 + i*cell, z0 + j*cell).applyMatrix4(W), dir); rc.far = 1;
+    const hit = rc.intersectObjects(meshes, false)[0]; if (hit) X[i*nz + j] = hit.point.applyMatrix4(Wi).x;
+  }
+  P.hf = { x: X, y0, z0, ny, nz, cell };
+  // probes: the backmost torso vertex (dominant bone pelvis / spine) per cell over the pack's footprint, low enough to lever (the
+  // body's vertices taken where they are now - its rest - only near the pack: a bind-pose box first, then skinned)
+  const sm = COAT.mesh, g = sm.geometry, SI = g.attributes.skinIndex, SW = g.attributes.skinWeight, bones = sm.skeleton.bones, v = new T.Vector3();
+  // (and above them, up to the lid's top, the lift's probes: the neck and the collar - the pack sliding up along the back must not
+  // run its lid's front into the collar (LU: they cap the lift); the shoulders are left out - their blades / clavicles overlap the
+  // lid's corners in many poses already, hidden under it - and so is anything buried more than 'deep' at rest. The upper back is no
+  // lift probe: on the face's flat the lift slides the face along it, and where the arms go up it shrugs into the lid's lower edge
+  // whatever the pack does - pushing the pack up for it would only run the lid into the collar)
+  const toPk = new T.Matrix4().multiplyMatrices(Wi, sm.matrixWorld), cells = [new Map(), new Map()], yHi = P.pivotY - P.lever, yTop = PACK.Y1 + 0.06;
+  const near = (v, m) => v.y > PACK.Y0 - 0.03 - m && v.y < yTop + m && Math.abs(v.z) < PACK.HW + 0.03 + m && v.x < PACK.X0 + 0.06 + m;
+  for (let i = 0; i < g.attributes.position.count; i++){
+    let bw = 0, bi = 0; for (let k = 0; k < 4; k++){ const w = SW.array[4*i+k]; if (w > bw){ bw = w; bi = SI.array[4*i+k]; } }
+    const nm = bones[bi].name, low = /^(pelvis|spine_0[123])$/.test(nm), up = /^(neck_\d+|collar[A-Z]?_[lr])$/.test(nm);
+    if (!low && !up) continue;
+    if (!near(v.fromBufferAttribute(g.attributes.position, i).applyMatrix4(toPk), 0.15)) continue;
+    v.fromBufferAttribute(g.attributes.position, i); sm.boneTransform(i, v); v.applyMatrix4(toPk);
+    if (!near(v, 0)) continue;
+    const f = packFront(v.y, v.z); if (f !== f) continue;
+    const u = v.y < yHi ? (low ? 0 : -1) : up ? 1 : -1; if (u < 0 || u && v.x - f < -P.deep) continue;
+    const ce = u ? P.cellU : P.cell, key = Math.round(v.y/ce)*1000 + Math.round(v.z/ce), c = cells[u].get(key);
+    if (!c || v.x < c[1]) cells[u].set(key, [i, v.x, v.x - f]);
+  }
+  const pr = [...cells[0].values()];
+  P.probe = skinSet(pr.map(c => c[0])); P.tgt = Float32Array.from(pr.map(c => Math.min(P.gap, c[2])));
+  P.qn = new Float32Array(pr.length*3); P.qp = new Float32Array(pr.length*3); P.qu = new Float32Array(pr.length*3); P.q = P.qn;
+  const c = [...cells[1].values()];
+  P.LU = { probe: skinSet(c.map(e => e[0])), tgt: Float32Array.from(c.map(e => Math.min(P.gap, e[2]))), n: new Float32Array(c.length*3), p: new Float32Array(c.length*3) };
+}
+// the pack's rest world matrix (no swing): pack space -> world, as the chest has it now
+function packRestW(out){ B.spine_03.updateWorldMatrix(true, false); return out.multiplyMatrices(B.spine_03.matrixWorld, PACK_DYN.M); }
+// the lowest pack point (world y) for a swing, the chest as it is now (MOVES floor)
+function packLowAt(p, r, s){
+  const P = PACK_DYN; packLocal(p, r, s, _pk.v2, _pk.q3);
+  _pk.m.compose(_pk.v2, _pk.q3, P.bone.scale).multiply(_pk.m2.makeTranslation(-P.a.x, -P.a.y, -P.a.z)).premultiply(B.spine_03.matrixWorld);
+  let lo = Infinity; for (const q of PACKV){ const y = _pk.v.copy(q).applyMatrix4(_pk.m).y; if (y < lo) lo = y; } return lo;
+}
+// the lowest pitch that keeps every probe (Q: their rest-frame positions) clear of the pack's front face, at roll r / lift s (the
+// fixed set, every probe every time: the result moves on smoothly with them; -Infinity when none is in front of the pack)
+function packPitchMin(p, r, s, Q){
+  const P = PACK_DYN, a = P.a, ls = P.ls, n = P.tgt.length, qi = _pk.qi, w = _pk.w;
+  const ox = a.x + s*ls.x, oy = a.y + s*ls.y;
+  for (let it = 0; it < 3; it++){
+    qi.setFromAxisAngle(_pk.X, r).multiply(_pk.q2.setFromAxisAngle(_pk.NZ, p)).invert();
+    let need = -Infinity;
+    for (let k = 0; k < n; k++){
+      w.set(Q[3*k] - ox, Q[3*k+1] - oy, Q[3*k+2] - a.z).applyQuaternion(qi);
+      const f = packFront(w.y + a.y, w.z + a.z); if (f !== f) continue;
+      const d = (P.tgt[k] - (w.x + a.x - f)) / Math.max(P.lvMin, -w.y); if (d > need) need = d;
+    }
+    if (need === -Infinity) return -Infinity;
+    p += need; if (Math.abs(need) < 1e-6) break;
+  }
+  return p;
+}
+// the lift's cap: the highest lift the collar leaves the pack at pitch p / roll r, the lift's probes (PACK_DYN.LU) at Q (rest frame):
+// along the lift's whole travel each probe's clearance in front of the face (off the face - above the lid - it is clear: the lid's
+// front rounds back at its top, so sliding the pack up runs it into the collar); a probe caps the lift where its clearance would
+// first run out going up from the lowest lift (at the lowest, if it is short already there); one whose clearance the lift hardly
+// changes is no lift's business (on the face's flat the lift slides the face along the back) - phased in by that change over
+// liftRelief .. 2 liftRelief, so none switches on or off at once; Infinity when none caps it
+function packLift(p, r, s, Q){
+  const P = PACK_DYN, a = P.a, T = P.LU.tgt, n = T.length, w = _pk.w, D = _pk.v2, N = 11, s0 = P.lift[2] - P.lift[4], ds = (P.lift[3] - P.lift[2] + 2*P.lift[4])/N;
+  _pk.qi.setFromAxisAngle(_pk.X, r).multiply(_pk.q2.setFromAxisAngle(_pk.NZ, p)).invert(); D.copy(P.ls).applyQuaternion(_pk.qi);
+  const cl = x => { const u = x - s; return w.x + a.x - D.x*u - packFront(w.y + a.y - D.y*u, w.z + a.z - D.z*u); };
+  let lim = Infinity;
+  for (let k = 0; k < n; k++){
+    w.set(Q[3*k] - a.x - s*P.ls.x, Q[3*k+1] - a.y - s*P.ls.y, Q[3*k+2] - a.z).applyQuaternion(_pk.qi);
+    const tg = T[k], cN = cl(s); if (cN - tg > 0.05) continue;   // (far: the face comes 34 + 11 mm nearer over the travel at most)
+    let lo = Infinity, hi = -Infinity, cap = Infinity, cp = 0;
+    for (let j = 0; j <= N; j++){
+      const x = s0 + j*ds, c0 = cl(x), c = c0 === c0 ? c0 : 0.1; if (c < lo) lo = c; if (c > hi) hi = c;
+      if (cap === Infinity && c < tg) cap = j ? x - ds + ds*(cp - tg)/(cp - c) : s0;
+      cp = c;
+    }
+    const wk = smooth01((hi - lo - P.liftRelief)/P.liftRelief);
+    if (wk > 0 && cap + (1 - wk)*0.1 < lim) lim = cap + (1 - wk)*0.1;
+  }
+  return lim;
+}
+function packStep(dt){
+  const P = PACK_DYN, K = _pk; if (!P.bone || !P.probe) return;
+  const Wr = packRestW(K.Wr); K.Ri.setFromRotationMatrix(Wr).invert(); K.Wi.copy(Wr).invert();
+  // the attachment point of the centre of mass (world) and its acceleration; the travel the in-place clips stand for
+  const cw = K.cw.copy(P.c).applyMatrix4(Wr);
+  const pq = B.pelvis.getWorldQuaternion(K.q3).multiply(K.q2.copy(BIND.pelvis.w).invert());
+  const hd = K.hd.set(1, 0, 0).applyQuaternion(pq).setY(0); if (hd.lengthSq() > 1e-6) hd.normalize();
+  const spd = S.walk*COAT.speed[0] + S.run*COAT.speed[1] + S.mvSpd;
+  const reset = !P.init || !COAT.init || dt > 0.2;
+  if (reset){ P.cPrev.copy(cw); P.vPrev.set(0, 0, 0); P.aS.set(0, 0, 0); P.spd = spd; P.nF = 0; P.sA = 0; }
+  else if (dt > 1e-5){
+    const v = K.vel.copy(cw).sub(P.cPrev).divideScalar(dt);
+    if (v.length() > P.vMax) P.aS.multiplyScalar(Math.exp(-dt*P.accRate));   // (a pop: the chest is taken where it went, no acceleration)
+    else {
+      const a = K.a.set(0, 0, 0); if (P.nF > 0) a.copy(v).sub(P.vPrev).divideScalar(dt);
+      if (a.length() > P.accMax) a.setLength(P.accMax);
+      P.aS.lerp(a, 1 - Math.exp(-dt*P.accRate)); P.vPrev.copy(v); P.nF++;
+    }
+    P.cPrev.copy(cw);
+    P.sA = Math.max(-12, Math.min(12, (spd - P.spd)/dt)); P.spd = spd;
+  }
+  // the specific force on the centre of mass in the rest frame: gravity's turn against the chest + the fictitious accelerations
+  const live = 1 - S.tp, A = K.A.copy(P.aS).multiplyScalar(P.accK).addScaledVector(hd, P.sA*P.speedK); A.y += (S.airPk || 0)*P.airK;
+  const f = K.f.copy(K.G).applyQuaternion(K.Ri).sub(K.G).multiplyScalar(P.gK).sub(A.applyQuaternion(K.Ri)).multiplyScalar(live);
+  const fp = f.dot(P.ep)/P.L, fr = f.dot(P.er)/P.L, fs = f.dot(P.ls);
+  const [hp, zp, pLo, pHi, pG] = P.pitch, [hr, zr, rMax, rG] = P.roll, [hs, zs, sLo, sHi, sG] = P.lift;
+  const wp = 2*Math.PI*hp, wr = 2*Math.PI*hr, ws = 2*Math.PI*hs, wk = 2*Math.PI*P.stop[0], kS = wk*wk, cS = 2*P.stop[1]*wk;
+  // the back's probes this frame, in the rest frame (P.qn; last frame's: P.qp)
+  const BM = boneMats(), out = skinRun(P.probe, BM);
+  for (let k = 0; k < P.tgt.length; k++) K.v.fromArray(out, 3*k).applyMatrix4(K.Wi).toArray(P.qn, 3*k);
+  const oU = skinRun(P.LU.probe, BM); for (let k = 0; k < P.LU.tgt.length; k++) K.v.fromArray(oU, 3*k).applyMatrix4(K.Wi).toArray(P.LU.n, 3*k);
+  if (reset){   // the static equilibrium of the rest hang under these forces
+    P.qp.set(P.qn); P.LU.p.set(P.LU.n);
+    P.r = Math.max(-rMax, Math.min(rMax, fr/(wr*wr))); P.s = Math.max(sLo, Math.min(sHi, fs/(ws*ws)));
+    P.p = Math.max(pLo, Math.min(pHi, fp/(wp*wp))); P.vp = P.vr = P.vs = 0;
+    const m0 = packPitchMin(P.p, P.r, P.s, P.qn); if (P.p < m0) P.p = Math.min(pHi, m0);
+    const s0 = packLift(P.p, P.r, P.s, P.LU.n); if (P.s > s0) P.s = Math.max(sLo - sG, s0);
+    P.pMin = m0; P.sMax = s0; P.init = true;
+  }
+  // the back's own speed out against the pack: the contact's pitch at this swing, last frame's back -> this frame's
+  let vSurf = 0, vTop = 0;
+  if (!reset && dt > 1e-5){ const m1 = packPitchMin(P.p, P.r, P.s, P.qn), m0 = packPitchMin(P.p, P.r, P.s, P.qp);
+    if (m1 > -Infinity && m0 > -Infinity) vSurf = Math.max(-P.push, Math.min(P.push, (m1 - m0)/dt));
+  }
+  // the lift's cap under the collar (packLift: once a frame - its scan is the costly part - at last frame's collar and this one's,
+  // lerped over the sub-steps) and the collar's own speed down onto the lid
+  const tN = packLift(P.p, P.r, P.s, P.LU.n), tP = reset ? tN : packLift(P.p, P.r, P.s, P.LU.p);
+  if (!reset && dt > 1e-5 && tN < Infinity && tP < Infinity) vTop = Math.max(-P.pushS, Math.min(P.pushS, (tN - tP)/dt));
+  const prev1 = P.r, prev2 = P.s; P.under = 0;
+  const nS = Math.max(1, Math.ceil(dt/P.h - 1e-6)), h = dt/nS;
+  for (let i = 0; i < nS; i++){
+    // springs to the rest hang; past a limit the webbing goes taut (the stop: stiffer, damped), hard a little further on
+    const ep = P.p > pHi ? P.p - pHi : 0, er = P.r > rMax ? P.r - rMax : P.r < -rMax ? P.r + rMax : 0, es = P.s > sHi ? P.s - sHi : P.s < sLo ? P.s - sLo : 0;
+    P.vp += (fp - wp*wp*P.p - 2*zp*wp*P.vp - (ep ? kS*ep + cS*P.vp : 0))*h;
+    P.vr += (fr - wr*wr*P.r - 2*zr*wr*P.vr - (er ? kS*er + cS*P.vr : 0))*h;
+    P.vs += (fs - ws*ws*P.s - 2*zs*ws*P.vs - (es ? kS*es + cS*P.vs : 0))*h;
+    P.p += P.vp*h; P.r += P.vr*h; P.s += P.vs*h;
+    if (P.p > pHi + pG){ P.p = pHi + pG; if (P.vp > 0) P.vp = 0; }
+    if (Math.abs(P.r) > rMax + rG){ P.r = Math.sign(P.r)*(rMax + rG); if (P.vr*P.r > 0) P.vr = 0; }
+    if (P.s > sHi + sG){ P.s = sHi + sG; if (P.vs > 0) P.vs = 0; } else if (P.s < sLo - sG){ P.s = sLo - sG; if (P.vs < 0) P.vs = 0; }
+    // the contact against this sub-step's back (the probes on their way from last frame's place to this frame's)
+    const u = (i + 1)/nS, Q = P.qu; for (let k = 0; k < Q.length; k++) Q[k] = P.qp[k] + (P.qn[k] - P.qp[k])*u;
+    const pm = packPitchMin(P.p, P.r, P.s, Q), lo = Math.max(pLo, pm); P.pMin = pm;
+    if (P.p < lo){ P.p = lo; const vS = lo === pm ? vSurf : 0; if (P.vp < vS) P.vp = vS + P.bounce*(vS - P.vp); }
+    // ... and the lift under the collar
+    const sm = tN < Infinity && tP < Infinity ? tP + (tN - tP)*u : tN; P.sMax = sm;
+    if (P.s > sm){ P.s = Math.max(sLo - sG, sm); if (P.vs > vTop) P.vs = vTop - P.bounce*(P.vs - vTop); }
+  }
+  P.qp.set(P.qn); P.LU.p.set(P.LU.n);
+  // a move down on the floor: the floor presses the pack onto his back (its pitch in, toward the contact's) until its lowest point
+  // clears it; where pitching in does not raise it, no lower than last frame's swing (the hips' guard lifts him for the rest)
+  if (S.mvFloor > 1e-3 && PACKV.length){
+    const fl = S.mvFl + P.floorPad, low = packLowAt(P.p, P.r, P.s);
+    if (low < fl){
+      const lo = Math.max(pLo, P.pMin), lowIn = lo < P.p ? packLowAt(lo, P.r, P.s) : low;
+      if (lowIn > low + 1e-5){
+        if (lowIn <= fl) P.p = lo;
+        else { let a = lo, b = P.p; for (let it = 0; it < 10; it++){ const m = (a + b)/2; if (packLowAt(m, P.r, P.s) >= fl) a = m; else b = m; } P.p = a; }
+        if (P.vp > 0) P.vp = 0;
+      }
+      // still on it (squeezed between his back and the floor): the roll / lift back toward last frame's where that raises it
+      const lw = P.p === lo ? lowIn : packLowAt(P.p, P.r, P.s);
+      if (lw < fl && packLowAt(P.p, prev1, prev2) > lw + 1e-5){
+        let a = 0, b = 1; const r1 = P.r, s1 = P.s;
+        for (let it = 0; it < 8; it++){ const m = (a + b)/2; if (packLowAt(P.p, r1 + (prev1 - r1)*m, s1 + (prev2 - s1)*m) >= fl) b = m; else a = m; }
+        P.r = r1 + (prev1 - r1)*b; P.s = s1 + (prev2 - s1)*b; P.vr = P.vs = 0;
+      }
+      // what is left lifts his hips now (update: the hips' guard did it with last frame's swing)
+      P.under = Math.max(0, fl - packLowAt(P.p, P.r, P.s))*Math.min(1, S.mvFloor)*live;
+    }
+  }
+  packLocal(P.p*live, P.r*live, P.s*live, P.bone.position, P.bone.quaternion);
+  P.bone.updateMatrixWorld(true);
 }
 
 // ---------- Coat skirt: its own bones + secondary motion ----------
@@ -6031,12 +6332,13 @@ loadModel(gltf => {
   buildCoat();
   buildSole();
   buildPackV();
+  buildPackDyn();
   updateHud();
   window.HERO_READY = false;   // tools wait for the tactical moves too
   // (HERO.setAnim: the game / tools - a tactical one-shot or the ledge climb plays once and holds its end; the viewer's buttons replay.
   // It returns false when the request waits for a committed one-shot to pass its commit point - in HERO.S.queue, made by update())
   window.HERO = { T, hero, model, B, S, SH, LIGHT, PAL, RAMP, CLS, post, weapons, flash, update, render, setAnim(a, cut){ S.replay = false; return setAnim(a, cut); }, setWeapon, setSize, CLIPS,
-    MOVES, moves, MV, SEQS, LEDGE, GUARD, playSeq, frame(w,h,px){ S.pxChar=px; setSize(w,h,1); } };
+    MOVES, moves, MV, SEQS, LEDGE, GUARD, playSeq, pack:PACK_DYN, frame(w,h,px){ S.pxChar=px; setSize(w,h,1); } };
   loadMoves().catch(e => console.warn('ruchy taktyczne niedostępne:', e)).finally(() => { window.HERO_READY = true; });
 }, err => { hud.textContent = 'Nie udało się wczytać modelu: ' + (err && err.message || err); });
 })();
