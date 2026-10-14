@@ -1,0 +1,509 @@
+{
+ "pxPerM": 52.5,
+ "atlas": "models.png",
+ "generator": "tools/model_sprites.mjs",
+ "sprites": {
+  "p2_guard_tower_v2": {
+   "x": 0,
+   "y": 0,
+   "w": 229,
+   "h": 388,
+   "scale": 1,
+   "size": 1,
+   "pxPerM": 52.5,
+   "model": "p2_guard_tower_v2",
+   "view": {
+    "yaw": 25,
+    "pitch": 4,
+    "mirror": false
+   },
+   "size_m": [
+    4.36,
+    7.39
+   ],
+   "outline": "sel",
+   "ax": 115,
+   "ay": 387,
+   "top": 387,
+   "layer": "play",
+   "points": {
+    "lens": [
+     147,
+     94
+    ],
+    "lens_x": [
+     155,
+     94
+    ],
+    "lens_y": [
+     147,
+     81
+    ],
+    "f_tl": [
+     47,
+     69
+    ],
+    "f_tr": [
+     133,
+     72
+    ],
+    "f_bl": [
+     47,
+     95
+    ],
+    "f_br": [
+     133,
+     98
+    ],
+    "s_tl": [
+     141,
+     72
+    ],
+    "s_tr": [
+     182,
+     66
+    ],
+    "s_bl": [
+     141,
+     98
+    ],
+    "s_br": [
+     182,
+     92
+    ],
+    "c_ftl": [
+     42,
+     49
+    ],
+    "c_fbl": [
+     42,
+     166
+    ],
+    "c_ftr": [
+     138,
+     52
+    ],
+    "c_fbr": [
+     138,
+     170
+    ],
+    "c_str": [
+     184,
+     45
+    ],
+    "c_sbr": [
+     184,
+     163
+    ],
+    "bat_l": [
+     42,
+     131
+    ],
+    "bat_r": [
+     138,
+     134
+    ],
+    "bat_s": [
+     184,
+     127
+    ]
+   }
+  },
+  "p2_guard_tower_v2_front": {
+   "x": 230,
+   "y": 0,
+   "w": 196,
+   "h": 388,
+   "scale": 1,
+   "size": 1,
+   "pxPerM": 52.5,
+   "model": "p2_guard_tower_v2",
+   "view": {
+    "yaw": 8,
+    "pitch": 4,
+    "mirror": false
+   },
+   "size_m": [
+    3.73,
+    7.39
+   ],
+   "outline": "sel",
+   "ax": 98,
+   "ay": 387,
+   "top": 387,
+   "layer": "play",
+   "points": {
+    "lens": [
+     163,
+     94
+    ],
+    "lens_x": [
+     171,
+     94
+    ],
+    "lens_y": [
+     163,
+     81
+    ],
+    "f_tl": [
+     42,
+     71
+    ],
+    "f_tr": [
+     136,
+     72
+    ],
+    "f_bl": [
+     42,
+     98
+    ],
+    "f_br": [
+     136,
+     98
+    ],
+    "s_tl": [
+     143,
+     72
+    ],
+    "s_tr": [
+     156,
+     65
+    ],
+    "s_bl": [
+     143,
+     98
+    ],
+    "s_br": [
+     156,
+     92
+    ],
+    "c_ftl": [
+     37,
+     51
+    ],
+    "c_fbl": [
+     37,
+     169
+    ],
+    "c_ftr": [
+     141,
+     53
+    ],
+    "c_fbr": [
+     141,
+     170
+    ],
+    "c_str": [
+     157,
+     45
+    ],
+    "c_sbr": [
+     157,
+     162
+    ],
+    "bat_l": [
+     37,
+     133
+    ],
+    "bat_r": [
+     141,
+     134
+    ],
+    "bat_s": [
+     157,
+     127
+    ]
+   }
+  },
+  "p2_siebhaus_hopper": {
+   "x": 0,
+   "y": 389,
+   "w": 172,
+   "h": 241,
+   "scale": 1,
+   "size": 1,
+   "pxPerM": 52.5,
+   "model": "p2_siebhaus_hopper",
+   "view": {
+    "yaw": 20,
+    "pitch": 9,
+    "mirror": false
+   },
+   "size_m": [
+    3.28,
+    4.59
+   ],
+   "outline": "sel",
+   "ax": 86,
+   "ay": 240,
+   "top": 240,
+   "layer": "play"
+  },
+  "p2_siebhaus_screen": {
+   "x": 173,
+   "y": 389,
+   "w": 203,
+   "h": 95,
+   "scale": 1,
+   "size": 1,
+   "pxPerM": 52.5,
+   "model": "p2_siebhaus_screen",
+   "view": {
+    "yaw": 14,
+    "pitch": 6,
+    "mirror": false
+   },
+   "size_m": [
+    3.87,
+    1.81
+   ],
+   "outline": "sel",
+   "ax": 101,
+   "ay": 94,
+   "top": 94,
+   "layer": "play",
+   "points": {
+    "sp0_b": [
+     50,
+     72
+    ],
+    "sp1_b": [
+     34,
+     79
+    ],
+    "sp2_b": [
+     161,
+     75
+    ],
+    "sp3_b": [
+     145,
+     82
+    ],
+    "sp0_t": [
+     50,
+     54
+    ],
+    "sp1_t": [
+     34,
+     61
+    ],
+    "sp2_t": [
+     161,
+     57
+    ],
+    "sp3_t": [
+     145,
+     64
+    ],
+    "pb": [
+     72,
+     50
+    ],
+    "ps": [
+     104,
+     62
+    ]
+   }
+  },
+  "p2_boom_barrier": {
+   "x": 0,
+   "y": 631,
+   "w": 235,
+   "h": 67,
+   "scale": 1,
+   "size": 1,
+   "pxPerM": 52.5,
+   "model": "p2_boom_barrier",
+   "view": {
+    "yaw": 12,
+    "pitch": 5,
+    "mirror": false
+   },
+   "size_m": [
+    4.48,
+    1.28
+   ],
+   "outline": "sel",
+   "ax": 117,
+   "ay": 66,
+   "top": 66,
+   "layer": "play",
+   "points": {
+    "pole_l": [
+     15,
+     10
+    ],
+    "pole_r": [
+     176,
+     13
+    ],
+    "pole_t": [
+     78,
+     8
+    ],
+    "pole_b": [
+     78,
+     14
+    ],
+    "cw_tl": [
+     216,
+     7
+    ],
+    "cw_tr": [
+     231,
+     7
+    ],
+    "cw_bl": [
+     216,
+     24
+    ],
+    "cw_br": [
+     231,
+     25
+    ]
+   }
+  },
+  "p2_crate_open": {
+   "x": 236,
+   "y": 632,
+   "w": 67,
+   "h": 57,
+   "scale": 1,
+   "size": 1,
+   "pxPerM": 52.5,
+   "model": "p2_crate_open",
+   "view": {
+    "yaw": 20,
+    "pitch": 8,
+    "mirror": false
+   },
+   "size_m": [
+    1.28,
+    1.09
+   ],
+   "outline": "#0b080b",
+   "ax": 34,
+   "ay": 56,
+   "top": 56,
+   "layer": "play",
+   "points": {
+    "o_tl": [
+     5,
+     12
+    ],
+    "o_tr": [
+     44,
+     14
+    ],
+    "o_bl": [
+     5,
+     49
+    ],
+    "o_br": [
+     44,
+     51
+    ]
+   }
+  },
+  "p2_guard_dog": {
+   "x": 304,
+   "y": 631,
+   "w": 57,
+   "h": 46,
+   "scale": 1,
+   "size": 1,
+   "pxPerM": 52.5,
+   "model": "p2_guard_dog",
+   "view": {
+    "yaw": 72,
+    "pitch": 5,
+    "mirror": false
+   },
+   "size_m": [
+    1.09,
+    0.88
+   ],
+   "outline": "sel",
+   "ax": 29,
+   "ay": 45,
+   "top": 45,
+   "layer": "play"
+  },
+  "p2_wall_lamp": {
+   "x": 362,
+   "y": 631,
+   "w": 28,
+   "h": 36,
+   "scale": 1,
+   "size": 1,
+   "pxPerM": 52.5,
+   "model": "p2_wall_lamp",
+   "view": {
+    "yaw": 12,
+    "pitch": 3,
+    "mirror": false
+   },
+   "size_m": [
+    0.53,
+    0.69
+   ],
+   "outline": "sel",
+   "ax": 13,
+   "ay": 35,
+   "top": 35,
+   "layer": "play",
+   "points": {
+    "glass": [
+     7,
+     19
+    ],
+    "neck": [
+     10,
+     6
+    ],
+    "plate": [
+     26,
+     6
+    ]
+   }
+  },
+  "p2_wall_lamp_sodium": {
+   "x": 391,
+   "y": 631,
+   "w": 23,
+   "h": 17,
+   "scale": 1,
+   "size": 1,
+   "pxPerM": 52.5,
+   "model": "p2_wall_bracket+p2_sodium_head",
+   "view": {
+    "yaw": 12,
+    "pitch": 3,
+    "mirror": false
+   },
+   "size_m": [
+    0.44,
+    0.32
+   ],
+   "outline": "sel",
+   "ax": 11,
+   "ay": 16,
+   "top": 16,
+   "layer": "play",
+   "points": {
+    "glass": [
+     5,
+     14
+    ],
+    "neck": [
+     7,
+     1
+    ],
+    "plate": [
+     21,
+     1
+    ]
+   }
+  }
+ }
+}

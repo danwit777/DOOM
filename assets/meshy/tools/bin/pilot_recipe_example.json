@@ -1,0 +1,294 @@
+[
+ {
+  "name": "p_guard_tower",
+  "model": "guard_tower",
+  "yaw": 25,
+  "pitch": 4,
+  "outline": "sel",
+  "inner": 3,
+  "smooth": 1,
+  "straight": 1,
+  "clean": true,
+  "island": [
+   10,
+   40
+  ],
+  "detail": 0.3,
+  "bevel": [
+   1,
+   -1
+  ],
+  "cast": 2,
+  "layer": "play",
+  "classes": {
+   "wood": [
+    "#8c847a",
+    "#867c71",
+    "#69655e",
+    "#7b7770",
+    "#787269",
+    "#948c81",
+    "#746c63",
+    "#a3998d",
+    "#54504d"
+   ],
+   "slate": [
+    "#38393c",
+    "#2b2c2c"
+   ]
+  }
+ },
+ {
+  "name": "p_ropeway_pylon",
+  "model": "ropeway_pylon",
+  "yaw": 15,
+  "pitch": 3,
+  "outline": "sel",
+  "inner": 3,
+  "smooth": 1,
+  "straight": 1,
+  "clean": true,
+  "island": [
+   8,
+   30
+  ],
+  "detail": 0.2,
+  "bevel": [
+   1,
+   -1
+  ],
+  "layer": "play",
+  "classes": {
+   "rust": {
+    "h": [
+     0,
+     45
+    ],
+    "s": [
+     0.25,
+     1
+    ],
+    "protos": [
+     "#874c2f",
+     "#6c3922",
+     "#955c40"
+    ]
+   },
+   "steel": [
+    "#5a5a5a",
+    "#3a3a3a"
+   ]
+  },
+  "cut": [
+   [
+    -6,
+    0,
+    -2.9,
+    11
+   ],
+   [
+    2.4,
+    0,
+    7,
+    11
+   ]
+  ],
+  "materials": {
+   "rust": {
+    "ramp": "rust",
+    "steps": [
+     0,
+     1,
+     2,
+     3,
+     4
+    ]
+   }
+  },
+  "features": [
+   {
+    "band": [
+     1.6,
+     20
+    ],
+    "axis": "y",
+    "tone": -1,
+    "soft": 4,
+    "mats": [
+     "rust"
+    ]
+   }
+  ]
+ },
+ {
+  "name": "p_ropeway_bucket",
+  "model": "ropeway_bucket",
+  "yaw": 20,
+  "pitch": 6,
+  "outline": "sel",
+  "inner": 3,
+  "smooth": 1,
+  "straight": 1,
+  "clean": true,
+  "island": [
+   10,
+   30
+  ],
+  "detail": 0.4,
+  "bevel": [
+   1,
+   -1
+  ],
+  "layer": "play",
+  "classes": {
+   "rust": [
+    "#443a32",
+    "#4a3e35",
+    "#4d433a",
+    "#594b40",
+    "#554539",
+    "#453d36",
+    "#605146",
+    "#4f3f33",
+    "#40352c",
+    "#6a5a4e"
+   ]
+  },
+  "materials": {
+   "rust": {
+    "ramp": "rust",
+    "steps": [
+     0,
+     1,
+     2,
+     3,
+     4
+    ]
+   }
+  }
+ },
+ {
+  "name": "p_shaft_cage",
+  "model": "shaft_cage",
+  "yaw": 20,
+  "pitch": 4,
+  "outline": "sel",
+  "inner": 3,
+  "smooth": 1,
+  "straight": 1,
+  "clean": true,
+  "island": [
+   8,
+   30
+  ],
+  "detail": 0.3,
+  "bevel": [
+   1,
+   -1
+  ],
+  "layer": "play",
+  "classes": {
+   "steel": [
+    "#4e4a42",
+    "#474036",
+    "#4b4337"
+   ],
+   "rust": [
+    "#816b4f",
+    "#8f7d60",
+    "#685a48",
+    "#5a4e3f",
+    "#3c2d21",
+    "#44392d",
+    "#524434"
+   ]
+  }
+ },
+ {
+  "name": "p_engine_house",
+  "model": "engine_house",
+  "yaw": 28,
+  "pitch": 5,
+  "outline": "sel",
+  "inner": 3,
+  "smooth": 1,
+  "straight": 1,
+  "clean": true,
+  "island": [
+   20,
+   120
+  ],
+  "detail": 0.3,
+  "bevel": [
+   1,
+   -1
+  ],
+  "cast": 2,
+  "layer": "play",
+  "classes": {
+   "brick": {
+    "h": [
+     0,
+     28
+    ],
+    "s": [
+     0.35,
+     1
+    ],
+    "protos": [
+     "#bf5f43",
+     "#9d4632",
+     "#b0583f",
+     "#b06d56"
+    ]
+   },
+   "slate": {
+    "s": [
+     0,
+     0.16
+    ],
+    "protos": [
+     "#444647",
+     "#2b2c2c",
+     "#6c6c68",
+     "#5c5754",
+     "#635f5c"
+    ]
+   },
+   "glass": [
+    "#1c2230",
+    "#262c3a"
+   ]
+  }
+ },
+ {
+  "name": "p_street_lamp",
+  "model": "street_lamp",
+  "yaw": 10,
+  "pitch": 3,
+  "outline": "sel",
+  "inner": 2,
+  "smooth": 1,
+  "straight": 1,
+  "clean": true,
+  "island": [
+   6,
+   20
+  ],
+  "detail": 0.3,
+  "bevel": [
+   1,
+   -1
+  ],
+  "layer": "play",
+  "classes": {
+   "green": [
+    "#32413f",
+    "#2e3d3b",
+    "#2b3835",
+    "#333e3a",
+    "#59635d"
+   ]
+  }
+ }
+]

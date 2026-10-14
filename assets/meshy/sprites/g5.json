@@ -1,0 +1,301 @@
+{
+ "pxPerM": 52.5,
+ "atlas": "models.png",
+ "generator": "tools/model_sprites.mjs",
+ "sprites": {
+  "colony_house_c1_tall_front": {
+   "x": 0,
+   "y": 0,
+   "w": 166,
+   "h": 493,
+   "scale": 0.65,
+   "size": 1,
+   "pxPerM": 34.125,
+   "model": "colony_house_c1_tall_a",
+   "view": {
+    "yaw": 0,
+    "pitch": 2,
+    "mirror": false
+   },
+   "size_m": [4.86, 14.45],
+   "outline": "sel",
+   "ax": 83,
+   "ay": 492,
+   "top": 492,
+   "layer": "mid"
+  },
+  "colony_house_c1_tall_b": {
+   "x": 167,
+   "y": 0,
+   "w": 220,
+   "h": 493,
+   "scale": 0.65,
+   "size": 1,
+   "pxPerM": 34.125,
+   "model": "colony_house_c1_tall_b",
+   "view": {
+    "yaw": 0,
+    "pitch": 2,
+    "mirror": false
+   },
+   "size_m": [6.45, 14.45],
+   "outline": "sel",
+   "ax": 110,
+   "ay": 492,
+   "top": 492,
+   "layer": "mid"
+  },
+  "colony_house_c3_hipped": {
+   "x": 0,
+   "y": 494,
+   "w": 226,
+   "h": 491,
+   "scale": 0.65,
+   "size": 1,
+   "pxPerM": 34.125,
+   "model": "colony_house_c3_hipped",
+   "view": {
+    "yaw": 0,
+    "pitch": 2,
+    "mirror": false
+   },
+   "size_m": [6.62, 14.39],
+   "outline": "sel",
+   "ax": 113,
+   "ay": 490,
+   "top": 490,
+   "layer": "mid"
+  },
+  "colony_house_c1_tall": {
+   "x": 227,
+   "y": 494,
+   "w": 224,
+   "h": 489,
+   "scale": 0.65,
+   "size": 1,
+   "pxPerM": 34.125,
+   "model": "colony_house_c1_tall_a",
+   "view": {
+    "yaw": 90,
+    "pitch": 2,
+    "mirror": false
+   },
+   "size_m": [6.56, 14.33],
+   "outline": "sel",
+   "ax": 112,
+   "ay": 488,
+   "top": 488,
+   "layer": "mid"
+  },
+  "screening_house_siebhaus": {
+   "x": 0,
+   "y": 986,
+   "w": 401,
+   "h": 444,
+   "scale": 0.65,
+   "size": 1,
+   "pxPerM": 34.125,
+   "model": "screening_house_siebhaus_a",
+   "view": {
+    "yaw": 0,
+    "pitch": 2,
+    "mirror": true
+   },
+   "size_m": [11.75, 13.01],
+   "outline": "sel",
+   "ax": 200,
+   "ay": 443,
+   "top": 443,
+   "layer": "mid"
+  },
+  "colony_house_c2_risalit": {
+   "x": 0,
+   "y": 1431,
+   "w": 286,
+   "h": 432,
+   "scale": 0.65,
+   "size": 1,
+   "pxPerM": 34.125,
+   "model": "colony_house_c2_risalit_a",
+   "view": {
+    "yaw": 0,
+    "pitch": 2,
+    "mirror": false
+   },
+   "size_m": [8.38, 12.66],
+   "outline": "sel",
+   "ax": 143,
+   "ay": 431,
+   "top": 431,
+   "layer": "mid"
+  },
+  "colony_house_c2_risalit_b": {
+   "x": 0,
+   "y": 1864,
+   "w": 284,
+   "h": 431,
+   "scale": 0.65,
+   "size": 1,
+   "pxPerM": 34.125,
+   "model": "colony_house_c2_risalit_b",
+   "view": {
+    "yaw": 0,
+    "pitch": 2,
+    "mirror": false
+   },
+   "size_m": [8.32, 12.63],
+   "outline": "sel",
+   "ax": 142,
+   "ay": 430,
+   "top": 430,
+   "layer": "mid"
+  },
+  "mid_engine_house_gabled": {
+   "x": 0,
+   "y": 2296,
+   "w": 254,
+   "h": 384,
+   "scale": 0.65,
+   "size": 1,
+   "pxPerM": 34.125,
+   "model": "mid_engine_house_gabled",
+   "view": {
+    "yaw": -90,
+    "pitch": 2,
+    "mirror": false
+   },
+   "size_m": [7.44, 11.25],
+   "outline": "sel",
+   "ax": 130,
+   "ay": 383,
+   "top": 383,
+   "layer": "mid"
+  },
+  "water_tower_steel": {
+   "x": 255,
+   "y": 2296,
+   "w": 116,
+   "h": 297,
+   "scale": 0.65,
+   "size": 1,
+   "pxPerM": 34.125,
+   "model": "water_tower_steel",
+   "view": {
+    "yaw": 15,
+    "pitch": 3,
+    "mirror": false
+   },
+   "size_m": [3.4, 8.7],
+   "outline": "sel",
+   "ax": 58,
+   "ay": 296,
+   "top": 296,
+   "layer": "mid"
+  },
+  "mid_familok_house": {
+   "x": 0,
+   "y": 2681,
+   "w": 318,
+   "h": 296,
+   "scale": 0.65,
+   "size": 1,
+   "pxPerM": 34.125,
+   "model": "mid_familok_house_a",
+   "view": {
+    "yaw": 0,
+    "pitch": 2,
+    "mirror": false
+   },
+   "size_m": [9.32, 8.67],
+   "outline": "sel",
+   "ax": 159,
+   "ay": 295,
+   "top": 295,
+   "layer": "mid"
+  },
+  "mid_familok_house_b": {
+   "x": 0,
+   "y": 2978,
+   "w": 324,
+   "h": 295,
+   "scale": 0.65,
+   "size": 1,
+   "pxPerM": 34.125,
+   "model": "mid_familok_house_b",
+   "view": {
+    "yaw": 0,
+    "pitch": 2,
+    "mirror": false
+   },
+   "size_m": [9.49, 8.64],
+   "outline": "sel",
+   "ax": 162,
+   "ay": 294,
+   "top": 294,
+   "layer": "mid"
+  },
+  "conveyor_bridge_truss": {
+   "x": 0,
+   "y": 3274,
+   "w": 238,
+   "h": 100,
+   "scale": 0.65,
+   "size": 1,
+   "pxPerM": 34.125,
+   "model": "conveyor_bridge_truss",
+   "view": {
+    "yaw": 0,
+    "pitch": 2,
+    "mirror": false
+   },
+   "size_m": [6.97, 2.93],
+   "outline": "sel",
+   "ax": 118,
+   "ay": 99,
+   "top": 99,
+   "layer": "mid"
+  },
+  "coal_yard_wall_gate": {
+   "x": 239,
+   "y": 3274,
+   "w": 222,
+   "h": 97,
+   "scale": 0.65,
+   "size": 1,
+   "pxPerM": 34.125,
+   "model": "coal_yard_wall_gate",
+   "view": {
+    "yaw": 0,
+    "pitch": 2,
+    "mirror": false
+   },
+   "size_m": [6.51, 2.84],
+   "outline": "sel",
+   "ax": 111,
+   "ay": 96,
+   "top": 96,
+   "layer": "mid"
+  },
+  "conveyor_bridge_truss_flat": {
+   "x": 0,
+   "y": 3375,
+   "w": 235,
+   "h": 42,
+   "scale": 0.65,
+   "size": 1,
+   "pxPerM": 34.125,
+   "model": "conveyor_bridge_truss",
+   "view": {
+    "yaw": 0,
+    "pitch": 2,
+    "mirror": false
+   },
+   "size_m": [6.89, 1.23],
+   "outline": "sel",
+   "ax": 117,
+   "ay": 41,
+   "top": 41,
+   "layer": "mid"
+  }
+ }
+}

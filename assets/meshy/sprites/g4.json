@@ -1,0 +1,329 @@
+{
+ "pxPerM": 52.5,
+ "atlas": "models.png",
+ "generator": "tools/model_sprites.mjs",
+ "sprites": {
+  "g4_engine_house": {
+   "x": 0,
+   "y": 0,
+   "w": 491,
+   "h": 407,
+   "scale": 1,
+   "size": 1,
+   "pxPerM": 52.5,
+   "model": "g4_engine_house",
+   "view": {
+    "yaw": 190,
+    "pitch": 3,
+    "mirror": false
+   },
+   "size_m": [9.35, 7.75],
+   "outline": "sel",
+   "ax": 245,
+   "ay": 406,
+   "top": 406,
+   "layer": "play",
+   "marks": {
+    "door": [343, 359],
+    "plate": [343, 170],
+    "ropes": [52, 178]
+   }
+  },
+  "g4_cage_back": {
+   "x": 0,
+   "y": 408,
+   "w": 240,
+   "h": 274,
+   "scale": 1,
+   "size": 1,
+   "pxPerM": 52.5,
+   "model": "g4_cage_b",
+   "view": {
+    "yaw": 0,
+    "pitch": 3,
+    "mirror": false
+   },
+   "size_m": [4.57, 5.22],
+   "outline": "#0b080b",
+   "ax": 120,
+   "ay": 273,
+   "top": 273,
+   "deck": {
+    "y": 259,
+    "x0": 12,
+    "x1": 228
+   },
+   "layer": "mover",
+   "marks": {
+    "origin": [120, 271],
+    "deck_l": [12, 259],
+    "deck_r": [228, 259],
+    "capels": [120, 1],
+    "plate": [120, 123]
+   }
+  },
+  "g4_cage_front": {
+   "x": 241,
+   "y": 408,
+   "w": 240,
+   "h": 158,
+   "scale": 1,
+   "size": 1,
+   "pxPerM": 52.5,
+   "model": "g4_cage_b",
+   "view": {
+    "yaw": 0,
+    "pitch": 3,
+    "mirror": false
+   },
+   "size_m": [4.57, 3.01],
+   "outline": "#0b080b",
+   "ax": 120,
+   "ay": 157,
+   "top": 157,
+   "deck": {
+    "y": 143,
+    "x0": 12,
+    "x1": 228
+   },
+   "layer": "mover",
+   "marks": {
+    "origin": [120, 155],
+    "deck_l": [12, 143],
+    "deck_r": [228, 143],
+    "capels": [120, -115],
+    "plate": [120, 7]
+   }
+  },
+  "g4_belt_post": {
+   "x": 0,
+   "y": 683,
+   "w": 82,
+   "h": 149,
+   "scale": 1,
+   "size": 1,
+   "pxPerM": 52.5,
+   "model": "g4_belt_post+g4_belt_post",
+   "view": {
+    "yaw": 15,
+    "pitch": 4,
+    "mirror": false
+   },
+   "size_m": [1.56, 2.84],
+   "outline": "#0b080b",
+   "ax": 41,
+   "ay": 148,
+   "top": 148,
+   "deck": {
+    "y": 2,
+    "x0": 15,
+    "x1": 67
+   },
+   "layer": "play"
+  },
+  "g4_shaft_collar": {
+   "x": 83,
+   "y": 683,
+   "w": 236,
+   "h": 147,
+   "scale": 1,
+   "size": 1,
+   "pxPerM": 52.5,
+   "model": "g4_shaft_collar",
+   "view": {
+    "yaw": 0,
+    "pitch": 10,
+    "mirror": false
+   },
+   "size_m": [4.5, 2.8],
+   "outline": "sel",
+   "ax": 118,
+   "ay": 146,
+   "top": 146,
+   "layer": "play"
+  },
+  "g4_drum_engine": {
+   "x": 0,
+   "y": 833,
+   "w": 266,
+   "h": 145,
+   "scale": 1,
+   "size": 1,
+   "pxPerM": 52.5,
+   "model": "g4_drum_engine",
+   "view": {
+    "yaw": 0,
+    "pitch": 2,
+    "mirror": false
+   },
+   "size_m": [5.07, 2.76],
+   "outline": "sel",
+   "ax": 133,
+   "ay": 144,
+   "top": 144,
+   "layer": "play"
+  },
+  "g4_sheave": {
+   "r": 39,
+   "step": 0.06544984694978735,
+   "layer": "play",
+   "pxPerM": 52.5,
+   "model": "g4_sheave",
+   "view": {
+    "yaw": 0,
+    "pitch": 0,
+    "mirror": false
+   },
+   "outline": "sel",
+   "size_m": [1.52, 1.52],
+   "frames": [{
+     "x": 267,
+     "y": 833,
+     "w": 80,
+     "h": 80,
+     "ax": 40,
+     "ay": 40
+    },
+    {
+     "x": 348,
+     "y": 833,
+     "w": 80,
+     "h": 80,
+     "ax": 40,
+     "ay": 40
+    },
+    {
+     "x": 429,
+     "y": 833,
+     "w": 80,
+     "h": 80,
+     "ax": 40,
+     "ay": 40
+    },
+    {
+     "x": 0,
+     "y": 979,
+     "w": 80,
+     "h": 80,
+     "ax": 40,
+     "ay": 40
+    },
+    {
+     "x": 81,
+     "y": 979,
+     "w": 80,
+     "h": 80,
+     "ax": 40,
+     "ay": 40
+    },
+    {
+     "x": 162,
+     "y": 979,
+     "w": 80,
+     "h": 80,
+     "ax": 40,
+     "ay": 40
+    },
+    {
+     "x": 243,
+     "y": 979,
+     "w": 80,
+     "h": 80,
+     "ax": 40,
+     "ay": 40
+    },
+    {
+     "x": 324,
+     "y": 979,
+     "w": 80,
+     "h": 80,
+     "ax": 40,
+     "ay": 40
+    },
+    {
+     "x": 405,
+     "y": 979,
+     "w": 80,
+     "h": 80,
+     "ax": 40,
+     "ay": 40
+    },
+    {
+     "x": 0,
+     "y": 1060,
+     "w": 80,
+     "h": 80,
+     "ax": 40,
+     "ay": 40
+    },
+    {
+     "x": 81,
+     "y": 1060,
+     "w": 80,
+     "h": 80,
+     "ax": 40,
+     "ay": 40
+    },
+    {
+     "x": 162,
+     "y": 1060,
+     "w": 80,
+     "h": 80,
+     "ax": 40,
+     "ay": 40
+    }]
+  },
+  "g4_conveyor_head": {
+   "x": 243,
+   "y": 1060,
+   "w": 159,
+   "h": 68,
+   "scale": 1,
+   "size": 1,
+   "pxPerM": 52.5,
+   "model": "g4_conveyor_head",
+   "view": {
+    "yaw": 0,
+    "pitch": 6,
+    "mirror": false
+   },
+   "size_m": [3.03, 1.3],
+   "outline": "#0b080b",
+   "ax": 79,
+   "ay": 67,
+   "top": 67,
+   "deck": {
+    "y": 2,
+    "x0": 0,
+    "x1": 142
+   },
+   "layer": "play"
+  },
+  "g4_belt_section": {
+   "x": 403,
+   "y": 1060,
+   "w": 96,
+   "h": 28,
+   "scale": 1,
+   "size": 1,
+   "pxPerM": 52.5,
+   "model": "g4_belt_section+g4_belt_section+g4_belt_section",
+   "view": {
+    "yaw": 0,
+    "pitch": 6,
+    "mirror": false
+   },
+   "size_m": [1.83, 0.53],
+   "outline": "#0b080b",
+   "ax": 48,
+   "ay": 27,
+   "top": 27,
+   "deck": {
+    "y": 1,
+    "x0": 0,
+    "x1": 96
+   },
+   "layer": "play"
+  }
+ }
+}

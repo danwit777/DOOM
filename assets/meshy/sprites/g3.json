@@ -1,0 +1,415 @@
+{
+ "pxPerM": 52.5,
+ "atlas": "models.png",
+ "generator": "tools/model_sprites.mjs",
+ "sprites": {
+  "street_lamp": {
+   "x": 0,
+   "y": 0,
+   "w": 71,
+   "h": 231,
+   "scale": 1,
+   "size": 1.0326,
+   "pxPerM": 54.2115,
+   "model": "street_lamp",
+   "view": {
+    "yaw": 15,
+    "pitch": 3,
+    "mirror": true
+   },
+   "size_m": [1.31, 4.26],
+   "outline": "sel",
+   "ax": 19,
+   "ay": 230,
+   "top": 230,
+   "lamp": [51, 41],
+   "layer": "play"
+  },
+  "ladder_full": {
+   "x": 72,
+   "y": 0,
+   "w": 36,
+   "h": 209,
+   "scale": 1,
+   "size": 1,
+   "pxPerM": 52.5,
+   "model": "steel_ladder_segment",
+   "view": {
+    "yaw": 0,
+    "pitch": 0,
+    "mirror": false
+   },
+   "size_m": [0.69, 3.98],
+   "outline": "sel",
+   "ax": 18,
+   "ay": 208,
+   "top": 208,
+   "layer": "play"
+  },
+  "banner": {
+   "x": 109,
+   "y": 0,
+   "w": 83,
+   "h": 151,
+   "scale": 1,
+   "size": 1,
+   "pxPerM": 52.5,
+   "model": "regime_banner_cloth",
+   "view": {
+    "yaw": 0,
+    "pitch": 0,
+    "mirror": false
+   },
+   "size_m": [1.58, 2.88],
+   "outline": "sel",
+   "ax": 40,
+   "ay": 150,
+   "top": 150,
+   "layer": "play"
+  },
+  "crate_stack2": {
+   "x": 193,
+   "y": 0,
+   "w": 68,
+   "h": 105,
+   "scale": 1,
+   "size": 1,
+   "pxPerM": 52.5,
+   "model": "wooden_crate+wooden_crate",
+   "view": {
+    "yaw": 20,
+    "pitch": 8,
+    "mirror": false
+   },
+   "size_m": [1.3, 2],
+   "outline": "#0b080b",
+   "ax": 34,
+   "ay": 104,
+   "top": 104,
+   "layer": "play"
+  },
+  "banner_mid": {
+   "x": 262,
+   "y": 0,
+   "w": 53,
+   "h": 99,
+   "scale": 0.65,
+   "size": 1,
+   "pxPerM": 34.125,
+   "model": "regime_banner_cloth",
+   "view": {
+    "yaw": 0,
+    "pitch": 0,
+    "mirror": false
+   },
+   "size_m": [1.55, 2.9],
+   "outline": "sel",
+   "ax": 26,
+   "ay": 98,
+   "top": 98,
+   "layer": "mid"
+  },
+  "catwalk": {
+   "x": 316,
+   "y": 0,
+   "w": 152,
+   "h": 74,
+   "scale": 1,
+   "size": 1,
+   "pxPerM": 52.5,
+   "model": "lattice_catwalk_section",
+   "view": {
+    "yaw": 0,
+    "pitch": 5,
+    "mirror": false
+   },
+   "size_m": [2.9, 1.41],
+   "outline": "#0b080b",
+   "ax": 76,
+   "ay": 73,
+   "top": 73,
+   "deck": {
+    "y": 47,
+    "x0": 3,
+    "x1": 149
+   },
+   "layer": "play"
+  },
+  "bicycle": {
+   "x": 0,
+   "y": 232,
+   "w": 94,
+   "h": 65,
+   "scale": 1,
+   "size": 1,
+   "pxPerM": 52.5,
+   "model": "bicycle_roadster",
+   "view": {
+    "yaw": 0,
+    "pitch": 4,
+    "mirror": true
+   },
+   "size_m": [1.79, 1.24],
+   "outline": "sel",
+   "ax": 46,
+   "ay": 64,
+   "top": 64,
+   "layer": "play"
+  },
+  "coal_sacks": {
+   "x": 95,
+   "y": 232,
+   "w": 96,
+   "h": 60,
+   "scale": 1,
+   "size": 1,
+   "pxPerM": 52.5,
+   "model": "coal_sacks_shovel",
+   "view": {
+    "yaw": 15,
+    "pitch": 8,
+    "mirror": false
+   },
+   "size_m": [1.83, 1.14],
+   "outline": "sel",
+   "ax": 48,
+   "ay": 59,
+   "top": 59,
+   "layer": "play"
+  },
+  "crate_a": {
+   "x": 192,
+   "y": 232,
+   "w": 66,
+   "h": 57,
+   "scale": 1,
+   "size": 1,
+   "pxPerM": 52.5,
+   "model": "wooden_crate",
+   "view": {
+    "yaw": 20,
+    "pitch": 8,
+    "mirror": false
+   },
+   "size_m": [1.26, 1.09],
+   "outline": "#0b080b",
+   "ax": 33,
+   "ay": 56,
+   "top": 56,
+   "layer": "play"
+  },
+  "crate_b": {
+   "x": 259,
+   "y": 232,
+   "w": 66,
+   "h": 57,
+   "scale": 1,
+   "size": 1,
+   "pxPerM": 52.5,
+   "model": "wooden_crate",
+   "view": {
+    "yaw": 20,
+    "pitch": 8,
+    "mirror": false
+   },
+   "size_m": [1.26, 1.09],
+   "outline": "#0b080b",
+   "ax": 33,
+   "ay": 56,
+   "top": 56,
+   "layer": "play"
+  },
+  "crate_c": {
+   "x": 326,
+   "y": 232,
+   "w": 66,
+   "h": 57,
+   "scale": 1,
+   "size": 1,
+   "pxPerM": 52.5,
+   "model": "wooden_crate",
+   "view": {
+    "yaw": 20,
+    "pitch": 8,
+    "mirror": false
+   },
+   "size_m": [1.26, 1.09],
+   "outline": "#0b080b",
+   "ax": 33,
+   "ay": 56,
+   "top": 56,
+   "layer": "play"
+  },
+  "bench": {
+   "x": 393,
+   "y": 232,
+   "w": 88,
+   "h": 54,
+   "scale": 1,
+   "size": 1,
+   "pxPerM": 52.5,
+   "model": "park_bench",
+   "view": {
+    "yaw": 8,
+    "pitch": 6,
+    "mirror": false
+   },
+   "size_m": [1.68, 1.03],
+   "outline": "sel",
+   "ax": 44,
+   "ay": 53,
+   "top": 53,
+   "layer": "play"
+  },
+  "ladder_top": {
+   "x": 0,
+   "y": 298,
+   "w": 32,
+   "h": 40,
+   "scale": 1,
+   "size": 1,
+   "pxPerM": 52.5,
+   "model": "steel_ladder_segment",
+   "view": {
+    "yaw": 0,
+    "pitch": 0,
+    "mirror": false
+   },
+   "size_m": [0.61, 0.76],
+   "outline": "sel",
+   "ax": 16,
+   "ay": 40,
+   "top": 40,
+   "layer": "play"
+  },
+  "ladder_foot": {
+   "x": 33,
+   "y": 298,
+   "w": 36,
+   "h": 29,
+   "scale": 1,
+   "size": 1,
+   "pxPerM": 52.5,
+   "model": "steel_ladder_segment",
+   "view": {
+    "yaw": 0,
+    "pitch": 0,
+    "mirror": false
+   },
+   "size_m": [0.69, 0.55],
+   "outline": "sel",
+   "ax": 18,
+   "ay": 28,
+   "top": 28,
+   "layer": "play"
+  },
+  "steam_vent_a": {
+   "x": 70,
+   "y": 298,
+   "w": 14,
+   "h": 26,
+   "scale": 1,
+   "size": 1,
+   "pxPerM": 52.5,
+   "model": "steam_vent_nozzle",
+   "view": {
+    "yaw": 320,
+    "pitch": 10,
+    "mirror": false
+   },
+   "size_m": [0.27, 0.5],
+   "outline": "sel",
+   "ax": 7,
+   "ay": 25,
+   "top": 25,
+   "vent": [9, 4],
+   "layer": "play"
+  },
+  "steam_vent_b": {
+   "x": 85,
+   "y": 298,
+   "w": 14,
+   "h": 26,
+   "scale": 1,
+   "size": 1,
+   "pxPerM": 52.5,
+   "model": "steam_vent_nozzle",
+   "view": {
+    "yaw": 290,
+    "pitch": 10,
+    "mirror": false
+   },
+   "size_m": [0.27, 0.5],
+   "outline": "sel",
+   "ax": 7,
+   "ay": 25,
+   "top": 25,
+   "vent": [9, 4],
+   "layer": "play"
+  },
+  "steam_vent_c": {
+   "x": 100,
+   "y": 298,
+   "w": 14,
+   "h": 26,
+   "scale": 1,
+   "size": 1,
+   "pxPerM": 52.5,
+   "model": "steam_vent_nozzle",
+   "view": {
+    "yaw": 260,
+    "pitch": 10,
+    "mirror": false
+   },
+   "size_m": [0.27, 0.5],
+   "outline": "sel",
+   "ax": 7,
+   "ay": 25,
+   "top": 25,
+   "vent": [10, 4],
+   "layer": "play"
+  },
+  "coal_bucket": {
+   "x": 115,
+   "y": 298,
+   "w": 24,
+   "h": 24,
+   "scale": 1,
+   "size": 1,
+   "pxPerM": 52.5,
+   "model": "coal_bucket_zinc",
+   "view": {
+    "yaw": 20,
+    "pitch": 12,
+    "mirror": false
+   },
+   "size_m": [0.46, 0.46],
+   "outline": "sel",
+   "ax": 12,
+   "ay": 23,
+   "top": 23,
+   "layer": "play"
+  },
+  "ladder_mid": {
+   "x": 140,
+   "y": 298,
+   "w": 32,
+   "h": 14,
+   "scale": 1,
+   "size": 1,
+   "pxPerM": 52.5,
+   "model": "steel_ladder_segment",
+   "view": {
+    "yaw": 0,
+    "pitch": 0,
+    "mirror": false
+   },
+   "size_m": [0.61, 0.27],
+   "outline": "sel",
+   "ax": 16,
+   "ay": 14,
+   "top": 14,
+   "layer": "play"
+  }
+ }
+}

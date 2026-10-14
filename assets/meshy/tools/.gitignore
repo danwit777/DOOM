@@ -1,0 +1,6 @@
+# mk.py reads the Meshy API key from tools/.key and writes the auth header to tools/.auth_header: never commit them.
+.key
+.auth_header
+# mk.py creates its ledger and downloads under tools/lib/
+lib/
+__pycache__/

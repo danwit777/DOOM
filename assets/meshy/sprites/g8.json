@@ -1,0 +1,438 @@
+{
+ "pxPerM": 52.5,
+ "atlas": "models.png",
+ "generator": "tools/model_sprites.mjs",
+ "sprites": {
+  "rifle_slung": {
+   "x": 0,
+   "y": 0,
+   "w": 20,
+   "h": 58,
+   "scale": 1,
+   "size": 1,
+   "pxPerM": 52.5,
+   "model": "rifle_clean",
+   "view": {
+    "yaw": 0,
+    "pitch": 0,
+    "mirror": false
+   },
+   "size_m": [
+    0.38,
+    1.1
+   ],
+   "outline": "#0b080b",
+   "ax": 10,
+   "ay": 57,
+   "top": 57,
+   "layer": "play"
+  },
+  "rifle_slung_l": {
+   "x": 21,
+   "y": 0,
+   "w": 20,
+   "h": 58,
+   "scale": 1,
+   "size": 1,
+   "pxPerM": 52.5,
+   "model": "rifle_clean",
+   "view": {
+    "yaw": 0,
+    "pitch": 0,
+    "mirror": true
+   },
+   "size_m": [
+    0.38,
+    1.1
+   ],
+   "outline": "#0b080b",
+   "ax": 10,
+   "ay": 57,
+   "top": 57,
+   "layer": "play"
+  },
+  "rifle_aim_45": {
+   "x": 42,
+   "y": 0,
+   "w": 39,
+   "h": 49,
+   "scale": 1,
+   "size": 1,
+   "pxPerM": 52.5,
+   "model": "rifle_clean",
+   "view": {
+    "yaw": 0,
+    "pitch": 0,
+    "mirror": true
+   },
+   "size_m": [
+    0.74,
+    0.93
+   ],
+   "outline": "#0b080b",
+   "ax": 20,
+   "ay": 48,
+   "top": 48,
+   "layer": "play"
+  },
+  "rifle_aim_30": {
+   "x": 82,
+   "y": 0,
+   "w": 49,
+   "h": 38,
+   "scale": 1,
+   "size": 1,
+   "pxPerM": 52.5,
+   "model": "rifle_clean",
+   "view": {
+    "yaw": 0,
+    "pitch": 0,
+    "mirror": true
+   },
+   "size_m": [
+    0.93,
+    0.72
+   ],
+   "outline": "#0b080b",
+   "ax": 25,
+   "ay": 37,
+   "top": 37,
+   "layer": "play"
+  },
+  "rifle_aim_m30": {
+   "x": 132,
+   "y": 0,
+   "w": 56,
+   "h": 28,
+   "scale": 1,
+   "size": 1,
+   "pxPerM": 52.5,
+   "model": "rifle_clean",
+   "view": {
+    "yaw": 0,
+    "pitch": 0,
+    "mirror": true
+   },
+   "size_m": [
+    1.07,
+    0.53
+   ],
+   "outline": "#0b080b",
+   "ax": 28,
+   "ay": 27,
+   "top": 27,
+   "layer": "play"
+  },
+  "rifle_aim_15": {
+   "x": 189,
+   "y": 0,
+   "w": 56,
+   "h": 26,
+   "scale": 1,
+   "size": 1,
+   "pxPerM": 52.5,
+   "model": "rifle_clean",
+   "view": {
+    "yaw": 0,
+    "pitch": 0,
+    "mirror": true
+   },
+   "size_m": [
+    1.07,
+    0.5
+   ],
+   "outline": "#0b080b",
+   "ax": 28,
+   "ay": 25,
+   "top": 25,
+   "layer": "play"
+  },
+  "rifle_aim_m15": {
+   "x": 246,
+   "y": 0,
+   "w": 60,
+   "h": 15,
+   "scale": 1,
+   "size": 1,
+   "pxPerM": 52.5,
+   "model": "rifle_clean",
+   "view": {
+    "yaw": 0,
+    "pitch": 0,
+    "mirror": true
+   },
+   "size_m": [
+    1.14,
+    0.29
+   ],
+   "outline": "#0b080b",
+   "ax": 30,
+   "ay": 14,
+   "top": 14,
+   "layer": "play"
+  },
+  "rifle_prop": {
+   "x": 307,
+   "y": 0,
+   "w": 59,
+   "h": 14,
+   "scale": 1,
+   "size": 1,
+   "pxPerM": 52.5,
+   "model": "rifle_clean",
+   "view": {
+    "yaw": 0,
+    "pitch": 0,
+    "mirror": true
+   },
+   "size_m": [
+    1.12,
+    0.27
+   ],
+   "outline": "#0b080b",
+   "ax": 30,
+   "ay": 13,
+   "top": 13,
+   "layer": "play"
+  },
+  "rifle_prop_l": {
+   "x": 367,
+   "y": 0,
+   "w": 59,
+   "h": 14,
+   "scale": 1,
+   "size": 1,
+   "pxPerM": 52.5,
+   "model": "rifle_clean",
+   "view": {
+    "yaw": 0,
+    "pitch": 0,
+    "mirror": false
+   },
+   "size_m": [
+    1.12,
+    0.27
+   ],
+   "outline": "#0b080b",
+   "ax": 29,
+   "ay": 13,
+   "top": 13,
+   "layer": "play"
+  },
+  "pistol": {
+   "x": 0,
+   "y": 59,
+   "w": 9,
+   "h": 5,
+   "scale": 1,
+   "size": 1,
+   "pxPerM": 52.5,
+   "model": "hand-pixeled (p2e fix round)",
+   "view": {
+    "yaw": 0,
+    "pitch": 0,
+    "mirror": false
+   },
+   "size_m": [
+    0.17,
+    0.1
+   ],
+   "outline": "#0b080b",
+   "ax": 2,
+   "ay": 3,
+   "grip": [
+    2,
+    3
+   ],
+   "top": 3,
+   "layer": "play",
+   "note": "generic service pistol, 9 x 5 px (17 x 10 cm): dark blued slide (steel 2) with a lit top line (steel 5), so it reads against the grey gloves"
+  },
+  "pistol_l": {
+   "x": 10,
+   "y": 59,
+   "w": 9,
+   "h": 5,
+   "scale": 1,
+   "size": 1,
+   "pxPerM": 52.5,
+   "model": "hand-pixeled (p2e fix round)",
+   "view": {
+    "yaw": 0,
+    "pitch": 0,
+    "mirror": true
+   },
+   "size_m": [
+    0.17,
+    0.1
+   ],
+   "outline": "#0b080b",
+   "ax": 6,
+   "ay": 3,
+   "grip": [
+    6,
+    3
+   ],
+   "top": 3,
+   "layer": "play",
+   "note": "generic service pistol, 9 x 5 px (17 x 10 cm): dark blued slide (steel 2) with a lit top line (steel 5), so it reads against the grey gloves"
+  },
+  "flashlight": {
+   "x": 20,
+   "y": 59,
+   "w": 8,
+   "h": 5,
+   "scale": 1,
+   "size": 1,
+   "pxPerM": 52.5,
+   "model": "hand-pixeled (p2e fix round)",
+   "view": {
+    "yaw": 0,
+    "pitch": 0,
+    "mirror": false
+   },
+   "size_m": [
+    0.15,
+    0.1
+   ],
+   "outline": "#0b080b",
+   "ax": 3,
+   "ay": 2,
+   "grip": [
+    3,
+    2
+   ],
+   "emit": [
+    6,
+    2
+   ],
+   "top": 2,
+   "layer": "play",
+   "note": "hand torch, 8 x 5 px: steel body, lamp[0] lens"
+  },
+  "flashlight_l": {
+   "x": 29,
+   "y": 59,
+   "w": 8,
+   "h": 5,
+   "scale": 1,
+   "size": 1,
+   "pxPerM": 52.5,
+   "model": "hand-pixeled (p2e fix round)",
+   "view": {
+    "yaw": 0,
+    "pitch": 0,
+    "mirror": true
+   },
+   "size_m": [
+    0.15,
+    0.1
+   ],
+   "outline": "#0b080b",
+   "ax": 4,
+   "ay": 2,
+   "grip": [
+    4,
+    2
+   ],
+   "emit": [
+    1,
+    2
+   ],
+   "top": 2,
+   "layer": "play",
+   "note": "hand torch, 8 x 5 px: steel body, lamp[0] lens"
+  },
+  "flashlight_toward": {
+   "x": 38,
+   "y": 59,
+   "w": 5,
+   "h": 5,
+   "scale": 1,
+   "size": 1,
+   "pxPerM": 52.5,
+   "model": "hand-pixeled (p2e fix round)",
+   "view": {
+    "yaw": 0,
+    "pitch": 0,
+    "mirror": false
+   },
+   "size_m": [
+    0.1,
+    0.1
+   ],
+   "outline": "#0b080b",
+   "ax": 2,
+   "ay": 2,
+   "grip": [
+    2,
+    2
+   ],
+   "emit": [
+    2,
+    2
+   ],
+   "top": 2,
+   "layer": "play",
+   "note": "the torch end-on, lens toward the viewer"
+  },
+  "flashlight_away": {
+   "x": 44,
+   "y": 59,
+   "w": 5,
+   "h": 5,
+   "scale": 1,
+   "size": 1,
+   "pxPerM": 52.5,
+   "model": "hand-pixeled (p2e fix round)",
+   "view": {
+    "yaw": 0,
+    "pitch": 0,
+    "mirror": false
+   },
+   "size_m": [
+    0.1,
+    0.1
+   ],
+   "outline": "#0b080b",
+   "ax": 2,
+   "ay": 2,
+   "grip": [
+    2,
+    2
+   ],
+   "emit": [
+    2,
+    2
+   ],
+   "top": 2,
+   "layer": "play",
+   "note": "the torch end-on, tail cap toward the viewer (the beam goes into the scene)"
+  },
+  "crate": {
+   "x": 0,
+   "y": 65,
+   "w": 18,
+   "h": 15,
+   "scale": 1,
+   "size": 1,
+   "pxPerM": 52.5,
+   "model": "hand-pixeled (p2f)",
+   "view": {
+    "yaw": 0,
+    "pitch": 0,
+    "mirror": false
+   },
+   "size_m": [
+    0.34,
+    0.29
+   ],
+   "outline": "#0b080b",
+   "ax": 9,
+   "ay": 14,
+   "top": 14,
+   "layer": "play",
+   "note": "wooden crate, 18 x 15 px (0.34 x 0.29 m): style.js RAMP.wood, lit top / left frame, boards and a brace; the miner's carry_heavy_object_walk draws it over the hands (frames[i].prop, both facings use this one sprite: the light stays upper left); ax / ay = bottom centre when it stands on the ground"
+  }
+ }
+}

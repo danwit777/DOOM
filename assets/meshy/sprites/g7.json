@@ -1,0 +1,125 @@
+{
+ "pxPerM": 52.5,
+ "atlas": "models.png",
+ "generator": "tools/model_sprites.mjs",
+ "sprites": {
+  "fg_pipe_stand_valve": {
+   "x": 0,
+   "y": 0,
+   "w": 118,
+   "h": 220,
+   "scale": 1.35,
+   "size": 1,
+   "pxPerM": 70.875,
+   "model": "fg_pipe_stand_valve",
+   "view": {
+    "yaw": 15,
+    "pitch": 0,
+    "mirror": false
+   },
+   "size_m": [1.66, 3.1],
+   "outline": "none",
+   "ax": 59,
+   "ay": 220,
+   "top": 220,
+   "layer": "fg"
+  },
+  "patrol_airship": {
+   "x": 119,
+   "y": 0,
+   "w": 282,
+   "h": 80,
+   "scale": 0.04,
+   "size": 10.5,
+   "pxPerM": 22.05,
+   "model": "patrol_airship_a",
+   "view": {
+    "yaw": 180,
+    "pitch": 2,
+    "mirror": false
+   },
+   "size_m": [12.79, 3.63],
+   "outline": "sel",
+   "ax": 141,
+   "ay": 79,
+   "top": 79,
+   "points": {
+    "prop_a": [128, 65],
+    "prop_b": [178, 61]
+   },
+   "layer": "sky"
+  },
+  "fg_crane_girder": {
+   "x": 0,
+   "y": 221,
+   "w": 450,
+   "h": 64,
+   "scale": 1.35,
+   "size": 1,
+   "pxPerM": 70.875,
+   "model": "fg_crane_girder",
+   "view": {
+    "yaw": 0,
+    "pitch": -6,
+    "mirror": false
+   },
+   "size_m": [6.35, 0.9],
+   "outline": "none",
+   "ax": 225,
+   "ay": 64,
+   "top": 64,
+   "points": {
+    "rope": [101, 64]
+   },
+   "layer": "fg"
+  },
+  "crane_hook_block": {
+   "x": 451,
+   "y": 221,
+   "w": 20,
+   "h": 46,
+   "scale": 1.35,
+   "size": 0.7222222222222222,
+   "pxPerM": 51.1875,
+   "model": "crane_hook_block",
+   "view": {
+    "yaw": 20,
+    "pitch": 0,
+    "mirror": false
+   },
+   "size_m": [0.39, 0.9],
+   "outline": "none",
+   "ax": 10,
+   "ay": 46,
+   "top": 46,
+   "points": {
+    "hang": [10, 1]
+   },
+   "layer": "fg"
+  },
+  "crane_hook": {
+   "x": 472,
+   "y": 221,
+   "w": 28,
+   "h": 37,
+   "scale": 1.35,
+   "size": 1,
+   "pxPerM": 70.875,
+   "model": "crane_hook_block",
+   "view": {
+    "yaw": 20,
+    "pitch": 0,
+    "mirror": false
+   },
+   "size_m": [0.4, 0.52],
+   "outline": "none",
+   "ax": 14,
+   "ay": 37,
+   "top": 37,
+   "points": {
+    "hang": [14, 0]
+   },
+   "layer": "fg"
+  }
+ }
+}
