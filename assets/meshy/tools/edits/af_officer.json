@@ -1,0 +1,82 @@
+[
+ {
+  "clip": "Arise",
+  "bones": [
+   "LeftShoulder",
+   "LeftArm",
+   "LeftForeArm",
+   "LeftHand"
+  ],
+  "ref": 1.8,
+  "win": [
+   0.0,
+   1.35
+  ],
+  "ramp": [
+   0.12,
+   0.35
+  ]
+ },
+ {
+  "clip": "Crouch_and_Step_Back",
+  "bones": [
+   "RightShoulder",
+   "RightArm",
+   "RightForeArm",
+   "RightHand"
+  ],
+  "ref": 0.0,
+  "win": [
+   0.5,
+   1.75
+  ],
+  "ramp": [
+   0.2,
+   0.25
+  ]
+ },
+ {
+  "clip": "Phone_Conversation",
+  "bones": [
+   "RightShoulder",
+   "RightArm",
+   "RightForeArm",
+   "RightHand"
+  ],
+  "ref": 0,
+  "refq": {
+   "RightShoulder": [
+    -0.424545,
+    0.566985,
+    0.361142,
+    0.606519
+   ],
+   "RightArm": [
+    -0.533973,
+    -0.72203,
+    0.326337,
+    0.295044
+   ],
+   "RightForeArm": [
+    0.425571,
+    -0.038477,
+    0.277785,
+    0.860375
+   ],
+   "RightHand": [
+    0.302018,
+    0.31908,
+    -0.248926,
+    0.863139
+   ]
+  },
+  "win": [
+   -1,
+   99
+  ],
+  "ramp": [
+   0.001,
+   0.001
+  ]
+ }
+]

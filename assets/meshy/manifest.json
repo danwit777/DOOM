@@ -33,6 +33,20 @@
     "notes": "None needed for the sprites; I checked:\n- The board is rows 0-35 (36 px) and its bottom is 126 px over the ground (SCALE.signUp).\n- Posts are 5 px of wood[4/3/3/3/2] inside a wood[0] edge.\n- The face is paper[2] with a paper[3] lit rim and a paper[1] shaded rim; Sperrzone is paper[3].\n- The paintable face is 25 px tall inside the 6 px wood frame, which leaves room for the stencil.\n\nKit note (not blocking): the GLB is 1.49 x 3.38 m with the board only about 1.2 m wide (the plan wants 2.0-3.7 m). For UE, export the board and the posts as separate nodes so only the board is stretched, or document a board-only X scale. The cartoon white chips at the post feet come from Meshy's texture.",
     "reroll": ""
    },
+   "sprite_models": [
+    {
+     "model": "g1_sign_board",
+     "sprites": [
+      "g1_sign_sperrzone",
+      "g1_sign_gleis4",
+      "g1_sign_kolonie",
+      "g1_sign_sortierung",
+      "g1_sign_schacht"
+     ],
+     "compact_glb": "meshy/groups/g1/models/g1_sign_board.glb",
+     "repo_file": "models/sign_board_posts.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a13772-a6bf-762a-a8d4-7753a874415d",
@@ -146,6 +160,16 @@
      "score": 5,
      "verdict": "reroll",
      "reroll": "The kit model is the wrong type: a fluted pilaster with a capital and no cranked arm, 0.22 x 2.69 m. Text-to-3D failed twice, so use the image route.\n\nStep 1, t2i nano-banana-pro, aspect 3:4, remove_bg: 'Three-quarter view of a single weathered grey precast reinforced-concrete fence post of a 1950s Eastern European restricted zone: a slim plain square shaft 12 cm thick and 2.1 m tall on a small square poured-concrete footing, its top 30 cm cranked outward at 45 degrees as one continuous overhang arm like a hockey stick; six small iron strand clamps with eye bolts on its face at even heights and two more on the arm; chipped arrises, rust stains running down from the clamps, soot; no wire, no capital, no cap, no moulding, no fluting; realistic 3D render, soft even studio light, no cast shadows, no outlines, plain white background, the whole object visible, no text'.\n\nStep 2, i3d with texture prompt 'weathered grey concrete, rust stains under iron clamps, no text, no letters, no symbols'.\n\nStep 3, import at height 2.35 with no stretch and re-run the current recipe; its arm and clamp add-boxes can then be dropped if the mesh carries them.\n\nAbout 39 credits."
+    }
+   ],
+   "sprite_models": [
+    {
+     "model": "g1_fence_post",
+     "sprites": [
+      "g1_fence_post"
+     ],
+     "compact_glb": "meshy/groups/g1/models/g1_fence_post.glb",
+     "repo_file": "models/sperrzone_fence_post.glb"
     }
    ],
    "tasks": {
@@ -280,6 +304,16 @@
      "reroll": "Texture only; the geometry is right: 1.83 x 2.74 x 0.32 m, warped planks, two posts, closed.\n\nThe GLB texture is flat grey (#707172), which is not usable as a UE kit piece. Run a Meshy retexture of the same refined mesh (task 01a13772-8543-74fa-95bb-31d746c1351c) with a new seed and the texture prompt: 'weathered grey-brown rough-sawn pine planks with visible wood grain and knots, damp and darker lower boards, rusty nail heads, soot; no text, no letters, no symbols'.\n\nAbout 10 credits. Re-import with the same models.json entry; the recipe maps oldwood to the dust ramp, so the sprite should barely change. Re-check it on the x2 sheet anyway."
     }
    ],
+   "sprite_models": [
+    {
+     "model": "g1_trench_panel",
+     "sprites": [
+      "g1_trench_panel"
+     ],
+     "compact_glb": "meshy/groups/g1/models/g1_trench_panel.glb",
+     "repo_file": "models/trench_revetment_panel.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a13818-ae93-75e5-87e1-362e91c0658b",
@@ -396,6 +430,17 @@
     "notes": "Sprite is good:\n- The 7-row props.js profile (steel[7] running line, rust[3/1/2/2/3/1]) is identical at seam columns 0 and 95, so it tiles at a 96 px pitch.\n- Lit from above.\n\nNotes:\n- Sleepers fall every 16-21 px (mean 19 px, about 0.37 m), not the plan's 30 px. The irregular rhythm repeats every 96 px; that is acceptable.\n- Drawn with the anchor 7 px under the street (the producer's placement), the sleepers cover the top 7-8 rows of the street tiles. props.js draws nothing below gy. Confirm this on the level's walk line before wiring it in.\n\nKit (reference only, as the plan says): the rails are textured wood-brown and one rail jogs at the middle fishplate. UE uses a spline with its own rail material, so never re-roll.",
     "reroll": ""
    },
+   "sprite_models": [
+    {
+     "model": "g1_rail_track",
+     "sprites": [
+      "g1_rail_track",
+      "g1_rail_module"
+     ],
+     "compact_glb": "meshy/groups/g1/models/g1_rail_track.glb",
+     "repo_file": "models/rail_track_section.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a13772-9dbd-720b-9b94-1f0c1d6ed60e",
@@ -495,6 +540,16 @@
      "score": 4,
      "verdict": "reroll",
      "reroll": "The model is the wrong type: a lidded case with hinges and checker plate on its walls; I rendered the GLB to confirm.\n\nUse the image route:\n- Run i3d on concept c3 (lib/ropeway_loading_station/t2i-01a137d9-3eaa-750a-b6f2-c8196ccf7aa8/image_0.png, alpha already removed, i3d_ok), about 30 credits.\n- Texture prompt: 'riveted grey-green steel plates, rust streaks, coal grime, worn checker plate deck, no stencils, no letters'.\n- c3 is the right type: a riveted block with a flush checker-plate deck, an angle-iron nosing and no lid.\n- c3 is nearly cubic (about 1.1 : 1 : 0.9), so the import stretch to 2.74 x 1.83 x 1.60 m widens its rivets about 1.35x in the kit. If 9 credits can be spared, first make one nano-banana-pro concept with the same prompt plus 'a long low block, its front face 1.5 times as wide as it is tall'.\n\nThen re-run the recipe:\n- Fit the sprite so the deck row is exactly 96 px over the ground and spans 144 px.\n- The deck nosing is steel[6] with a 1-row lit edge.\n- Rivets come from the recipe; the hazard stripes are paint only."
+    }
+   ],
+   "sprite_models": [
+    {
+     "model": "g1_loading_station",
+     "sprites": [
+      "g1_loading_station"
+     ],
+     "compact_glb": "meshy/groups/g1/models/g1_loading_station.glb",
+     "repo_file": "models/ropeway_loading_station.glb"
     }
    ],
    "tasks": {
@@ -644,6 +699,16 @@
     "notes": "None. Reads at x1:\n- Steel[2..6] body lit from the upper left.\n- The glass in lens[0..3] with a glint.\n- The lens[2] beam pixel is verified at (19, 31) = (-3, -22) from the anchor.\n- The size of 1.4 makes the lens about 22 px, which matches the level's 20 px lens. Yaw 25 instead of 35 is a documented choice.\n\nKit is clean and closed: 0.61 x 0.80 x 0.49 m.",
     "reroll": ""
    },
+   "sprite_models": [
+    {
+     "model": "g1_searchlight",
+     "sprites": [
+      "g1_searchlight"
+     ],
+     "compact_glb": "meshy/groups/g1/models/g1_searchlight.glb",
+     "repo_file": "models/searchlight_bracket.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a13772-b01e-762f-9596-56544e7efe42",
@@ -735,6 +800,24 @@
     "notes": "None required:\n- 0 enclosed holes.\n- 4/3/2 running bond at a 31 px pitch and 13 px courses, 128 x 46.\n- Burlap ramp with lit tops; crevices filled with burlap[0-1].\n\nOptional polish: the bags read as smooth loaves, without the props.js tufts, cords and stitched seam. Add a 1 px burlap[2] seam dot row 5 px above each bag's bottom and a burlap[4/3] tuft at the tied ends, alternating ends as in props.js.\n\nKit: one clean 0.63 x 0.29 x 0.33 m bag, good for instancing.",
     "reroll": ""
    },
+   "sprite_models": [
+    {
+     "model": "g1_sandbag",
+     "sprites": [
+      "g1_sandbag_nest",
+      "g1_sandbag_nest",
+      "g1_sandbag_nest",
+      "g1_sandbag_nest",
+      "g1_sandbag_nest",
+      "g1_sandbag_nest",
+      "g1_sandbag_nest",
+      "g1_sandbag_nest",
+      "g1_sandbag_nest"
+     ],
+     "compact_glb": "meshy/groups/g1/models/g1_sandbag.glb",
+     "repo_file": "models/sandbag_nest.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a13773-6aea-705a-850e-781c0212c7fa",
@@ -833,10 +916,10 @@
    "name_pl": "Wieża strażnicza (pilot)",
    "model_bbox_m": [
     3.04,
-    8.64,
+    7.03,
     3.11
    ],
-   "model_triangles": 7993,
+   "model_triangles": 7965,
    "model_quantized": true,
    "judge": {
     "score": 7.5,
@@ -847,6 +930,25 @@
     "notes": "1. The searchlight floats 3 px above its bracket: sprite rows 143-145 are empty between the fork-post foot (row 142) and the arm (row 146). In recipe.json g1_guard_tower, instances[1].pos, change y from 4.4 to 4.343 (3 px at 52.5 px/m). I tested this in judge_r2/fix_tower/: the post now meets the arm's outer end. The beam pixel then moves: use lens[2] at (188, 119), which is (+78, -269) from the anchor (110, 388), in place of (189, 117).\n\n2. Kit: in models.json g1_guard_tower, add \"clip\": [[-9, 7.02, -9, 9, 12, 9]] and re-import from src/guard_tower. I tested this in judge_r2/models_fix/: the GLB is 3.04 x 7.03 x 3.11 m and the roof is intact, so the roof lamp and antenna no longer ship in the kit. Re-render and re-check the sprite afterwards; it already cuts at 7.0 m, but the decimation changes slightly.\n\nOptional: the steel lump under the wall lantern (about 13 x 14 px) reads as a blob and could be cut. There is one stray basalt[4] pixel in the floor beam at (35, 146).\n\nThe rest is good: 222 px legs, a cab over 108 x 120, a clean slate roof, flat glass panes with glints.",
     "reroll": ""
    },
+   "sprite_models": [
+    {
+     "model": "g1_guard_tower",
+     "sprites": [
+      "g1_guard_tower"
+     ],
+     "compact_glb": "meshy/groups/g1/models/g1_guard_tower.glb",
+     "repo_file": "models/guard_tower.glb"
+    },
+    {
+     "model": "g1_searchlight",
+     "sprites": [
+      "g1_guard_tower"
+     ],
+     "compact_glb": "meshy/groups/g1/models/g1_searchlight.glb",
+     "repo_file": "models/searchlight_bracket.glb",
+     "note": "the same compact GLB as models/searchlight_bracket.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a13700-6d5b-716f-9424-0b0b32fa9781",
@@ -888,7 +990,7 @@
     "sprites/g1.png",
     "sprites/g1.json"
    ],
-   "notes": "Pilot model (generated before the ledger, gen/dl), reused. FIX r1: the pilot's little lamp on the cab's front-left wall and the box under it painted steel where they stand proud of the wall (a 3D-box band, every facing - the judge's z-band skipped the camera-facing plates); the panes (door window and side windows) one flat glass of their own (steel[2..3], detail 0) with one 1 px lit diagonal glint per pane (props.js: dark panes, the sky streaked across) - no more broken-glass blobs; the gable smoothed row by row (no dark speckle). Strongest sprite of the group otherwise unchanged: pilot OBJ at 8.64 m (x0.96), X/Z x0.88, yaw 25 / pitch 4, cut over the 7.0 m ridge, iron stove pipe to 7.28 m, grey timber on the dust ramp, slate roof, the searchlight (x1.4) on a knee-braced bracket off the cab's right back corner. Lamp lens[2] pixel: sprite px (189, 117) = (+79, -271) from the anchor (110, 388). KIT NOTE: the GLB still carries the pilot's roof lamp and antenna up to 8.64 m (cut only in the sprite); guard_tower v2 with a walkway is pass-2 item 2 in the plan. The guard in the window is g8's job."
+   "notes": "Pilot model (generated before the ledger, gen/dl), reused. FIX r1: the pilot's little lamp on the cab's front-left wall and the box under it painted steel where they stand proud of the wall (a 3D-box band, every facing - the judge's z-band skipped the camera-facing plates); the panes (door window and side windows) one flat glass of their own (steel[2..3], detail 0) with one 1 px lit diagonal glint per pane (props.js: dark panes, the sky streaked across) - no more broken-glass blobs; the gable smoothed row by row (no dark speckle). Strongest sprite of the group otherwise unchanged: pilot OBJ at 8.64 m (x0.96), X/Z x0.88, yaw 25 / pitch 4, cut over the 7.0 m ridge, iron stove pipe to 7.28 m, grey timber on the dust ramp, slate roof, the searchlight (x1.4) on a knee-braced bracket off the cab's right back corner. Lamp lens[2] pixel: sprite px (188, 119) = (+78, -269) from the anchor (110, 388). ASSEMBLY FIX ROUND (the pass-1 judge's 0-credit fix, applied 14 Oct): the searchlight instance lowered from y 4.4 to 4.343 m (recipe.json), so its fork post now meets the bracket arm (sprite rows 143-145 closed), and the kit GLB re-imported with models.json clip [[-9, 7.02, -9, 9, 12, 9]]: 3.04 x 7.03 x 3.11 m, the pilot's roof lamp and antenna are gone; only the guard tower sprite changed in the g1 atlas. guard_tower v2 with a walkway is pass-2 item 2 in the plan. The guard in the window is g8's job."
   },
   {
    "name": "ropeway_pylon",
@@ -916,6 +1018,19 @@
     "notes": "None required:\n- The lattice reads, with 12 openings per mast.\n- The mirrored _r sprites are re-lit from the left.\n- The crossarm is about 45 px, as in props.js.\n- The kit is clipped to 1.01 x 4.25 x 0.85 m and is clean.\n\nMinor: in the rust variant one mast chord shows as a stub above the crossarm, right of the sheave post; the steel pair hides it. Use g1_pylon_l_steel / g1_pylon_r_steel in the level, as the producer advises. The sheave is a plain disc without the level's 4 spokes; that is acceptable at r 9.",
     "reroll": ""
    },
+   "sprite_models": [
+    {
+     "model": "g1_ropeway_pylon",
+     "sprites": [
+      "g1_pylon_l",
+      "g1_pylon_r",
+      "g1_pylon_l_steel",
+      "g1_pylon_r_steel"
+     ],
+     "compact_glb": "meshy/groups/g1/models/g1_ropeway_pylon.glb",
+     "repo_file": "models/ropeway_pylon.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a13700-6e4c-7383-8e27-58f49068d959",
@@ -988,6 +1103,17 @@
     "notes": "None. The geometry matches props.js paintBucket and map.js:\n- Lip about 89 px; deck at y 129, x 5..89 (84 px = map w 56u), 16 px under the lip.\n- Crossbar underside 105 px over the deck; bottom 32 px under the deck.\n- OUTLINE #0b080b on this mover only.\n- Calm plates, ribs, rivet row and short rust runs.\n\ng1_bucket_front differs from the bucket's own front wall in 352 of 3791 px: rust runs at other columns, and a small st3 'T' weld mark at (70-73, 37-40). The engine always draws the front over the bucket, so these never show. Optionally remove the T mark.\n\nKit: clean, 1.83 x 3.14 x 0.94 m.",
     "reroll": ""
    },
+   "sprite_models": [
+    {
+     "model": "g1_bucket_v2",
+     "sprites": [
+      "g1_bucket",
+      "g1_bucket_front"
+     ],
+     "compact_glb": "meshy/groups/g1/models/g1_bucket_v2.glb",
+     "repo_file": "models/ropeway_bucket_v2.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a13772-b892-73e6-8bc0-4dc4aadd459e",
@@ -1101,6 +1227,7 @@
     "notes": "Retired: the pilot round-kettle bucket is the wrong type for the level and has no sprite. Keep its GLB only as a reference in the library. Not counted in the group score.",
     "reroll": ""
    },
+   "sprite_models": [],
    "tasks": {
     "final_model": {
      "id": "01a13700-6ddc-72ba-baca-c2e9c287303a",
@@ -1136,7 +1263,7 @@
    "pilot_credits_before_ledger": 30,
    "sprites": [],
    "repo_files": [],
-   "notes": "Pilot model (generated before the ledger, gen/dl), reused. Superseded by ropeway_bucket_v2 (the pilot is a round kettle, the wrong type): FIX r1 removed g1_bucket_pilot_fallback from recipe.json and the shipped atlas (out/), so nobody wires it in. The GLB stays in the library as the pilot reference only (2.4 m)."
+   "notes": "Pilot model (generated before the ledger, gen/dl), dropped by the judge, not shipped. Superseded by ropeway_bucket_v2 (the pilot is a round kettle, the wrong type): FIX r1 removed g1_bucket_pilot_fallback from recipe.json and the shipped atlas (out/), so nobody wires it in. The GLB stays in the library as the pilot reference only (2.4 m)."
   },
   {
    "name": "familok_window_segmental",
@@ -1164,6 +1291,32 @@
     "notes": "Polish only, recipe.json, then re-render the 8 window sprites.\n(1) window_seg_b*: two dark teeth poke into the sill's lit top under the inner jamb feet, at sprite px about (8-9, 84-86) and (50-51, 84-86). Fix: raise the stone zone box top from 0.462 to 0.475 m so the reveal shadow's foot row becomes sill. Or add a feature {rows:[<sill top row>, <sill top row>], face:5, ramp:'stone', overLines:true, mats:['stone']} over px [-22, 22].\n(2) window_seg_a*: there is an outline pixel at the sill's left end, (1, 79). Fix: paint stone face 5 there with a px-limited rows feature, or set the sill bond's edges to 'cut'.\n(3) Optional: the frames are 38 px wide against SCALE.window 42 x 66 (A 38x69, B 38x72). To fix, use stretch x 1.1 in models.json for g2_window_seg_a/b and re-import, or widen the 'win' x range to +-0.40 m and trim each jamb by 2 px. If A and B share a storey, anchor them on the sill top.\nUnreal: the source models include a brick wall panel (A 1.17 x 1.84 m, B 1.56 x 2.24 m), so use them as wall modules, not flush inserts. Each is one component.",
     "reroll": "none: the models are right (segmental arch, mullion and transom, sill)"
    },
+   "sprite_models": [
+    {
+     "model": "g2_window_seg_a",
+     "sprites": [
+      "window_seg_a",
+      "window_seg_a_curtain",
+      "window_seg_a_lit",
+      "window_seg_a_lit2"
+     ],
+     "compact_glb": "meshy/groups/g2/models/g2_window_seg_a.glb",
+     "repo_file": "models/familok_window_segmental.glb"
+    },
+    {
+     "model": "g2_window_seg_b",
+     "sprites": [
+      "window_seg_b",
+      "window_seg_b_cracked",
+      "window_seg_b_lit",
+      "window_seg_b_lit2"
+     ],
+     "compact_glb": "meshy/groups/g2/models/g2_window_seg_b.glb",
+     "repo_file": null,
+     "archive_file": "g2/familok_window_segmental/compact/g2_window_seg_b.glb",
+     "note": "a variant GLB over the 80 MB size budget: not in this package, on the archive branch at g2/familok_window_segmental/compact/g2_window_seg_b.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a1376a-c013-764b-921b-3ffc73593535",
@@ -1223,8 +1376,10 @@
        "window_seg_b_lit",
        "window_seg_b_lit2"
       ],
-      "repo_file": "models/familok_window_segmental__b.glb",
-      "compact_glb": "meshy/groups/g2/models/g2_window_seg_b.glb"
+      "repo_file": null,
+      "compact_glb": "meshy/groups/g2/models/g2_window_seg_b.glb",
+      "archive_file": "g2/familok_window_segmental/compact/g2_window_seg_b.glb",
+      "full_res_archive_file": "g2/familok_window_segmental/familok_window_segmental__b.glb"
      }
     ],
     "replaced": [],
@@ -1289,8 +1444,7 @@
    "repo_files": [
     "models/familok_window_segmental.glb",
     "sprites/g2.png",
-    "sprites/g2.json",
-    "models/familok_window_segmental__b.glb"
+    "sprites/g2.json"
    ],
    "notes": "Round 2. The model still supplies the jambs, the arch outline and the sill. The 40 px opening is now painted the way tiles.js windowAt() does it, with a new 'win' painter: a 3 px frame (soffit and left jamb paint[1], lit stile paint[4], right stile paint[3]/[2]), 4 px mullion and transom, 3 px glazing bars, a 5 px bottom rail and the right reveal. Every member is a clean bar, so there are no 1 px teeth. The arch is re-laid as tiles.js arch() with a new 'arch2' painter: 6 px voussoirs, a brick[2] joint every 4 px placed symmetrically about a 6x9 keystone, the extrados lit brick[6..7], the intrados brick[3] and a mortar line over it. On A the frame head follows the arch; on B a dark segment sits under the arch. The jambs are re-bonded over the mesh's reveal, which removes B's green teeth and its dark strip. The panes are flat. Dark panes have one sheen stroke, on the upper panes only. Lit panes are lamp[2] with a round lamp[3..4] glow and lamp[1] along the bars, with no ragged bands or triangle glints. The tiles.js dressing is ported as variants: A has plain, a drawn curtain, lamp + lace + drapes, and lamp + lace + geranium; B has plain, a cracked pane, lamp + lace + drapes, and lamp + lace + geranium. Sprites are 58x88 (A) and 60x93 (B). B's glb is groups/g2/models/g2_window_seg_b.glb and its model_dir is lib/familok_window_segmental/i3d-01a1376a-dc32-772a-8970-96b702377cfc."
   },
@@ -1320,6 +1474,16 @@
     "notes": "Optional polish: the broken-glass texture behind the boards becomes faint glass[2] vertical stubs, which read as low-contrast noise at x1. Fix: raise island for the glass class (e.g. [16, 40]) so the stubs merge into glass[0]. Then add 6-9 small glass[3] glints at fixed positions, as tiles.js boarded() does. Everything else is good: one tilted plank, one broken plank with a splinter, overhangs with nails and rust runs, the drop shadow and the sooted arch.",
     "reroll": "none"
    },
+   "sprite_models": [
+    {
+     "model": "g2_window_boarded",
+     "sprites": [
+      "window_boarded"
+     ],
+     "compact_glb": "meshy/groups/g2/models/g2_window_boarded.glb",
+     "repo_file": "models/familok_window_boarded.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a1376a-b92b-77c9-b680-aebcd727ece4",
@@ -1418,6 +1582,17 @@
     "notes": "Polish: two lit stone pixels sit at the surround's bottom corners, (2, 21) and (21, 21). Fix: add {rows:[21, 21], face:3, ramp:'stone', overLines:true, mats:['stone']}. The lit edge of the left stone jamb also stops at row 12 because the silhouette steps in. Optional fix: a keep box for x -0.25..-0.23 m. Unreal (no credits): flip the normals of the glass insert, component 2 (3122 faces), in lib/familok_attic_window/i3d-01a1376a-e71f-70d9-be75-b93bf151cf49 before or at UE import.",
     "reroll": "none"
    },
+   "sprite_models": [
+    {
+     "model": "g2_attic_window",
+     "sprites": [
+      "attic_window",
+      "attic_window_lit"
+     ],
+     "compact_glb": "meshy/groups/g2/models/g2_attic_window.glb",
+     "repo_file": "models/familok_attic_window.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a1376a-e71f-70d9-be75-b93bf151cf49",
@@ -1517,6 +1692,26 @@
     "notes": "Sprites, optional:\n- The door_dark fanlight hub is a ragged triangular cluster of wood pixels. Paint a 5 px half-disc hub as tiles.js doorAt() does (r<=5: rim wood[3], body wood[2]).\n- Remove the 1 px outline dot at (7, 20) on the left reveal of door_dark.\n- The sunburst rays are slightly uneven near the hub but readable.\nUnreal, no credits:\n- Both source textures have pale pink-grey (green door) or grey-brown (dark door) brick that does not match the windows' red brick. Recolour the brick texels in texture_0.png: mask hue 0-40 deg, sat < 0.35, outside the door-leaf UV islands. Map them to the window A texture's brick prototypes (bin/pal.py on lib/familok_window_segmental/i3d-01a1376a-c013-764b-921b-3ffc73593535/texture_0.png).\n- Delete door_green's 570-face meeting-stile sliver (component 2, x +-0.02 m, z -0.10..-0.08).\nNote: the arches are round where the plan says segmental. That is acceptable for Silesian colony doors.",
     "reroll": "none: geometry and type are right; only the brick colour is off, and a texture recolour fixes it"
    },
+   "sprite_models": [
+    {
+     "model": "g2_door_green",
+     "sprites": [
+      "door_green",
+      "door_green_lit"
+     ],
+     "compact_glb": "meshy/groups/g2/models/g2_door_green.glb",
+     "repo_file": "models/familok_street_door.glb"
+    },
+    {
+     "model": "g2_door_dark",
+     "sprites": [
+      "door_dark",
+      "door_dark_lit"
+     ],
+     "compact_glb": "meshy/groups/g2/models/g2_door_dark.glb",
+     "repo_file": "models/familok_street_door__dark.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a1376a-ec72-74a3-8755-2d63df43d2d9",
@@ -1575,7 +1770,8 @@
        "door_dark_lit"
       ],
       "repo_file": "models/familok_street_door__dark.glb",
-      "compact_glb": "meshy/groups/g2/models/g2_door_dark.glb"
+      "compact_glb": "meshy/groups/g2/models/g2_door_dark.glb",
+      "full_res_archive_file": "g2/familok_street_door/familok_street_door__dark.glb"
      }
     ],
     "replaced": [],
@@ -1667,6 +1863,16 @@
     "notes": "None required. I verified the seams: it is exactly 96 x 20 and fully periodic (zinc laps every 48, corbel joints every 12, 5 px dentils every 8), with the deck on row 1. Optional: soot streaks under the dentils, periodic in 96.",
     "reroll": "none"
    },
+   "sprite_models": [
+    {
+     "model": "g2_cornice",
+     "sprites": [
+      "cornice"
+     ],
+     "compact_glb": "meshy/groups/g2/models/g2_cornice.glb",
+     "repo_file": "models/familok_cornice_segment.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a1376a-e21d-7284-8dcc-2a647b816dd3",
@@ -1765,6 +1971,16 @@
     "notes": "None required. It is 96 x 11 and seamless. Headers are every 6 px with four odd bricks in fixed places. The lit top is brick[6], the underside brick[3] then brick[1], as tiles.js stringCourse() does.",
     "reroll": "none (the plan says never re-roll)"
    },
+   "sprite_models": [
+    {
+     "model": "g2_string_course",
+     "sprites": [
+      "string_course"
+     ],
+     "compact_glb": "meshy/groups/g2/models/g2_string_course.glb",
+     "repo_file": "models/familok_string_course.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a1376a-c5c7-7311-af2c-f90d754a6d5a",
@@ -1863,6 +2079,16 @@
     "notes": "Optional polish: it is seamless at 96 x 20 with stones in stone[2]/[3], but plainer than tiles.js plinth() and close to a flat bar at x1. Add periodic (mod 96) tooling ticks (about 7 px of stone[3]/stone[1] singles) and a splashed-dirt run on rows 16-17 (stone[1], noise sampled periodically in 96). Unreal: keep the z stretch of 0.42.",
     "reroll": "none (the plan says never re-roll)"
    },
+   "sprite_models": [
+    {
+     "model": "g2_plinth",
+     "sprites": [
+      "stone_plinth"
+     ],
+     "compact_glb": "meshy/groups/g2/models/g2_plinth.glb",
+     "repo_file": "models/familok_stone_plinth.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a1376a-b315-7520-b673-624ec1c3ff84",
@@ -1961,6 +2187,19 @@
     "notes": "Fix the 1 px notch on the shaft's right edge just above the shoe: the steel[2] column becomes outline at shoe px (11, 17-19), which is full-pipe rows 163-165. The mesh's shoe bend narrows the shaft there. In both downpipe_shoe and downpipe, raise the top of the second add box (x +-0.0571, starting at y 0) from 0.152 to about 0.25 m, so the shaft's silhouette is filled through the bend. Then re-render downpipe and downpipe_shoe. I verified everything else: a 6 px shaft with the tiles.js columns, joints every 72 px, and the hopper + n segments + shoe stack without a seam.",
     "reroll": "none"
    },
+   "sprite_models": [
+    {
+     "model": "g2_downpipe",
+     "sprites": [
+      "downpipe",
+      "downpipe_hopper",
+      "downpipe_segment",
+      "downpipe_shoe"
+     ],
+     "compact_glb": "meshy/groups/g2/models/g2_downpipe.glb",
+     "repo_file": "models/familok_downpipe.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a1376a-d10d-7165-b093-c6d3aa220e05",
@@ -2062,6 +2301,16 @@
     "notes": "Polish, recipe only:\n(1) The coal flue feature on rows [0, 1] cuts the cap's lit top and reads as a notch. Change it to rows [1, 1] (or [1, 2]) and keep row 0 as the stone[5] back edge, so it reads as an opening seen from slightly above.\n(2) A brick[7] scrap sits at row 6, x 12-17, in the dark course under the cap's shadow. Add {rows:[6, 6], face:3, mats:['brick'], overLines:true, px:[-99, 9]}.\n(3) A red stray pixel sits at (35, 4) under the cap's right end. Extend the stone rows [4, 5] feature to px 99, or cut it.\nValue is fine: the front stays at brick[5..6].",
     "reroll": "none"
    },
+   "sprite_models": [
+    {
+     "model": "g2_chimney",
+     "sprites": [
+      "roof_chimney"
+     ],
+     "compact_glb": "meshy/groups/g2/models/g2_chimney.glb",
+     "repo_file": "models/familok_roof_chimney.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a1376a-d6b8-75fc-8c62-62670910c3bb",
@@ -2160,6 +2409,20 @@
     "notes": "Optional polish in recipe.json (crate_a/b/c, crate_stack2):\n- Erase the 3 dark dashes on the lid's back-left edge (sprite px around (10-17, 4-6)): add a box3 on the lid's back edge (y 0.90-0.94, z -0.53..-0.42) with tone 0.\n- Clean the bottom-right corner of the side face (px x 52-64, y 43-54). It is a cluster of wood[0] / wood[2] dashes plus steel pixels.\n- Drop the lone 1 px vertical tick in the side panel at x 62-63, y 23-31 (the model's handle). Repaint the side panel's mid-band with the panel step.\n- Give each corner bracket a steel[6] lit pixel at its upper-left corner and one steel[2] rivet, so it is not a flat grey L.\nThe sizes match SCALE.crate: the front face is 48 px and the lid edge is the walk line. The stack seam steps along the front face's bottom edge, which is correct for yaw 20.",
     "reroll": "No reroll. The model is a closed, framed 0.91 m crate with handles and corner bolts. It is about 7% off a cube (x:y:z 1.07:1:1.12), and it has 562 open and 283 non-manifold edges but no visible holes. The texture is whitewashed grey: for Unreal, use a grey-brown material multiply, or a Meshy retexture (texture prompt from the plan) if credits remain after pass 2."
    },
+   "sprite_models": [
+    {
+     "model": "wooden_crate",
+     "sprites": [
+      "crate_a",
+      "crate_b",
+      "crate_c",
+      "crate_stack2",
+      "crate_stack2"
+     ],
+     "compact_glb": "meshy/groups/g3/models/wooden_crate.glb",
+     "repo_file": "models/wooden_crate.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a1377e-1174-748f-9426-9c18682e57ca",
@@ -2272,6 +2535,16 @@
      "score": 5,
      "verdict": "reroll",
      "reroll": "The model is wrong for the Unreal kit: four legs with knee braces (a table), a closed end rail, and an extra stretch z 0.64 in the import. It cannot tile per 0.91 m.\n\nReject c4 for image-to-3D: its truss is a fish-belly under the middle third only, and its deck (about 1.2 m) is wider than the rails are tall.\n\nMethod: one new t2i concept with nano-banana-pro, then i3d (texture_prompt 'weathered grey steel, light rust, no text, no letters'). Budget about 40 credits from the pass-2 pool; g3 has 2 left.\n\nConcept prompt: 'Three-quarter product render of ONE straight industrial steel catwalk module, 2.7 m long and 0.9 m wide, floating on a plain light grey background, no floor, no shadow: an open bar-grating deck between two C-channel side stringers; under the deck a continuous shallow Warren truss 0.3 m deep running the FULL length at constant depth (top chord, bottom chord, zig-zag angle-iron diagonals); round-tube posts every 0.9 m on BOTH long sides carrying a top rail 0.9 m above the deck and a knee rail at 0.45 m; both ends cut square and OPEN (no end rail, no legs, no posts below, nothing under the bottom chord); riveted gussets; weathered grey steel, light rust; 1950s coal mine; realistic; no text'.\n\nAccept only if: the rails are at least 0.85 m over the deck; the deck is at most 1.0 m deep; the truss is 0.25-0.35 m deep and the same depth end to end; nothing hangs below it; the ends are open.\n\nFallback if the concept fails twice: this is pure repetition, so a procedural Unreal kit (grating tile + truss bay + post) is cheaper than more Meshy spend."
+    }
+   ],
+   "sprite_models": [
+    {
+     "model": "lattice_catwalk_section",
+     "sprites": [
+      "catwalk"
+     ],
+     "compact_glb": "meshy/groups/g3/models/lattice_catwalk_section.glb",
+     "repo_file": "models/lattice_catwalk_section.glb"
     }
    ],
    "tasks": {
@@ -2432,6 +2705,19 @@
     "notes": "1. ladder_full has a 13-15 px rung pitch ([14,14,15,14,14,13,13,14,15,14,14]); the level climbs on a fixed SCALE.rung of 14. Either compose ladder_full from ladder_foot + n x ladder_mid + ladder_top (each piece placed directly on the one below; the pitch is 14 across the joins), or drop it from the atlas and ship the pieces only.\n2. Anchor metadata is inconsistent: ay = h-1 on ladder_full (208) and ladder_foot (28), but ay = h on ladder_mid (14) and ladder_top (40). Make it uniform, or add a 'stack' field that documents the join row, so the level does not stack them 1 px off.\n3. The pieces are good: stiles 4 px with the level's column shading (30 px outside, 22 px between), rivets, 30 px grab rails with caps, foot plates, and rust 4-16 px up the stiles.",
     "reroll": "No reroll; the plan says never re-roll this in pass 2. The model is straight and even, with wall-return brackets, 46 open edges and one component. Cut it into stile, rung, top and foot pieces in Unreal."
    },
+   "sprite_models": [
+    {
+     "model": "steel_ladder_segment",
+     "sprites": [
+      "ladder_full",
+      "ladder_foot",
+      "ladder_mid",
+      "ladder_top"
+     ],
+     "compact_glb": "meshy/groups/g3/models/steel_ladder_segment.glb",
+     "repo_file": "models/steel_ladder_segment.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a1377e-19d3-7160-85bc-364b494e8764",
@@ -2526,6 +2812,16 @@
     "notes": "The rims break the light rule. Measured: both rims are brightest at 270-330 degrees (bottom and lower right) and dark at the upper left. The plan's note asks for 'the rim gets a lit upper-left edge'. The tyres are lumpy, because they are painted from the mesh's normals.\n\nFix (no credits):\n1. Add an 'annulus' mode to the draw feature in groups/g3/ms.mjs. It is like 'ring' but paints only r0 < dd <= r1, so the spokes stay. Shade it by facing like props.js bicycle(): fac > 0.5 lit, fac < -0.3 shade, mid between.\n2. For each wheel, at [-0.535, 0.336, 0] and [0.465, 0.338, 0], replace the rim and tyre box features (disc r [0.272, 0.305] paint steel; r [0.305, 0.352] paint tyre) with two annuli:\n   - rim: r 14.5-16.0 px, cols [steel[6] #7c8a86, steel[4] #4f5a5c, steel[2] #2c3234]\n   - tyre: r 16.0-18.5 px, cols [coal[4] #3a3238, coal[2] #1b171b, coal[1] #120e12]\n   Draw both before the mudguard/rust pass, or use 'unless' on rust so the mudguards stay on top.\n3. Re-check the frame's lit top line (coal[6] / coal[4], as props.js tube()). Remove the lone grey pixel left of the rear wheel at (1-2, 38).\nThe handlebar, saddle, chainring, chain, crank and pedal fixes from round 1 are good; 94x65 matches the level's 93 px bike.",
     "reroll": "No reroll. The model is a good heavy roadster: black frame, sprung leather saddle, upright bars, headlamp, rear carrier, spoked wheels. It has 4 components (the lamp and saddle springs as separate parts) and 44 open edges. It is a clean Unreal piece."
    },
+   "sprite_models": [
+    {
+     "model": "bicycle_roadster",
+     "sprites": [
+      "bicycle"
+     ],
+     "compact_glb": "meshy/groups/g3/models/bicycle_roadster.glb",
+     "repo_file": "models/bicycle_roadster.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a1377e-5240-7252-a9b3-3f17a2daab5f",
@@ -2628,6 +2924,16 @@
     "notes": "Optional polish:\n- Add the bolt heads the plan and the level bench draw: a steel[5] px where each slat crosses an iron end.\n- Clean the left seat-end stray cluster at sprite px (3-7, 24-27): a wood[4] corner over coal[1].\n- The iron ends read as dark posts at yaw 8 (correct foreshortening). If you want the scroll to read, lift the armrest's top run to coal[6] for 3-4 px.\nThe sprite is 88x54. It is 6 px taller than the level's 48 px bench but within the plan's 0.9 m plus the pitch.",
     "reroll": "No reroll. The model has good scrolled cast-iron ends and armrests; the slats look fused in the top view but read correctly from the front. The texture is white slats with orange peel, not the plan's peeling green, so Unreal needs a material swap (green paint / grey-brown wood mask), or a Meshy retexture if pass-2 credits remain."
    },
+   "sprite_models": [
+    {
+     "model": "park_bench",
+     "sprites": [
+      "bench"
+     ],
+     "compact_glb": "meshy/groups/g3/models/park_bench.glb",
+     "repo_file": "models/park_bench.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a1377e-3ec3-7073-bcdb-acb1c8cd14e3",
@@ -2730,6 +3036,16 @@
     "notes": "None required. 24x24 matches the level's bucket(): a tapered zinc body lit on the left with a steel[6] rim row, two hoops, a coal heap proud of the rim with coal[6] lumps, and the 1 px steel[3] bail lying back. Optional: lift the bail's top run to steel[4], because steel[3] nearly vanishes over the coal heap at x1.",
     "reroll": "No reroll. The pail is clean, with rolled rims and side drop rings, but no wire bail (Unreal can add one as a spline). The coal lumps are oversized for household coal (about 10 cm each) but acceptable."
    },
+   "sprite_models": [
+    {
+     "model": "coal_bucket_zinc",
+     "sprites": [
+      "coal_bucket"
+     ],
+     "compact_glb": "meshy/groups/g3/models/coal_bucket_zinc.glb",
+     "repo_file": "models/coal_bucket_zinc.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a1377e-493c-739e-83e1-b1cf99ce0191",
@@ -2821,6 +3137,16 @@
     "notes": "1. Size: the sacks measure 47-53 px with tufts (0.9-1.0 m), not the '0.57-0.78 m' in the notes. That is as tall as the 0.91 m crate; the plan says 0.55-0.7 m and the level's sacks() are 29-37 px plus a 9 px tuft. In models.json set coal_sacks_shovel height 1.0 -> 0.85 (sacks about 40-45 px with tufts, the shovel's D-grip still on top).\n2. Haft smear: the capsule [[0.47,0.2,0.12],[0.51,0.9,-0.29]] r 0.045 paints a 4-5 px wood band over the burlap. Cut r to 0.02, then add two 'draw line' features from the grip to the socket, as props.js sacks() draws its haft: cols ['#7a5030'] (wood[3], lit left) and the same line offset +1 px in x with cols ['#3a2414'] (wood[1]).\n3. Speckle: there are 53 isolated 1 px dark burlap[1] dots on the shoulders. Lower detail.burlap 0.15 -> 0.06, and add {fill: 'burlap', n: 3} or raise island to [16, 40].\n4. The middle sack shows no tied neck. Draw one like the level's: a 6x3 burlap[3] neck with a burlap[4] lit left px, an 8x1 burlap[1] tie, and a 3-row tuft leaning right, at the middle sack's top centre.\nKeep: K3 stencil, spade plate, lit flanks between sacks, spilt coal.",
     "reroll": "No reroll. The model is right: three tied jute sacks, a D-grip spade leaning on the last, and spilt coal, in 3 components with 73 open edges. The shovel is fused to the sacks, which is fine for a single static prop in Unreal."
    },
+   "sprite_models": [
+    {
+     "model": "coal_sacks_shovel",
+     "sprites": [
+      "coal_sacks"
+     ],
+     "compact_glb": "meshy/groups/g3/models/coal_sacks_shovel.glb",
+     "repo_file": "models/coal_sacks_shovel.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a1377e-096b-7191-82da-066bb65f4338",
@@ -2912,6 +3238,17 @@
     "notes": "Optional polish:\n- Remove the stub past the right finial (sprite px x 77-82, y 2-6). It is the model's rod end, left in the gap between the cuts [0.715,-0.1,0.95,3.055] and [0.7,3.16,0.95,3.9]. Add the cut [0.865, 2.95, 1.3, 3.3].\n- Soften the 2-3 hooked crease ends in the top third (horizontal banner[0] runs at y 13-17) so they read as folds, not scratches.\n- Kit OBJ: delete the stray single-face component at (0.25, -0.687). The kit cloth is unstretched (x:y 0.357), so scale X 1.5 in Unreal to the plan's 1.14 m cloth.\nbanner_mid keeping banner red is correct: bg.js line 50 says 'banner red kept'. The cloth is blank, the hem is frayed with threads, and the rod has hooks and lit finials.",
     "reroll": "No reroll. The cloth is blank in every view, the folds splay from the sleeve, and the hem is frayed. The pole-less kit mesh in lib/regime_banner_cloth/kit/ is clean: 262 open edges at the cloth hem, as expected."
    },
+   "sprite_models": [
+    {
+     "model": "regime_banner_cloth",
+     "sprites": [
+      "banner",
+      "banner_mid"
+     ],
+     "compact_glb": "meshy/groups/g3/models/regime_banner_cloth.glb",
+     "repo_file": "models/regime_banner_cloth.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a1377e-2b41-75d4-8643-04fc7a1a20db",
@@ -3015,6 +3352,18 @@
     "notes": "1. Stray red pixels: a 2x2 red block under vent_b's flange (px 9-10, 24-25) and one red pixel on vent_c (10, 23). They come from the last two box3 features in each vent entry (paint 'rust', step 1, on 'flange'). Delete them, or make each a 1x3 vertical run from a bolt down, rust[1] over rust[0].\n2. vent_c (yaw 260): the bore reads only as a notch, and a lone steel[0] pixel sits at (4, 6). Either turn it to yaw 240 so the lip ellipse shows, or ship a mirrored vent_b as the third variant. Erase the stray pixel.\n3. Size note: 26 px (0.5 m) is about twice the plan's 0.25 m and the level's 13 px nozzle (anchor NGY-12). Round 1 accepted 0.45 m for readability, and meta.vent re-anchors the steam, so I accept it. The level must place the steam at meta.vent, not at NGY-12.",
     "reroll": "No reroll. The model is a clean flanged standpipe with a 45-degree hooded outlet and a lip: one component, 82 open edges, no baked shadow. It is a good Unreal piece at the plan's footprint."
    },
+   "sprite_models": [
+    {
+     "model": "steam_vent_nozzle",
+     "sprites": [
+      "steam_vent_a",
+      "steam_vent_b",
+      "steam_vent_c"
+     ],
+     "compact_glb": "meshy/groups/g3/models/steam_vent_nozzle.glb",
+     "repo_file": "models/steam_vent_nozzle.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a1377e-5abd-7410-b219-b2486b7b81f1",
@@ -3108,6 +3457,16 @@
     "notes": "None. This is the reused pilot model and it is unchanged since round 1. Pole and plinth use the smog ramp per the VALUE rule, the hood is dark, and the sodium glass is 189 px over the street and 32 px right of the pole (the level has 190 / 33); meta.lamp [51, 41] is the glow anchor. The sprite is 231 px against SCALE.lamp 204, but that is the plan's own 4.23 m choice.",
     "reroll": "No reroll."
    },
+   "sprite_models": [
+    {
+     "model": "street_lamp",
+     "sprites": [
+      "street_lamp"
+     ],
+     "compact_glb": "meshy/groups/g3/models/street_lamp.glb",
+     "repo_file": "models/street_lamp.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a13700-3116-7336-9f96-1247d817e7fe",
@@ -3177,6 +3536,17 @@
     "notes": "None required. It is clean and rectangular, 240 px wide (the 5-tile shaft); the back + hero + front sandwich works and the OUTLINE is #0b080b. Optional polish: the cage front frame is a single flat steel tone; give its top and left members the lit bevel step (bevel [1,-1] on the front pass). The bridle chains read as twisted rope; a 'bars' feature (dy 3, steel tone -1) along them would suggest links. Leave g4_cage_a.glb as the alternative kit piece.",
     "reroll": "none"
    },
+   "sprite_models": [
+    {
+     "model": "g4_cage_b",
+     "sprites": [
+      "g4_cage_back",
+      "g4_cage_front"
+     ],
+     "compact_glb": "meshy/groups/g4/models/g4_cage_b.glb",
+     "repo_file": "models/shaft_cage_foerderkorb.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a13747-7f21-760b-9e11-b7cd39bcabc3",
@@ -3234,7 +3604,9 @@
       },
       "sprites": [],
       "repo_file": null,
-      "compact_glb": "meshy/groups/g4/models/g4_cage_a.glb"
+      "compact_glb": "meshy/groups/g4/models/g4_cage_a.glb",
+      "archive_file": "g4/shaft_cage_foerderkorb/compact/g4_cage_a.glb",
+      "full_res_archive_file": "g4/shaft_cage_foerderkorb/shaft_cage_foerderkorb__a.glb"
      }
     ],
     "replaced": [],
@@ -3323,6 +3695,16 @@
     "notes": "(a) DOOR, a VALUE failure and a placeholder. The box paints flat wood[2] #5a3a22: contrast 1.31, and the door bay measures 1.28, under VALUE.floor 1.4 exactly where the 'door' mark puts the hero (judge_r2/door_value_x4.png: he merges into it). It is also one flat slab with a single line. Make it SCALE.door 60 x 120: own x [-3.81,-2.67], arch 0.5. Use the wood steps [2,3,3,4,4] with flat:false, so its large area is wood[3] #7a5030 (1.91). Draw vertical planks with bars dx 6 col wood[1], and one centre split at wood[0]. Add a 1 px lit left jamb box (tone +1) and a 2 px right reveal (tone -1), plus two iron strap-hinge boxes (paint iron, 0.06 m tall at y 0.45 and 1.75). Draw a stone arch-ring box 0.1 m larger than the door before it, so it stops looking pasted over the string course. Stronger alternative: an open door with a lamp-lit interior (paint lamp, steps [1,2,2,2,3]). (b) HEIGHT. 'top' is 406 px = 7.73 m against the plan's 7.2 m. At the street view the frame top is 396 px over the street (map.js headframe h 382 + 14), so the chimney pots are cropped and the house out-tops the finale's landmark (judge_r2/lineup_E_x2.png). Shorten the chimney by 0.55 m with the two-instance trick already in ms.mjs. Instance A is the model with a cut box over the chimney above 6.0 m (own x [-5.5,-4.2], y [6.0, 8.5]). Instance B is the same model with span over the chimney x and spanY [6.0, null] at pos [0,-0.55,0]. Move the iron bands to y 3.3 / 4.55 / 5.7 and drop the chimney recls box top to 6.5. Cut the lantern finial (a cut box over its x, y > 7.15). Target top <= 378 px. (c) WIDTH. It is 491 px; the level has 468 px between the headframe box's right edge (x 7212) and the level's end (7680). Trim the left lean-to stub with keepX at the main wall's outer corner (about 26 px), which gives about 465 px, and place the house flush with the level's end (ENT.engineHouse x of about 7215). If the 348 px slot must stay, fold one more bay (a second spread slab), about 380 px. (d) Small: paint out the dark lumps on the string course beside the downpipe and the stray diagonal stroke above the third upper window (a stone/brick box or a local island raise).",
     "reroll": "none: the model (5-bay 1911 brick hall, lantern, chimney, clean mesh 0.3% open edges) is a good Unreal kit piece; all problems are recipe/integration."
    },
+   "sprite_models": [
+    {
+     "model": "g4_engine_house",
+     "sprites": [
+      "g4_engine_house"
+     ],
+     "compact_glb": "meshy/groups/g4/models/g4_engine_house.glb",
+     "repo_file": "models/winding_engine_house.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a13747-71a4-77e5-bf42-5dcb740c8698",
@@ -3379,7 +3761,8 @@
       },
       "sprites": [],
       "repo_file": null,
-      "compact_glb": null
+      "compact_glb": null,
+      "full_res_archive_file": "g4/winding_engine_house/winding_engine_house__alt-mi3d.glb"
      }
     ],
     "replaced": [],
@@ -3480,6 +3863,16 @@
     "notes": "None required. The spokes read, the green bed is clean, and the steel cylinder has a lit top, mid front and dark belly; the brass and wood brake shoes are clean and the light comes from the upper left. Notes for integration: (1) its body band is dark, 80% under the VALUE floor of 1.4. Never place it on the playfield behind the hero; it is an interior / Unreal piece. (2) The house's hall windows are painted flat, so nothing shows this sprite in the web level yet. (3) It is 5.07 m long against the plan's 3.5 m; that is fine inside the 4-bay house.",
     "reroll": "none"
    },
+   "sprite_models": [
+    {
+     "model": "g4_drum_engine",
+     "sprites": [
+      "g4_drum_engine"
+     ],
+     "compact_glb": "meshy/groups/g4/models/g4_drum_engine.glb",
+     "repo_file": "models/winding_drum_engine.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a13747-8efc-71ad-98aa-ee7b0dfce23d",
@@ -3579,6 +3972,16 @@
     "notes": "(a) THE DRIVE END IS A MUDDY LUMP (judge_r2/head_end_x8.png). There is a ring arc, then a grey mass with a dark 'mouth' hole, an 'eye' slit and a stub shaft. It does not read as the concept's drum + motor + chain guard + gearbox. Add a recls box over the drive (own x >= 1.05, y 0.1..0.95) that turns 'belt'-class pixels into steel before the bevel; that removes the dark holes. Keep the wheel feature, r 0.3, and add a hub box of 0.12 m (tone +1, lit upper left) with a dark axle pixel. Paint the motor as a box feature 0.45 x 0.3 m: steel tone 0, a lit top row, a darker end cap. Paint the gearbox/chain guard as a box 0.35 x 0.4 m at tone -1 with two bolt heads. Set island [10,30] for that region. (b) THERE IS NO RETURN RUN. The belt wraps the drum and ends; the section's dark return band (its rows 17-24) stops at the joint against a solid grey girder (judge_r2/joint_from_sheet.png). Add a box feature painted 'belt' under the stringer, from the open end to the drum's bottom tangent, on the same rows as the section's return band. The joint then continues and the belt visibly loops round the drum. (c) THE LEG DANGLES IN THE LEVEL. The level's belt is row 7, 192 px over the street, and columns 117-120 under the open end must stay free. The rebuilt 1.2 m leg ends 126 px in mid-air (judge_r2/lineup_D_x2.png). Ship g4_conveyor_head without the leg: drop the six 'add' leg boxes and keep the 'cut' of the leaned leg. The level's belt painter already draws legs only down to a post's cap. Keep the legged version as g4_conveyor_head_leg for a ground-level belt. Unreal: the lib model is inclined 16.5 deg and its belt is narrow. It is usable after rotation; the concept c3 is the better reference for a UE rebuild.",
     "reroll": "none now (4 credits left; the sprite is fixable by painting). If pass 2 has spare credits: i3d from the same concept c3 at geo 2k with the texture_prompt, because standard geometry lost the belt width and the drive."
    },
+   "sprite_models": [
+    {
+     "model": "g4_conveyor_head",
+     "sprites": [
+      "g4_conveyor_head"
+     ],
+     "compact_glb": "meshy/groups/g4/models/g4_conveyor_head.glb",
+     "repo_file": "models/conveyor_head_drive.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a137a4-ef16-744c-a0e3-9c466cde37c3",
@@ -3721,6 +4124,18 @@
     "notes": "None required. I verified it: 96 x 28 px, the edge columns pixel-identical, brackets on a 48 px pitch across every joint, OUTLINE, and the dusty deck on y 1. Integration note: the tile has no legs, and at the level's geometry there is a 19 px gap between its underside and the post caps. Keep the legs from tiles.js paintBelt, or add a 24 x 21 px leg-pair sprite. The joint to the head is fixed on the head's side (a return-run box).",
     "reroll": "none (the plan says never re-roll this one; in Unreal it is a spline + scrolling material)"
    },
+   "sprite_models": [
+    {
+     "model": "g4_belt_section",
+     "sprites": [
+      "g4_belt_section",
+      "g4_belt_section",
+      "g4_belt_section"
+     ],
+     "compact_glb": "meshy/groups/g4/models/g4_belt_section.glb",
+     "repo_file": "models/conveyor_belt_section.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a13747-76f2-717d-9c6a-b01eced0008d",
@@ -3812,6 +4227,17 @@
     "notes": "None required. I measured the body at 48 px under a 52 px deck, with no inverted step at the capital; the rust lines are gone and the outline is OUTLINE. Optional: the base plate's centre (the smeared anchor-nut lump) and the dark smudge on the capital face read as blobs at x2. Paint both plain steel (recls / box to steel tone 0), then place two hex nuts on the plate as small boxes, a lit top pixel over a shadow pixel each.",
     "reroll": "none"
    },
+   "sprite_models": [
+    {
+     "model": "g4_belt_post",
+     "sprites": [
+      "g4_belt_post",
+      "g4_belt_post"
+     ],
+     "compact_glb": "meshy/groups/g4/models/g4_belt_post.glb",
+     "repo_file": "models/steel_belt_post.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a13747-95b2-75fb-a4ce-2c30df188b78",
@@ -3903,6 +4329,16 @@
     "notes": "None required. It follows the level's wheel contract (r 39, step pi/48, 12 frames of 80 x 80, axle at 40,40), the cycle is seamless, and the rim stays calm (about 5% of rim pixels change per step, only the rivets). Notes: it is heavier than the owner's 1 px lattice sheave, so use one style per headframe. For the mid / midfar layers render it again from the model at the layer scale; downscaling these 3 px spokes would clump them.",
     "reroll": "none"
    },
+   "sprite_models": [
+    {
+     "model": "g4_sheave",
+     "sprites": [
+      "g4_sheave"
+     ],
+     "compact_glb": "meshy/groups/g4/models/g4_sheave.glb",
+     "repo_file": "models/headframe_sheave_wheel.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a13747-85d5-7193-8b17-e1a5234bfeb5",
@@ -4001,6 +4437,16 @@
      "score": 2,
      "verdict": "reroll",
      "reroll": "The model is wrong for the job: a 1.77 m open-front brick box, not a 4.6 m shaft back wall with the guides. Pass 2, low priority and for the Unreal kit only: an IMG nano-banana-2 concept (16:9, remove_bg) + standard image-to-3D, about 36 credits. Prompt: 'Orthographic three-quarter view, slightly from above: the top 3 m of a rectangular coal-mine shaft seen as one flat back wall 4.6 m wide: soot-blackened brick lining, a concrete collar slab along the top edge, two vertical timber cage guides 3.6 m apart bolted to three horizontal steel I-beam buntons, short 0.5 m brick side returns, nothing in front of the wall; Upper Silesia 1950s; realistic 3D render, soft even studio light, no cast shadows, no outlines, plain white background, the whole object visible, no text, no people'. My recommendation: build it in Unreal from a brick trim sheet + I-beam and timber kit pieces instead; that is cheaper and exact."
+    }
+   ],
+   "sprite_models": [
+    {
+     "model": "g4_shaft_collar",
+     "sprites": [
+      "g4_shaft_collar"
+     ],
+     "compact_glb": "meshy/groups/g4/models/g4_shaft_collar.glb",
+     "repo_file": "models/shaft_collar_guides.glb"
     }
    ],
    "tasks": {
@@ -4146,6 +4592,7 @@
     "notes": "Reuse as is: this is the owner's model and the quality bar. Do not mix its 1 px lattice sheaves with g4_sheave on the same headframe.",
     "reroll": "none"
    },
+   "sprite_models": [],
    "tasks": {
     "final_model": null,
     "concept_or_preview": null,
@@ -4201,6 +4648,7 @@
     "notes": "Reuse as is (cart_tub, cart_pair, cart_parked). The empty-tub variant stays a pass-2 option, made by hiding the coal part in a recipe; it needs no credits.",
     "reroll": "none"
    },
+   "sprite_models": [],
    "tasks": {
     "final_model": null,
     "concept_or_preview": null,
@@ -4257,6 +4705,7 @@
     "notes": "Reuse as is (barrel_a/b/c, barrel_lying, barrel_stack).",
     "reroll": "none"
    },
+   "sprite_models": [],
    "tasks": {
     "final_model": null,
     "concept_or_preview": null,
@@ -4315,6 +4764,26 @@
     "notes": "Familok A ships as is (8.5): clean painted windows, an arched door, a plinth with cellar windows, a slate hip roof. Optional: a no-mats mdeco fill over [-158,25,156,199] removes the faint lit dashes under the cornice and the string course.\n\nFamilok B (7.3) needs three fixes:\n(1) In mkrecipe.py, remove 'mats':['mtrim'] from the wall fill {'fill':[-160,17,160,189],'mat':'mbrick','step':2}. Tested in judge_r2/out_fixtest2 and judge_r2/fixtest_famB_x3.png: every light-brick smear and the dark inner-line blobs at y_up 95-100 (x -52..-23 and 25..35) are gone. The rows/course/shutter/window decals still draw on top, giving clean 2 px stripes.\n(2) Redraw both chimneys. The right one's top is broken and ragged, and the left one has a dark dot. For each, erase [-58,256,-25,296] / [25,256,56,296], then add a grow fill mbrick step 2 on the stack, vcols MB3/MB2 on the left column and MB0 on the right, and a cap of rows SM4/SM2 2 px wider.\n(3) Straighten the left wall edge, which has outline jogs at y_up about 30 and 90: use straight 2 as on the c1 firewall, or corners() with an MB3 column.\n\nLevel: B must be re-laid for the 9.3/9.5 m widths. The ridge row is at mid y about 316, within 18 px of the cable-car rope (309).",
     "reroll": "Not needed: both Meshy models (i3d-...fabf, i3d-...02ec) are good 3D kit houses, single component, no symbols."
    },
+   "sprite_models": [
+    {
+     "model": "mid_familok_house_a",
+     "sprites": [
+      "mid_familok_house"
+     ],
+     "compact_glb": "meshy/groups/g5/models/mid_familok_house_a.glb",
+     "repo_file": "models/mid_familok_house.glb"
+    },
+    {
+     "model": "mid_familok_house_b",
+     "sprites": [
+      "mid_familok_house_b"
+     ],
+     "compact_glb": "meshy/groups/g5/models/mid_familok_house_b.glb",
+     "repo_file": null,
+     "archive_file": "g5/mid_familok_house/compact/mid_familok_house_b.glb",
+     "note": "a variant GLB over the 80 MB size budget: not in this package, on the archive branch at g5/mid_familok_house/compact/mid_familok_house_b.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a13747-fabf-70fa-934c-310e3a3a2dae",
@@ -4372,7 +4841,9 @@
        "mid_familok_house_b"
       ],
       "repo_file": null,
-      "compact_glb": "meshy/groups/g5/models/mid_familok_house_b.glb"
+      "compact_glb": "meshy/groups/g5/models/mid_familok_house_b.glb",
+      "archive_file": "g5/mid_familok_house/compact/mid_familok_house_b.glb",
+      "full_res_archive_file": "g5/mid_familok_house/mid_familok_house__b.glb"
      }
     ],
     "replaced": [],
@@ -4461,6 +4932,27 @@
     "notes": "Firewall c1_tall (8.0): fine as the blank poster wall. Optional: paint the three string courses and the eave band as rows decals over a fill, to drop the texture's lit streaks at y_up about 105, 215 and 355.\n\nc1_tall_b (7.0) needs three fixes:\n(1) Add a whole-wall fill {'fill':[-106,12,106,362],'mat':'mbrick','step':2} with no mats. Tested in judge_r2/out_fixtest3: the smear row under the top windows at y_up about 272 goes.\n(2) The middle chimney reads as a lit '7' glyph and the right chimney is a ragged fragment. Erase [-8,440,18,495] and [84,450,108,490]. Redraw them with the engine-stack decal, e.g. {'taper':[5,446,490,18,18],'grow':'mbrick'} and {'taper':[96,452,486,14,14],'grow':'mbrick'}, plus caps of rows SM4/SM2.\n(3) Replace the jumbled corbel frieze: fill [-110,348,110,378] mbrick step 2, then cornice(-108,108,377) (dentils at pitch 5).\n\nc1_tall_front (7.5) needs two fixes:\n(1) The same frieze replacement: fill [-86,352,86,371], then cornice(-86,86,371).\n(2) The top windows [-56,247,-16,326] and [16,247,56,326] are 79 px tall (2.3 m) against 56 px below. Paint them at 247..305 over the wall fill, so the front reads as even storeys.",
     "reroll": "Not needed. Model A (3 window rows, red casements) and model B (4x3) are clean single-component kit houses. The plan's blind upper wall is covered by the firewall view."
    },
+   "sprite_models": [
+    {
+     "model": "colony_house_c1_tall_a",
+     "sprites": [
+      "colony_house_c1_tall",
+      "colony_house_c1_tall_front"
+     ],
+     "compact_glb": "meshy/groups/g5/models/colony_house_c1_tall_a.glb",
+     "repo_file": "models/colony_house_c1_tall.glb"
+    },
+    {
+     "model": "colony_house_c1_tall_b",
+     "sprites": [
+      "colony_house_c1_tall_b"
+     ],
+     "compact_glb": "meshy/groups/g5/models/colony_house_c1_tall_b.glb",
+     "repo_file": null,
+     "archive_file": "g5/colony_house_c1_tall/compact/colony_house_c1_tall_b.glb",
+     "note": "a variant GLB over the 80 MB size budget: not in this package, on the archive branch at g5/colony_house_c1_tall/compact/colony_house_c1_tall_b.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a13749-7325-76ff-a7e6-1efe86c2706d",
@@ -4518,7 +5010,9 @@
        "colony_house_c1_tall_b"
       ],
       "repo_file": null,
-      "compact_glb": "meshy/groups/g5/models/colony_house_c1_tall_b.glb"
+      "compact_glb": "meshy/groups/g5/models/colony_house_c1_tall_b.glb",
+      "archive_file": "g5/colony_house_c1_tall/compact/colony_house_c1_tall_b.glb",
+      "full_res_archive_file": "g5/colony_house_c1_tall/colony_house_c1_tall__b.glb"
      }
     ],
     "replaced": [],
@@ -4607,6 +5101,26 @@
     "notes": "c2 A (8.0) needs three fixes:\n(1) Add fills {'fill':[[-145,22,-50,318],[64,22,145,318]],'mat':'mbrick','step':2} with no mats over the side bays, plus one over the risalit face [-38,22,52,300]. Measure the risalit's edges with pxgrid first.\n(2) Then re-add corners() on the risalit box: MB3/MB2 on its left edge, MB0 on its right, and a 1 px MB0 shadow column on the wall right of it. Tested in judge_r2/fixtest3_c2_after_x3.png: the fills clean the light dashes beside the windows, but without corners() the risalit flattens to thin lines.\n(3) Redraw the three chimneys, which are smeared with ragged right edges, as taper decals with caps.\n\nc2 B (7.2) needs four fixes:\n(1) Add side-bay fills [[-145,6,-48,300],[54,6,145,300]] and a fill under the oriel [-52,6,54,100], all with no mats. Tested: the walls come out clean. Start the right box at x -48 rather than -52 (as tested) so it also takes the dark blob left of the oriel at x about 49-53, y_up 283-288.\n(2) Paint the oriel's foot as a corbel ledge: fill [-50,98,52,114] mbrick step 2, rows MB3/MB2/MB0 at y 114, and a stepped console (two rows, each 4 px narrower) under it. This replaces the ragged corbel smears.\n(3) Replace the glyph frieze at y_up about 296-310 in both side bays with cornice().\n(4) Erase the ghost diagonal lines beside the dormer roofs (x about -75..-60 and 60..75, y_up about 395-410).",
     "reroll": "Not needed. Both models are the most characteristic Nikiszowiec silhouettes in the set (stepped gable with oculus; oriel with gable) and are clean kit pieces."
    },
+   "sprite_models": [
+    {
+     "model": "colony_house_c2_risalit_a",
+     "sprites": [
+      "colony_house_c2_risalit"
+     ],
+     "compact_glb": "meshy/groups/g5/models/colony_house_c2_risalit_a.glb",
+     "repo_file": "models/colony_house_c2_risalit.glb"
+    },
+    {
+     "model": "colony_house_c2_risalit_b",
+     "sprites": [
+      "colony_house_c2_risalit_b"
+     ],
+     "compact_glb": "meshy/groups/g5/models/colony_house_c2_risalit_b.glb",
+     "repo_file": null,
+     "archive_file": "g5/colony_house_c2_risalit/compact/colony_house_c2_risalit_b.glb",
+     "note": "a variant GLB over the 80 MB size budget: not in this package, on the archive branch at g5/colony_house_c2_risalit/compact/colony_house_c2_risalit_b.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a13748-1bb2-7725-b822-e6ed0dff85ed",
@@ -4664,7 +5178,9 @@
        "colony_house_c2_risalit_b"
       ],
       "repo_file": null,
-      "compact_glb": "meshy/groups/g5/models/colony_house_c2_risalit_b.glb"
+      "compact_glb": "meshy/groups/g5/models/colony_house_c2_risalit_b.glb",
+      "archive_file": "g5/colony_house_c2_risalit/compact/colony_house_c2_risalit_b.glb",
+      "full_res_archive_file": "g5/colony_house_c2_risalit/colony_house_c2_risalit__b.glb"
      }
     ],
     "replaced": [],
@@ -4753,6 +5269,16 @@
     "notes": "(1) Add 'mbrick' to the wall fill's mats: {'fill':[-113,33,113,418],'mat':'mbrick','step':2,'mats':['mtrim','mglass','mlit','mbrick']}. Tested in judge_r2/out_fixtest and judge_r2/fixtest_before_after_x2.png: the lit smears between the floors (y_up about 131-151 and 311-321) are gone, and the windows, door, courses, dentils and plinth stay intact.\n(2) Redraw the left chimney cluster (x about -96..-59, y_up 461-483), which is ragged with stray bits. Use two taper stacks with caps, matching the clean middle and right chimneys.\n\nAfter these two fixes I expect a score of about 8.4.",
     "reroll": "Not needed: a clean 4x4 tenement model with a sandstone plinth, single component."
    },
+   "sprite_models": [
+    {
+     "model": "colony_house_c3_hipped",
+     "sprites": [
+      "colony_house_c3_hipped"
+     ],
+     "compact_glb": "meshy/groups/g5/models/colony_house_c3_hipped.glb",
+     "repo_file": "models/colony_house_c3_hipped.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a13748-086c-72dc-a296-37ebe9b7decb",
@@ -4851,6 +5377,16 @@
     "notes": "Ships. Optional polish:\n(1) Fill the glyph-like frieze under the cornice, [-125,120,78,135] mbrick step 2, then course(-125,78,133,2).\n(2) Erase the two stray lit vertical lines on the wall at x about -101 and 59, y_up 105-135.\n\nThe stack is drawn square-shaded in 3 tones, as in bg.js, rather than as the model's round chimney. That matches the level, so keep it. Kit: texture_0_kit.png plus model_kit.obj, with the baked stack shadow lifted (verified in judge_r2/kit_engine_tex_top.png).",
     "reroll": "Not needed."
    },
+   "sprite_models": [
+    {
+     "model": "mid_engine_house_gabled",
+     "sprites": [
+      "mid_engine_house_gabled"
+     ],
+     "compact_glb": "meshy/groups/g5/models/mid_engine_house_gabled.glb",
+     "repo_file": "models/mid_engine_house_gabled.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a13748-0eef-77fe-bc02-2f6d1fdefad0",
@@ -4949,6 +5485,16 @@
     "notes": "The sprite ships (8.5). It matches bg.js D: a lit glazing band with mullions every 30 px, hall lamps, a lit floor, the screen and hopper at the ends, a clean 4-leg frame with X-braces and a tie, and the hopper and chute. Box 10.1 x 4.0 m with its underside at 7.6 m, as planned.\n\nOptional sprite polish:\n(1) Square the roof slab's top-left 1-2 px step (sprite x about 8..75) with a rows DS3/DS5 decal along the slab top.\n(2) Straighten the conveyor stub's ragged lower edge.\n\nThe kit needs a weld pass, with no credits, before Unreal: model_kit_stretched.obj has 7 components, 1029 open edges and 688 non-manifold edges. In Blender:\n(1) Merge by distance (0.1 mm).\n(2) Delete the 6 loose zero-thickness parts (217-, 172-, 6-, 2-, 2- and 2-face planes or strips).\n(3) Recalculate the normals outward and fill holes of 8 edges or fewer.\n(4) Export the result as model_kit_stretched_clean.glb.\n\nThe stretched trestle itself reads right (judge_r2/kit_sieb_stretched_tex.png).",
     "reroll": "Not needed: the stretch fixed the squat frame, so the fallback re-roll is unnecessary."
    },
+   "sprite_models": [
+    {
+     "model": "screening_house_siebhaus_a",
+     "sprites": [
+      "screening_house_siebhaus"
+     ],
+     "compact_glb": "meshy/groups/g5/models/screening_house_siebhaus_a.glb",
+     "repo_file": "models/screening_house_siebhaus.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a13748-8c25-7086-8099-dfe90696a0d1",
@@ -5003,7 +5549,9 @@
       },
       "sprites": [],
       "repo_file": null,
-      "compact_glb": "meshy/groups/g5/models/screening_house_siebhaus_b.glb"
+      "compact_glb": "meshy/groups/g5/models/screening_house_siebhaus_b.glb",
+      "archive_file": "g5/screening_house_siebhaus/compact/screening_house_siebhaus_b.glb",
+      "full_res_archive_file": "g5/screening_house_siebhaus/screening_house_siebhaus__b.glb"
      }
     ],
     "replaced": [],
@@ -5114,6 +5662,18 @@
      "reroll": "For the kit only, later and optional (about 30 credits): T3D preview plus refine, 'a steel Pratt truss conveyor gallery, two straight parallel chords, regular verticals and diagonals, a belt deck inside, open sides, no stairs, no end housings, 8 m long, 1.5 m tall'."
     }
    ],
+   "sprite_models": [
+    {
+     "model": "conveyor_bridge_truss",
+     "sprites": [
+      "conveyor_bridge_truss",
+      "conveyor_bridge_truss_flat"
+     ],
+     "compact_glb": "meshy/groups/g5/models/conveyor_bridge_truss.glb",
+     "repo_file": "models/conveyor_bridge_truss__sprite.glb",
+     "note": "the pass-1 model the shipped sprites were rendered from; models/conveyor_bridge_truss.glb is the pass-2 kit piece that replaced it for Unreal"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a13821-83f1-7032-92a7-bdda08b57e0a",
@@ -5136,23 +5696,31 @@
      "prompt": "One straight 2 m long module of a steel Pratt truss conveyor gallery, a rectangular box frame 1.5 m tall and 1.2 m wide, open at both ends and cut square so modules join end to end: two straight parallel top chords and two bottom chords of steel angles, a vertical post at each corner, one diagonal in each side panel, light cross bracing on top, a floor deck with a conveyor belt on idler rollers inside, open sides; no legs, no supports, no roof sheets, no stairs, no end housings; riveted gusset plates, rust and soot; realistic; single game asset, no ground, no base plate, no text",
      "local_copy": "meshy/lib/conveyor_bridge_truss/t3d-01a1381c-e135-7700-bd72-b2dc21251605/"
     },
-    "variants": [],
-    "replaced": [
-     {
-      "task": {
-       "id": "01a13748-92c8-721e-900d-f5fc5690553e",
-       "kind": "i3d",
-       "role": "replaced",
-       "tag": "g5",
-       "credits": 30,
-       "status": "SUCCEEDED",
-       "ai_model": "latest",
-       "expires_at": "2026-10-16T22:02Z"
-      },
-      "pass1_judge": 8,
-      "why": "replaced by the pass-2 re-roll (p2c); pass-1 judge: For the kit only, later and optional (about 30 credits): T3D preview plus refine, 'a steel Pratt truss conveyor gallery, two straight parallel chords, regular verticals and diagonals, a belt deck inside, open sides, no stairs, no end housings, 8 m long, 1.5 m…"
+    "sprite_model": {
+     "id": "01a13748-92c8-721e-900d-f5fc5690553e",
+     "kind": "i3d",
+     "role": "sprite_source",
+     "tag": "g5",
+     "credits": 30,
+     "status": "SUCCEEDED",
+     "ai_model": "latest",
+     "expires_at": "2026-10-16T22:02Z",
+     "concept_or_preview": {
+      "id": "01a13742-2fca-7639-880e-8c3e76f21ab1",
+      "kind": "t2i",
+      "role": "sprite_source_concept",
+      "tag": "g5",
+      "credits": 6,
+      "status": "SUCCEEDED",
+      "ai_model": "nano-banana-2",
+      "prompt": "Three-quarter view of a free-standing sloping lattice girder bridge carrying a conveyor belt: an open riveted steel truss with gussets, a walkway inside, square-cut ends, no buildings; 1950s colliery; realistic 3D render, soft even studio light, no cast shadows, no outlines, plain white background, the whole object visible, no text, no people",
+      "aspect_ratio": "16:9",
+      "remove_background": true,
+      "expires_at": "2026-10-16T21:54Z"
      }
-    ],
+    },
+    "variants": [],
+    "replaced": [],
     "rejected_pass2_attempt": [
      {
       "id": "01a13816-9821-7459-9376-4cd9258cff03",
@@ -5166,19 +5734,6 @@
      }
     ],
     "candidates": [
-     {
-      "id": "01a13742-2fca-7639-880e-8c3e76f21ab1",
-      "kind": "t2i",
-      "role": "replaced_source",
-      "tag": "g5",
-      "credits": 6,
-      "status": "SUCCEEDED",
-      "ai_model": "nano-banana-2",
-      "prompt": "Three-quarter view of a free-standing sloping lattice girder bridge carrying a conveyor belt: an open riveted steel truss with gussets, a walkway inside, square-cut ends, no buildings; 1950s colliery; realistic 3D render, soft even studio light, no cast shadows, no outlines, plain white background, the whole object visible, no text, no people",
-      "aspect_ratio": "16:9",
-      "remove_background": true,
-      "expires_at": "2026-10-16T21:54Z"
-     },
      {
       "id": "01a13741-fafb-754d-ab16-e055b41b0b97",
       "kind": "t2i",
@@ -5220,6 +5775,7 @@
    ],
    "repo_files": [
     "models/conveyor_bridge_truss.glb",
+    "models/conveyor_bridge_truss__sprite.glb",
     "sprites/g5.png",
     "sprites/g5.json"
    ],
@@ -5251,6 +5807,16 @@
     "notes": "Ships. The tank is shaded as a cylinder, the ladder is clean, the rear braces are a step down, and the conical roof has a finial.\n\nOptional polish:\n(1) The looped overflow pipe on the tank's left (x about -56..-33, y_up 144..181) reads as a curly handle. Erase it and redraw it as a straight riser of vcols DS3 with a DS5 left column.\n(2) The braced base is busy but readable at x1. Leave it.",
     "reroll": "Not needed."
    },
+   "sprite_models": [
+    {
+     "model": "water_tower_steel",
+     "sprites": [
+      "water_tower_steel"
+     ],
+     "compact_glb": "meshy/groups/g5/models/water_tower_steel.glb",
+     "repo_file": "models/water_tower_steel.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a13748-30ee-765b-900d-c456109ec2b7",
@@ -5342,6 +5908,16 @@
     "notes": "Ships. The plank gate has a Z brace and strap hinges; the brick runs and piers are flat with a lit or shaded edge; the coping and pier caps are lit. Nothing needed.",
     "reroll": "Not needed."
    },
+   "sprite_models": [
+    {
+     "model": "coal_yard_wall_gate",
+     "sprites": [
+      "coal_yard_wall_gate"
+     ],
+     "compact_glb": "meshy/groups/g5/models/coal_yard_wall_gate.glb",
+     "repo_file": "models/coal_yard_wall_gate.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a13748-27fd-7587-bb58-1258fd6be94b",
@@ -5433,6 +6009,24 @@
     "notes": "Optional polish, sprite g6_gauturm_a_far: paint the dark dusk[1] oval on the third crown tier (sprite x 81..88, y 70..72) as a dusk[2] rect. Kit: src/gauturm_a/model.obj still carries the 4 melted searchlight lumps at the deck corners. Run tools/kit_clean.py with boxes over the deck corners (about y 36.5..39.5 m, |x| and |z| > 6 m in the widened frame) into src/kit_gauturm_a; the plan's searchlight_bracket piece replaces them in Unreal. The melted centre-slit recess in the mesh is acceptable for a far landmark.",
     "reroll": ""
    },
+   "sprite_models": [
+    {
+     "model": "gauturm_a",
+     "sprites": [
+      "g6_gauturm_a_far"
+     ],
+     "compact_glb": "meshy/groups/g6/models/gauturm_a.glb",
+     "repo_file": "models/gauturm.glb"
+    },
+    {
+     "model": "gauturm_b",
+     "sprites": [
+      "g6_gauturm_b_far"
+     ],
+     "compact_glb": "meshy/groups/g6/models/gauturm_b.glb",
+     "repo_file": "models/gauturm__b.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a13748-f8aa-7084-9a5c-2872dacad54c",
@@ -5495,7 +6089,8 @@
        "g6_gauturm_b_far"
       ],
       "repo_file": "models/gauturm__b.glb",
-      "compact_glb": "meshy/groups/g6/models/gauturm_b.glb"
+      "compact_glb": "meshy/groups/g6/models/gauturm_b.glb",
+      "full_res_archive_file": "g6/gauturm/gauturm__b.glb"
      }
     ],
     "replaced": [],
@@ -5585,6 +6180,26 @@
     "notes": "Small metadata and pixel fix. g6_headframe_strut_a_mid: the strut's concrete foot plate ends on row 458 while the ground row ay is 459. Add a draw rect in the plate's dark step at (274,459,50,1) and add [274,324] to feet, as the owner's headframe lists its strut foot. Same at midfar: (116,197,23,1) and feet + [116,139]. Otherwise clean: regular zig-zag strut, X braces against the sky, rim one continuous run, lone4 2.98% (owner 2.88%). Optional: the knee braces under the deck are blobby; acceptable at 0.6.",
     "reroll": ""
    },
+   "sprite_models": [
+    {
+     "model": "headframe_strut_a",
+     "sprites": [
+      "g6_headframe_strut_a_mid",
+      "g6_headframe_strut_a_midfar"
+     ],
+     "compact_glb": "meshy/groups/g6/models/headframe_strut_a.glb",
+     "repo_file": "models/lattice_headframe_strut.glb"
+    },
+    {
+     "model": "headframe_strut_b",
+     "sprites": [
+      "g6_headframe_strut_b_mid",
+      "g6_headframe_strut_b_midfar"
+     ],
+     "compact_glb": "meshy/groups/g6/models/headframe_strut_b.glb",
+     "repo_file": "models/lattice_headframe_strut__b.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a13748-a136-70fb-b5a6-f9914e9694a6",
@@ -5650,7 +6265,8 @@
        "g6_sheave_mf11"
       ],
       "repo_file": "models/lattice_headframe_strut__b.glb",
-      "compact_glb": "meshy/groups/g6/models/headframe_strut_b.glb"
+      "compact_glb": "meshy/groups/g6/models/headframe_strut_b.glb",
+      "full_res_archive_file": "g6/lattice_headframe_strut/lattice_headframe_strut__b.glb"
      }
     ],
     "replaced": [],
@@ -5744,6 +6360,16 @@
     "notes": "Optional, 0 credits: the rim on the right legs has no minimum run, so it breaks into dotted sky[5] flecks (lone4 10.1%, lone8 0.5%; the lone4 figure comes mostly from the 1 px diagonals). Give it the struts' rim settings: {col '#c47a3e', nx -1, min 40, within the right leg's upper half}. Set bevel [1,0] instead of [1,-1] to drop the stair-step dark bevel on the diagonals. The model is clean and kit-grade.",
     "reroll": ""
    },
+   "sprite_models": [
+    {
+     "model": "headframe_slim",
+     "sprites": [
+      "g6_headframe_slim_mid"
+     ],
+     "compact_glb": "meshy/groups/g6/models/headframe_slim.glb",
+     "repo_file": "models/lattice_headframe_slim.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a13749-6159-70b5-b5ae-8199d1cdf735",
@@ -5843,6 +6469,16 @@
     "notes": "None needed for the sprite. It is a true hyperboloid with the throat at about 22% under the rim, measured 90 / 108 / 170 px against bg.js's 88 / 104 / 172. It has bg.js-style bands lit on the left flank (dusk[4..5] for the VALUE rule), rings on the shaded half only, a lip, and steam / mouth points. Kit note: the remapped OBJ keeps the original texture's dark soot band, now at about 45% height instead of at the throat. If it bothers in Unreal, lighten that v-band in the texture or let a material decal cover it. One shell with 52 open edges is fine.",
     "reroll": ""
    },
+   "sprite_models": [
+    {
+     "model": "cooling_tower",
+     "sprites": [
+      "g6_cooling_tower_midfar"
+     ],
+     "compact_glb": "meshy/groups/g6/models/cooling_tower.glb",
+     "repo_file": "models/cooling_tower.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a1374a-0129-70e9-afea-385a724857d9",
@@ -5958,6 +6594,28 @@
      "reroll": "Wrong type: three symmetric pitched gables with fully glazed gable ends, not the plan's 3-tooth saw-tooth, and the mesh is noisy. Pass 2, about 33 credits. Make a nano-banana-2 (plan model) 16:9 concept, remove_background, with this prompt: 'Orthographic three-quarter view from the front-left: a low 1920s red-brick engineering workshop of an Upper Silesian coal mine, 12 m long, brick walls 4.4 m high with a row of segmental-arched steel windows, a planked sliding door on a rail, a plinth and a downpipe; the roof is a SAW-TOOTH (shed) roof of exactly THREE identical ASYMMETRIC teeth all facing the same way: each tooth one short near-vertical face fully glazed with small steel-framed panes and one long sloping face of black tar paper, so the end wall shows the profile of the teeth of a saw, not gables; soot-stained; realistic 3D render, soft even studio light, no cast shadows, no outlines, plain white background, the whole building visible, no text, no people'. Judge the concept before I3D and reject symmetric or gabled teeth. Then run I3D with texture_prompt 'red brick, black tar paper, grey steel window frames, soot; no text, no letters, no symbols'. A 0-credit fallback for the web sprite only is to derive a 3-tooth sprite from hall a: cut the 4th tooth bay and repaint the windows with the existing painter."
     }
    ],
+   "sprite_models": [
+    {
+     "model": "sawtooth_a",
+     "sprites": [
+      "g6_sawtooth_a_mid",
+      "g6_sawtooth_a_midfar",
+      "g6_sawtooth_a_far"
+     ],
+     "compact_glb": "meshy/groups/g6/models/sawtooth_a.glb",
+     "repo_file": "models/sawtooth_hall__a.glb"
+    },
+    {
+     "model": "sawtooth_b",
+     "sprites": [
+      "g6_sawtooth_b_mid",
+      "g6_sawtooth_b_midfar",
+      "g6_sawtooth_b_far"
+     ],
+     "compact_glb": "meshy/groups/g6/models/sawtooth_b.glb",
+     "repo_file": "models/sawtooth_hall.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a13817-8b42-7051-92d4-4e053eb229fb",
@@ -6025,7 +6683,8 @@
        "g6_sawtooth_b_far"
       ],
       "repo_file": "models/sawtooth_hall__a.glb",
-      "compact_glb": "meshy/groups/g6/models/sawtooth_a.glb"
+      "compact_glb": "meshy/groups/g6/models/sawtooth_a.glb",
+      "full_res_archive_file": "g6/sawtooth_hall/sawtooth_hall__a.glb"
      }
     ],
     "replaced": [
@@ -6157,6 +6816,21 @@
      "reroll": "Kit only: the 3D model is a 4:1 T3D stack stretched 4.66x in y, so the brick courses are about 1.3 m tall and the iron bands are 4.66x too thick. Not usable in Unreal. Preferred, 0 credits: lathe the profile in Python (octagonal base 2.3 m x 3 m, a round shaft tapering 1.5 to 0.9 m over 30 m, bands every 4 m, a corbelled cap). Use cylindrical UVs with a tileable crop of the current T3D brick texture, repeated so one course is about 7.5 cm. Meshy option for pass 2 (about 60 credits): a 3-piece modular kit, each piece close to cubic proportions, which T3D handles well. 'octagonal red-brick chimney base 2.4 m across, 3 m tall, stone plinth and cornice, no ground, no text'; 'straight round red-brick chimney shaft section 1.5 m diameter, 4 m tall, slight taper, one iron band, flat seamless top and bottom, no ground, no text'; 'corbelled brick chimney crown 1.6 m wide, 1.5 m tall, soot-blackened top, two iron warning-lamp brackets, no ground, no text'. Stack the sections in Unreal and taper them by scaling. Do not try a single 20:1 stack in a 9:16 concept: the subject would be about 80 px wide and the brick detail would be lost."
     }
    ],
+   "sprite_models": [
+    {
+     "model": "chimney",
+     "sprites": [
+      "g6_chimney_far_s",
+      "g6_chimney_far",
+      "g6_chimney_far_l",
+      "g6_chimney_midfar",
+      "g6_chimney_mid"
+     ],
+     "compact_glb": "meshy/groups/g6/models/chimney.glb",
+     "repo_file": "models/industrial_chimney__sprite.glb",
+     "note": "the pass-1 model the shipped sprites were rendered from; models/industrial_chimney.glb is the pass-2 procedural kit mesh that replaced it for Unreal"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a13748-9843-763e-9e25-637559c0ce8e",
@@ -6243,6 +6917,7 @@
    ],
    "repo_files": [
     "models/industrial_chimney.glb",
+    "models/industrial_chimney__sprite.glb",
     "sprites/g6.png",
     "sprites/g6.json"
    ],
@@ -6274,6 +6949,16 @@
     "notes": "Optional polish; it ships as it is.\n(1) Add the points the level's drawShip uses, in recipe.json under points (own frame):\n- lens: the bottom of the housing under the nose, about sprite px [240, 66]. This is the searchlight beam origin, as SHIP.lens.\n- nav: the tip of the top fin, about [22, 8], as SHIP.nav.\n- emblem: the centre of the band, about [194, 30], for the pipeline's cog (r 10).\nAt present only prop_a and prop_b are there.\n(2) Two tone spikes break the band edges:\n- A 2 px wide hull[4] spike rises into the hull[5] band at sprite x 122-123, rows 27-33.\n- The ring frame at x 172 widens to 3 px (x 172-175) for rows 25-31.\n- A hull[4] tongue sticks out at x 118-122, row 46.\nRemove them with a tone-0 feature over those own-x columns, or raise island from [6,20] to about [16,20], then re-check the band edges.\n(3) For the 3D kit:\n- The GLB is at unit 8, so it is 12.8 m long. The plan's ship is 134 m, and the sprite gets there with size 10.5. Write kit_scale 10.5 into final.json, or re-import with unit 84 and texel about 0.26.\n- The kit texture has Meshy's lengthwise red stripe; the sprite has a ring band. For Unreal, do the band as a material mask or decal over own x -3.95 to -3.38 (times 10.5).\nCheck results: palette is all hull, banner and lamp steps; alpha 0/255; 0 stubs, slits or tips; one part; nose right; ring frames every 21 px; a plain 13 px band; the windows have their two lamp steps and a glint; no emblem.",
     "reroll": "None needed. The model is right: a fat hull of about 4:1, a cross of four tail fins, a gondola with windows, two pods and a housing under the nose. Its 282 x 80 px sprite matches the level's own 282 px ship."
    },
+   "sprite_models": [
+    {
+     "model": "patrol_airship_a",
+     "sprites": [
+      "patrol_airship"
+     ],
+     "compact_glb": "meshy/groups/g7/models/patrol_airship_a.glb",
+     "repo_file": "models/patrol_airship.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a1377c-f0b5-7060-8476-074d3d161fd8",
@@ -6329,7 +7014,9 @@
       },
       "sprites": [],
       "repo_file": null,
-      "compact_glb": "meshy/groups/g7/models/patrol_airship_b.glb"
+      "compact_glb": "meshy/groups/g7/models/patrol_airship_b.glb",
+      "archive_file": "g7/patrol_airship/compact/patrol_airship_b.glb",
+      "full_res_archive_file": "g7/patrol_airship/patrol_airship__b.glb"
      }
     ],
     "replaced": [],
@@ -6428,6 +7115,16 @@
       "01a13816-8dcc-716c-86ba-2ede77966aad",
       "01a1381c-eaf2-707f-9314-ad30b6cf42c1"
      ]
+    }
+   ],
+   "sprite_models": [
+    {
+     "model": "fg_crane_girder",
+     "sprites": [
+      "fg_crane_girder"
+     ],
+     "compact_glb": "meshy/groups/g7/models/fg_crane_girder.glb",
+     "repo_file": "models/fg_crane_girder.glb"
     }
    ],
    "tasks": {
@@ -6543,6 +7240,17 @@
     "notes": "This covers both sprites, crane_hook_block and crane_hook. The throat is now open (holes.py finds 0 enclosed px) and the eye spike is gone. Both are clean: coal steps, 0 stubs or slits, top and left rims.\nThe problem: at yaw 20 the bowl's hole is a narrow V slot, about 6 px wide and closing to 1-2 px at the saddle. The hook reads as a fat claw. At yaw 10 or 0 the bowl opens into a round hole (judge_r2/hook_fix_x6.png, hook_yaws_x6.png).\nRecipe fix, tested in judge_r2/recipe_stack.json and out_stack:\n- Set yaw 10 for both sprites. Keep both throat cuts; there are still 0 enclosed holes, stubs or slits.\n- Set crane_hook_block size to 0.6/0.9 = 0.667, the plan's 0.6 m: 19 x 40 px, against 0.65 m and 46 px now.\n- At that size points.hang [0, 0.88, 0] lands at [10, -2], 2 px above the sprite. Lower it to about y 0.85, the top of the eye.\n- crane_hook stays at size 1 (30 x 37 px at yaw 10). It matches the level's painted chain hook (ro 9, 23 px wide).\nWith the shallow girder, the stack ends at y 79 (hook alone) or y 84 (block) (judge_r2/stack_shallow_x2.png).\n3D kit: one clean piece, 0.43 x 0.9 x 0.25 m. The latch closes the throat, which is realistic. Two problems:\n- The cheek plate's two square windows and the yellow paint arc under them read as a cartoon face in the thumbnail. Paint the arc out in texture_0 (a texture edit only).\n- The kit is at 0.9 m, against the plan's 0.6 m. Note kit_scale 0.667, or re-import with height 0.6.",
     "reroll": "None needed. The model is the right type for the 1950s: a bolted block with a lifting eye, a swivel crosshead and a forged hook with a latch."
    },
+   "sprite_models": [
+    {
+     "model": "crane_hook_block",
+     "sprites": [
+      "crane_hook_block",
+      "crane_hook"
+     ],
+     "compact_glb": "meshy/groups/g7/models/crane_hook_block.glb",
+     "repo_file": "models/crane_hook_block.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a1377c-d655-7485-9d0d-85dbf3e30e1e",
@@ -6635,6 +7343,16 @@
     "notes": "None required. Checks: 118 x 220 px, sil, fg 1.35, yaw 15, coal steps only, alpha 0/255, 0 stubs, slits or tips. The 4 px pin is gone.\nThe holes that show through are the hand-wheel's spokes (10, 19 and 24 px), the open bore (49 px) and the frame between the riser and the valve branch. All are intended.\nIt reads as a 1950s flanged riser with a T-branch, an elbow, a valve with a spoked hand-wheel, a lower branch with a blind flange, and a foot plate. The rims are on the top and left.\nThe bounding box, 1.66 x 3.1 m, matches the plan's 1.8 x 3.1 m. The riser itself is about 0.31 m, against the prompt's 0.9 m and the level's painted 66 px, so the stand reads lighter than the painted one. That is acceptable and true to the model.\n3D kit: clean, closed, single part (1.55 x 3.1 x 0.92 m), well-formed flanges and wheel. Texture is rust and soot with no baked outlines.",
     "reroll": "None needed."
    },
+   "sprite_models": [
+    {
+     "model": "fg_pipe_stand_valve",
+     "sprites": [
+      "fg_pipe_stand_valve"
+     ],
+     "compact_glb": "meshy/groups/g7/models/fg_pipe_stand_valve.glb",
+     "repo_file": "models/fg_pipe_stand_valve.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a1377c-df89-7281-be85-cbd88f0a573f",
@@ -6735,6 +7453,7 @@
      "reroll": "none: the I3D c0 (Stahlhelm, greatcoat ending above the knee, pouches, no insignia) and its rig are right. 15 clips read, incl. the rifle-ready idle (fix/idle_rifle_x4.png) and an aim that ends along the facing (rifle_comp_x3.png)."
     }
    ],
+   "sprite_models": [],
    "character": {
     "atlases": [
      {
@@ -6937,7 +7656,47 @@
       }
      }
     ],
-    "rigged_model": "download via task id (rig task: rigged GLB / FBX + walking / running); the compact models/guard_soldier.glb is the static, unrigged mesh"
+    "rigged_model": "no compact rigged GLB: the rig task's rigged GLB / FBX + walking / running and every animation pack are on the archive branch meshy-models-full (g8/guard_soldier/) and can be re-fetched by task id",
+    "edited_glbs": [
+     {
+      "file": "guard_soldier_p2e_fix.glb",
+      "archive_path": "g8/guard_soldier/edited/guard_soldier_p2e_fix.glb",
+      "working_copy": "meshy/groups/g8/p2e/fix/glb/guard_soldier_p2e_fix.glb",
+      "bytes": 6111484,
+      "made_from": {
+       "task": "01a1381e-2b61-75d7-947b-ad3aef733daa",
+       "kind": "anim",
+       "file": "animation.glb"
+      },
+      "motion_edits": [
+       {
+        "clip": "Arise",
+        "atlas_rows": [
+         "arise"
+        ],
+        "bones": [
+         "LeftShoulder",
+         "LeftArm",
+         "LeftForeArm",
+         "LeftHand"
+        ],
+        "window_s": [
+         0.033,
+         1.333
+        ],
+        "max_change_deg": 81.0,
+        "spec": [
+         "tools/edits/af_guard.json"
+        ]
+       }
+      ],
+      "texture_repainted": false,
+      "tools": [
+       "tools/edits/armfix.py"
+      ]
+     }
+    ],
+    "edited_glbs_note": "The atlases were rendered from these edited copies, not from the Meshy files: the Meshy animation packs and FBX files listed under tasks are unedited, so importing them brings back what the edits removed (an empty arm thrust forward or raised). For Unreal use the edited GLB (same rig and clip names), or apply the same spec with tools/edits/armfix.py."
    },
    "tasks": {
     "final_model": {
@@ -7255,6 +8014,7 @@
      "reroll": "none: the MI3D c3 (field cap, four-pocket tunic, chest flashlight visible as a light chest strip, steel-ramp trousers, khaki gaiters) is a clearly different silhouette from the guard. All 13 clips read (patrol_a.png, patrol_b.png)."
     }
    ],
+   "sprite_models": [],
    "character": {
     "atlases": [
      {
@@ -7423,7 +8183,7 @@
        },
        {
         "name": "phone_call_gesture",
-        "frames": 39,
+        "frames": 34,
         "fps": 6,
         "loop": false,
         "source_clip": "phone_call_gesture",
@@ -7450,7 +8210,47 @@
       "excluded": {}
      }
     ],
-    "rigged_model": "download via task id (rig task: rigged GLB / FBX + walking / running); the compact models/patrol_soldier.glb is the static, unrigged mesh"
+    "rigged_model": "no compact rigged GLB: the rig task's rigged GLB / FBX + walking / running and every animation pack are on the archive branch meshy-models-full (g8/patrol_soldier/) and can be re-fetched by task id",
+    "edited_glbs": [
+     {
+      "file": "patrol_soldier_p2e_fix.glb",
+      "archive_path": "g8/patrol_soldier/edited/patrol_soldier_p2e_fix.glb",
+      "working_copy": "meshy/groups/g8/p2e/fix/glb/patrol_soldier_p2e_fix.glb",
+      "bytes": 5689612,
+      "made_from": {
+       "task": "01a1381e-30cc-7322-977f-1c2b8ed3a500",
+       "kind": "anim",
+       "file": "animation.glb"
+      },
+      "motion_edits": [
+       {
+        "clip": "Stand_Up1",
+        "atlas_rows": [
+         "stand_up"
+        ],
+        "bones": [
+         "LeftArm",
+         "LeftForeArm",
+         "RightArm",
+         "RightForeArm"
+        ],
+        "window_s": [
+         1.633,
+         2.867
+        ],
+        "max_change_deg": 74.6,
+        "spec": [
+         "tools/edits/af_patrol.json"
+        ]
+       }
+      ],
+      "texture_repainted": false,
+      "tools": [
+       "tools/edits/armfix.py"
+      ]
+     }
+    ],
+    "edited_glbs_note": "The atlases were rendered from these edited copies, not from the Meshy files: the Meshy animation packs and FBX files listed under tasks are unedited, so importing them brings back what the edits removed (an empty arm thrust forward or raised). For Unreal use the edited GLB (same rig and clip names), or apply the same spec with tools/edits/armfix.py."
    },
    "tasks": {
     "final_model": {
@@ -7711,7 +8511,7 @@
     "characters/patrol_soldier.png",
     "characters/patrol_soldier.json"
    ],
-   "notes": "PASS 2 (p2e): second action pack, 30 cr, on the pass-1 rig 01a1374f-70ac (lib/patrol_soldier/anim-01a1381e-30cc-7322-977f-1c2b8ed3a500/animation.glb + .fbx; record lib/patrol_soldier/final_anim_p2e.json): 575 Combat Idle Turn Left, 578 Idle Torch Turn Left, 521 / 522 Crouch Walk Left / Right with Torch, 186 Strangled and Fall Forward, 344 Stand Up 1 (gets up from lying on the back; after the choke it plays from the other facing's atlas), 184 Shot and Fall Forward, 50 Phone Call Gesture (hand at the ear: radio / field-telephone alarm), 391 Head Hold in Pain (hit by a thrown stone, dazed), 425 Vault with Rifle. New atlas clips: combat_idle_turn_left 10f/8fps (a ~67-degree turn into the background; no chained turn-back: two passes end with his back to the viewer, not facing left - dropped); idle_torch_turn_left 10f/8fps + torch_turn_back 18f (188 degrees); crouch_walk_left_with_torch / crouch_walk_right_with_torch 11f/10fps loops (strafes: in place they read as a crouched torch sidestep in depth - Unreal-lane clips for the 2.5D depth lanes; in the web level only in place, not as a moving walk); strangled_and_fall_forward 36f/6fps (1.2-7.2 s); stand_up 29f/6fps (1.6-6.4 s: first stir -> standing); shot_and_fall_forward 22f/10fps; phone_call_gesture 39f/6fps (0-6.5 s); head_hold_in_pain 30f/8fps; vault_with_rifle 10f/12fps. The torch clips raise the torch hand (the rig's LeftHand): a hand-pixeled flashlight is placed per frame at hand_l, the light cone leaves from its lens (fix round). Rendered with the pass-1 renderer unchanged (groups/g8/char/char_page.js + render_char.mjs; new config groups/g8/char/cfg_p2e.py -> chars_p2e.json, the pass-1 class tables and ramps; both facings, yaw 0.35 / pi - 0.35, pitch 4, 52.5 px/m, 1 px outline #0b080b, sockets per frame), then appended under the pass-1 atlas by groups/g8/p2e/tools/merge_atlas.py (new clips carry pack: 2; pass-1 clips untouched; pass-1 copies in groups/g8/p2e/backup_pass1/). No frame touches the render window's edge (p2e/tools/clipcheck.py). Every action id was verified with 'mk.py library --search' and previewed from Meshy's public preview GIFs (groups/g8/p2e/gif*/sheet_*.png) before buying; none duplicates the character's pack 1. Unreal: the FBX next to the GLB in the anim dir, on the pass-1 rig. Atlas now 24 clips, 3831 x 4468 px (taller than 4096: fine for canvas 2D; split into two pages if a WebGL target caps textures at 4096). Sheets: groups/g8/review/g8_patrol_soldier_anims2_right_x2.png / _left_x2.png (pack 2 only); the full groups/g8/review/g8_patrol_soldier_anims_right_x2.png / _left_x2.png regenerated. || P2E FIX ROUND (judge p2e round 1; no Meshy spend). (1) The get-up chain. Round 1's 'wakes from face down after the choke' was wrong: the choke ends curled on the side with the head toward the facing, stand_up starts on the back with the head toward the back. Fixed with the judge's first option: strangled_and_fall_forward carries next = {clip: stand_up, facing: 'flip', hold: 2}. After the right-facing choke, hold its last frame for 2 frames and play stand_up from the left atlas (and the other way round); the head side then matches and he gets up facing the other way (review/g8_p2e_chains_x3.png). stand_up also got a motion edit: both arms (1.6-2.9 s) are slerped to their lying pose (p2e/fix/glb/patrol_soldier_p2e_fix.glb), so they stay along the body while he sits up, then go to his knees. Before, they were thrown forward with open hands. (2) The flashlight. A hand-pixeled torch is now in out/models.png / .json: 'flashlight' / 'flashlight_l' (8 x 5 px including the 1 px #0b080b outline, so 6 x 3 inside: a steel-ramp body lit on top and a lamp[0] lens column), plus 'flashlight_toward' / 'flashlight_away' (5 x 5, end-on, for turn frames where the arm points along the view axis). It is composited at hand_l, not hand_r: the raised torch hand is the rig's LeftHand bone (in frame 0 its socket is 30 px ahead at head height; hand_r hangs). Every frame of the six torch clips has frames[i].prop = {sprite, x, y, emit, dir, layer}. That covers the four pack-2 clips plus pass 1's torch_look_around / crouch_walk_with_torch, which get metadata only. emit is the lens pixel the light-cone fx leaves from, instead of the chest. dir is right / left / toward / away, from the hand's depth against the chest. layer is 'under' when the hand is behind his body (turned away). Demo with the cone: review/g8_p2e_props_x3.png. (3) crouch_walk_left_with_torch / crouch_walk_right_with_torch carry lane 'unreal-depth' and web 'in place only' in the JSON: they are in-place sidesteps in depth, not a moving walk in the web level. Rifle modes for pack 2: aim (combat_idle_turn_left, vault_with_rifle), slung (the torch clips, phone_call_gesture, head_hold_in_pain), dropped (strangled_and_fall_forward, stand_up, shot_and_fall_forward). Atlas: 24 clips, 3831 x 4468 px; pass-1 clips pixel-identical; palette, alpha and window checks pass. Before / after: review/g8_p2e_fix_before_after_x2.png. Unreal: the arm edits exist only in the GLB copy in p2e/fix/glb/ (same rig, same clip names); the anim dir's FBX keeps Meshy's original arms - import the edited GLB for these clips."
+   "notes": "PASS 2 (p2e): second action pack, 30 cr, on the pass-1 rig 01a1374f-70ac (lib/patrol_soldier/anim-01a1381e-30cc-7322-977f-1c2b8ed3a500/animation.glb + .fbx; record lib/patrol_soldier/final_anim_p2e.json): 575 Combat Idle Turn Left, 578 Idle Torch Turn Left, 521 / 522 Crouch Walk Left / Right with Torch, 186 Strangled and Fall Forward, 344 Stand Up 1 (gets up from lying on the back; after the choke it plays from the other facing's atlas), 184 Shot and Fall Forward, 50 Phone Call Gesture (hand at the ear: radio / field-telephone alarm), 391 Head Hold in Pain (hit by a thrown stone, dazed), 425 Vault with Rifle. New atlas clips: combat_idle_turn_left 10f/8fps (a ~67-degree turn into the background; no chained turn-back: two passes end with his back to the viewer, not facing left - dropped); idle_torch_turn_left 10f/8fps + torch_turn_back 18f (188 degrees); crouch_walk_left_with_torch / crouch_walk_right_with_torch 11f/10fps loops (strafes: in place they read as a crouched torch sidestep in depth - Unreal-lane clips for the 2.5D depth lanes; in the web level only in place, not as a moving walk); strangled_and_fall_forward 36f/6fps (1.2-7.2 s); stand_up 29f/6fps (1.6-6.4 s: first stir -> standing); shot_and_fall_forward 22f/10fps; phone_call_gesture 39f/6fps (0-6.5 s); head_hold_in_pain 30f/8fps; vault_with_rifle 10f/12fps. The torch clips raise the torch hand (the rig's LeftHand): a hand-pixeled flashlight is placed per frame at hand_l, the light cone leaves from its lens (fix round). Rendered with the pass-1 renderer unchanged (groups/g8/char/char_page.js + render_char.mjs; new config groups/g8/char/cfg_p2e.py -> chars_p2e.json, the pass-1 class tables and ramps; both facings, yaw 0.35 / pi - 0.35, pitch 4, 52.5 px/m, 1 px outline #0b080b, sockets per frame), then appended under the pass-1 atlas by groups/g8/p2e/tools/merge_atlas.py (new clips carry pack: 2; pass-1 clips untouched; pass-1 copies in groups/g8/p2e/backup_pass1/). No frame touches the render window's edge (p2e/tools/clipcheck.py). Every action id was verified with 'mk.py library --search' and previewed from Meshy's public preview GIFs (groups/g8/p2e/gif*/sheet_*.png) before buying; none duplicates the character's pack 1. Unreal: the FBX next to the GLB in the anim dir, on the pass-1 rig. Atlas now 24 clips, 3831 x 4468 px (taller than 4096: fine for canvas 2D; split into two pages if a WebGL target caps textures at 4096). Sheets: groups/g8/review/g8_patrol_soldier_anims2_right_x2.png / _left_x2.png (pack 2 only); the full groups/g8/review/g8_patrol_soldier_anims_right_x2.png / _left_x2.png regenerated. || P2E FIX ROUND (judge p2e round 1; no Meshy spend). (1) The get-up chain. Round 1's 'wakes from face down after the choke' was wrong: the choke ends curled on the side with the head toward the facing, stand_up starts on the back with the head toward the back. Fixed with the judge's first option: strangled_and_fall_forward carries next = {clip: stand_up, facing: 'flip', hold: 2}. After the right-facing choke, hold its last frame for 2 frames and play stand_up from the left atlas (and the other way round); the head side then matches and he gets up facing the other way (review/g8_p2e_chains_x3.png). stand_up also got a motion edit: both arms (1.6-2.9 s) are slerped to their lying pose (p2e/fix/glb/patrol_soldier_p2e_fix.glb), so they stay along the body while he sits up, then go to his knees. Before, they were thrown forward with open hands. (2) The flashlight. A hand-pixeled torch is now in out/models.png / .json: 'flashlight' / 'flashlight_l' (8 x 5 px including the 1 px #0b080b outline, so 6 x 3 inside: a steel-ramp body lit on top and a lamp[0] lens column), plus 'flashlight_toward' / 'flashlight_away' (5 x 5, end-on, for turn frames where the arm points along the view axis). It is composited at hand_l, not hand_r: the raised torch hand is the rig's LeftHand bone (in frame 0 its socket is 30 px ahead at head height; hand_r hangs). Every frame of the six torch clips has frames[i].prop = {sprite, x, y, emit, dir, layer}. That covers the four pack-2 clips plus pass 1's torch_look_around / crouch_walk_with_torch, which get metadata only. emit is the lens pixel the light-cone fx leaves from, instead of the chest. dir is right / left / toward / away, from the hand's depth against the chest. layer is 'under' when the hand is behind his body (turned away). Demo with the cone: review/g8_p2e_props_x3.png. (3) crouch_walk_left_with_torch / crouch_walk_right_with_torch carry lane 'unreal-depth' and web 'in place only' in the JSON: they are in-place sidesteps in depth, not a moving walk in the web level. Rifle modes for pack 2: aim (combat_idle_turn_left, vault_with_rifle), slung (the torch clips, phone_call_gesture, head_hold_in_pain), dropped (strangled_and_fall_forward, stand_up, shot_and_fall_forward). Atlas: 24 clips, 3831 x 4468 px; pass-1 clips pixel-identical; palette, alpha and window checks pass. Before / after: review/g8_p2e_fix_before_after_x2.png. Unreal: the arm edits exist only in the GLB copy in p2e/fix/glb/ (same rig, same clip names); the anim dir's FBX keeps Meshy's original arms - import the edited GLB for these clips. ASSEMBLY FIX ROUND (the final p2e judge's 0-credit item 1): phone_call_gesture ends on frame 33 in both facings (34 frames, 0-5.65 s of the 6.5 s cut); frames 34-38 held a raised open palm at head height (left facing) and a hand at the cap peak (right facing), the salute rule that excluded gunshot_reaction. Their pixels are cleared from out/patrol_soldier.png, the JSON clip carries 'cut', and char/cfg_p2e.py / chars_p2e.json now end the clip at t1 5.645 s."
   },
   {
    "name": "regime_officer",
@@ -7748,6 +8548,7 @@
      "reroll": "none: I3D c0 (peaked cap without badge, black leather jacket, cross strap, brown holster, flared grey breeches, riding boots) is the iconic security officer. No symbols. Hand-height check: max 65-69 px against shoulders at about 79 px, so no salute-like frame anywhere."
     }
    ],
+   "sprite_models": [],
    "character": {
     "atlases": [
      {
@@ -7939,7 +8740,87 @@
       }
      }
     ],
-    "rigged_model": "download via task id (rig task: rigged GLB / FBX + walking / running); the compact models/regime_officer.glb is the static, unrigged mesh"
+    "rigged_model": "no compact rigged GLB: the rig task's rigged GLB / FBX + walking / running and every animation pack are on the archive branch meshy-models-full (g8/regime_officer/) and can be re-fetched by task id",
+    "edited_glbs": [
+     {
+      "file": "regime_officer_p2e_fix.glb",
+      "archive_path": "g8/regime_officer/edited/regime_officer_p2e_fix.glb",
+      "working_copy": "meshy/groups/g8/p2e/fix/glb/regime_officer_p2e_fix.glb",
+      "bytes": 6117696,
+      "made_from": {
+       "task": "01a1381e-3615-72b8-9ce1-fa3e5e5fb51a",
+       "kind": "anim",
+       "file": "animation.glb"
+      },
+      "motion_edits": [
+       {
+        "clip": "Phone_Conversation",
+        "atlas_rows": [
+         "phone_conversation"
+        ],
+        "bones": [
+         "RightShoulder",
+         "RightArm",
+         "RightForeArm",
+         "RightHand"
+        ],
+        "window_s": [
+         0.0,
+         4.833
+        ],
+        "max_change_deg": 102.8,
+        "spec": [
+         "tools/edits/af_officer.json"
+        ]
+       },
+       {
+        "clip": "Arise",
+        "atlas_rows": [
+         "arise"
+        ],
+        "bones": [
+         "LeftShoulder",
+         "LeftArm",
+         "LeftForeArm",
+         "LeftHand"
+        ],
+        "window_s": [
+         0.033,
+         1.333
+        ],
+        "max_change_deg": 81.0,
+        "spec": [
+         "tools/edits/af_officer.json"
+        ]
+       },
+       {
+        "clip": "Crouch_and_Step_Back",
+        "atlas_rows": [
+         "crouch_and_step_back"
+        ],
+        "bones": [
+         "RightShoulder",
+         "RightArm",
+         "RightForeArm",
+         "RightHand"
+        ],
+        "window_s": [
+         0.533,
+         1.733
+        ],
+        "max_change_deg": 78.9,
+        "spec": [
+         "tools/edits/af_officer.json"
+        ]
+       }
+      ],
+      "texture_repainted": false,
+      "tools": [
+       "tools/edits/armfix.py"
+      ]
+     }
+    ],
+    "edited_glbs_note": "The atlases were rendered from these edited copies, not from the Meshy files: the Meshy animation packs and FBX files listed under tasks are unedited, so importing them brings back what the edits removed (an empty arm thrust forward or raised). For Unreal use the edited GLB (same rig and clip names), or apply the same spec with tools/edits/armfix.py."
    },
    "tasks": {
     "final_model": {
@@ -8242,8 +9123,22 @@
     "group_score": 7.5,
     "group_first_round": 7.1,
     "notes": "1) Cap lamp: the plan's lamp-ramp accent is absent (0 pixels of lamp #7a4a1a..#fff3c4 in miner_hauer.png and miner_hauer_c0.png). The clean-up or prototype matching removes it. Paint it from 3D: project the rig's 'headfront' node each frame. When it faces the camera (dot > 0), put 1 px lamp[3] '#ffd890' plus 1 px lamp[2] below it, outlined, and exempt the lamp class from the lone-pixel and island merge. Do the same for miner_hauer_c0. 2) ladder_climb_loop: render it seen from behind (camera behind the rig, as the hero's climb in judge_r2/hero_climb.png) on both sheets, keep inplaceY, and export 'dy' and 'lx' as the hero does. The clip rises 43.8 cm per 1.567 s loop = 23 px over 16 frames, so dy ≈ 1.44 px/frame; lx = midpoint of hand_l and hand_r minus ax. 3) Ground snap: idle -2/-3, drink -2/-3, ladder -6..+1, sneaky_walk +1..+3, walk 0..+2. 4) 'speed': sneaky_walk 93.8 cm / 2.833 s ≈ 17 px/s, cautious_crouch_walk_forward 151.2 / 1.133 ≈ 70 px/s; walk, run and injured_walk from foot slide. 5) Belt speckle (0.092, the group's highest): raise the island size for the metal and canvas classes on the belt ([4,8]) so battery and pouches read as two blocks. 6) Denim lit steps #323e5c / #4a5774 are off-palette until the owner adds RAMP.denim. If he declines, map them to steel[3] '#3d4446' and steel[4] '#4f5a5c'. 7) Skin deep step -> '#8d5245'.",
-    "reroll": "none: I3D c2 (white helmet with cap lamp, navy work clothes, tool belt, rubber boots) reads well and differs from every other figure. The c0 alternate (leather helmet, canvas) is the plan's period hauer but reads as a flat cap close to civilian_man; keep it as an alternate. The black strip from helmet to shoulder is the lamp cable. It can read as a ponytail but is acceptable."
+    "reroll": "none: I3D c2 (white helmet with cap lamp, navy work clothes, tool belt, rubber boots) reads well and differs from every other figure. The c0 alternate (leather helmet, canvas) is the plan's period hauer but reads as a flat cap close to civilian_man; keep it as an alternate. The black strip from helmet to shoulder is the lamp cable. It can read as a ponytail but is acceptable.",
+    "later_rounds": [
+     {
+      "job": "p2f",
+      "score": null,
+      "source": "meshy/groups/g8/sink_result.json fix_round",
+      "must_fix_and_done": [
+       "miner_hauer bend_over_pick_up: the left-facing hold (frames 15-34) had the near right arm straight forward at shoulder / chin height (the salute-risk silhouette). Fixed as option (a): the right arm is slerped to a lowered hold at belt height from 1.95 s (full from frame 15), p2f/glb/miner_hauer_p2f_fix.glb (p2e/fix/armfix.py + p2f/af_miner.json), both facings re-rendered; role / note updated (holds the object at belt height, elbow down). handscan2 (body-relative) shows no hit after frame 8 on either sheet; strips looked at in both facings (groups/g8/p2f/fix3/bopL_ba.png before / after left, bop_rest.png right before / after and the holds).",
+       "miner_hauer crouch_pull: role corrected (kneels upright, bends, heaves a lump up, kneels upright again - never stands); the note says it pops from / to the standing idle at BOTH ends (no kneel-down / stand-up for the miner); loop: true as a kneeling work cycle (first / last frame nearly identical), to be entered and left off-screen, behind cover or on a cut.",
+       "repo copy: /home/user/DOOM/assets/meshy/characters/{miner_hauer,civilian_man,resistance_courier}.{png,json} are already byte-identical (cmp) to the final groups/g8/out files - the fixed atlases went in with repo commit 9f9dceb - so nothing was copied. The repo's assets/meshy/manifest.json still carries the pre-fix p2f notes for these three (e.g. crouch_pull listed without loop, no fix-round text); the atlas JSONs themselves hold the corrected role / note / loop."
+      ],
+      "should_fix_and_done": []
+     }
+    ]
    },
+   "sprite_models": [],
    "character": {
     "atlases": [
      {
@@ -8533,7 +9428,46 @@
       "excluded": {}
      }
     ],
-    "rigged_model": "download via task id (rig task: rigged GLB / FBX + walking / running); the compact models/miner_hauer.glb is the static, unrigged mesh"
+    "rigged_model": "no compact rigged GLB: the rig task's rigged GLB / FBX + walking / running and every animation pack are on the archive branch meshy-models-full (g8/miner_hauer/) and can be re-fetched by task id",
+    "edited_glbs": [
+     {
+      "file": "miner_hauer_p2f_fix.glb",
+      "archive_path": "g8/miner_hauer/edited/miner_hauer_p2f_fix.glb",
+      "working_copy": "meshy/groups/g8/p2f/glb/miner_hauer_p2f_fix.glb",
+      "bytes": 6674388,
+      "made_from": {
+       "task": "01a138b7-ebd4-7503-a711-658d4063ea7d",
+       "kind": "anim",
+       "file": "animation.glb"
+      },
+      "motion_edits": [
+       {
+        "clip": "Male_Bend_Over_Pick_Up",
+        "atlas_rows": [
+         "bend_over_pick_up"
+        ],
+        "bones": [
+         "RightShoulder",
+         "RightArm",
+         "RightForeArm"
+        ],
+        "window_s": [
+         1.967,
+         5.667
+        ],
+        "max_change_deg": 58.6,
+        "spec": [
+         "tools/edits/af_miner.json"
+        ]
+       }
+      ],
+      "texture_repainted": false,
+      "tools": [
+       "tools/edits/armfix.py"
+      ]
+     }
+    ],
+    "edited_glbs_note": "The atlases were rendered from these edited copies, not from the Meshy files: the Meshy animation packs and FBX files listed under tasks are unedited, so importing them brings back what the edits removed (an empty arm thrust forward or raised). For Unreal use the edited GLB (same rig and clip names), or apply the same spec with tools/edits/armfix.py."
    },
    "tasks": {
     "final_model": {
@@ -8595,7 +9529,8 @@
       "character_atlas": "characters/miner_hauer_c0.json",
       "sprites": [],
       "repo_file": null,
-      "compact_glb": null
+      "compact_glb": null,
+      "full_res_archive_file": "g8/miner_hauer/miner_hauer__c0.glb"
      }
     ],
     "replaced": [],
@@ -8882,7 +9817,7 @@
     "characters/miner_hauer_c0.png",
     "characters/miner_hauer_c0.json"
    ],
-   "notes": "I3D from c2 (white helmet + cap lamp, blue work clothes, belt with battery and tucked gloves, rubber boots, sooty face) picked over c0 (dark leather helmet reads as a cap, canvas goes to speckle). Rigged (lib/miner_hauer/rig-01a1374f-811a-70b3-997f-dcc4588e0970: rigged_character.glb/.fbx + walking / running) and animated (lib/miner_hauer/anim-01a1374f-f3aa-7470-b62c-8d85338ad1a0/animation.glb + .fbx: the plan's action pack). Sprites: 12 clips x 8 frames, right (yaw 0.35) and left (pi - 0.35) facing, 92 px tall at 52.5 px/m, pitch 4, own three.js r128 renderer (groups/g8/char/char_page.js + render_char.mjs, config char/cfg_all.py -> char/chars.json): SS 4x4 albedo / normal / depth passes, material classes from the texture (Lab prototypes) -> style.js ramps (paint / coal / wood / steel / basalt / dust / burlap / stone+paper / lamp; skin = the hero's own skin ramp; miner denim = the hero's navy extended), hero light (upper left) and bands, value detail, upper-left rim, inner depth lines, lone-pixel clean-up, 1 px OUTLINE #0b080b. Atlas JSON like level/hero.json (anims / left.anims, frames {x,y,w,h,ax,ay}) plus per-frame sockets (hand_r, hand_l, back, head) for compositing the rifle; clips with root motion are made in-place, each clip turned so its start pose faces the view (turned = that yaw). Clips: walk, run, idle_3, stand_and_chat, chair_sit_idle_m, stand_and_drink, ladder_climb_loop, cautious_crouch_walk_forward, sneaky_walk, wave_one_hand, alert, injured_walk. Left sheet: groups/g8/review/g8_miner_hauer_anims_left_x2.png. glb = the static A-pose model (12k faces) for the kit; the Unreal asset is the rig dir's FBX / GLB. || FIX r1: Denim: deep = coal[1], dark / mid snapped to the hero's navy #141932 / #242b50; the two lit steps #323e5c / #4a5774 (4.9 % of his pixels) are the only colours outside style.js + hero.png - proposed as RAMP.denim for style.js (owner's call). Belt: the cap lamp alone on the lamp ramp, the tin battery and self-rescuer on metal, the gloves on canvas (no orange blob). ladder_climb_loop in place in y too (head travel 17 -> 5 px). idle (was idle_3) 6 fps over a fitted 5.3 s loop; chair_sit_idle_m = the seated hunch 2.4-7.67 s only; injured_walk / sneaky_walk 10 fps (fitted 2.83 s limp cycle). ALTERNATE miner_hauer_c0 (the plan's period hauer: leather helmet with cap lamp, grey-brown canvas, rubber boots, moustache): the unrigged c0 I3D rigged in the fix round (5 cr rig 01a137ac-0357 + 30 cr anim 01a137ac-7599, the same 10 actions; lib/miner_hauer/final_rig_c0.json), atlas groups/g8/out/miner_hauer_c0.png/.json (same clip set and timing), static glb groups/g8/models/miner_hauer_c0.glb, sheets g8_miner_hauer_c0_anims_right_x2.png / _left_x2.png; helmet on a dark coal ramp with a lighter lit top so it reads as a hard dome. Fix round r1 (renderer groups/g8/char/char_page.js = the judge's patch + segments / face modes / loop fit / wrap; config groups/g8/char/cfg_all.py): every clip is sampled by time with a per-clip fps and range (t0 / t1, or a loop point fitted to the start pose); facing per clip: rig forward for walks, aims, turns and knock-downs, 'open' for standing idles and talks (chest and head turned to the side's camera or profile, never away); root motion out in x/z; skin ramp without the off-palette rim #c99e7c. Atlas clips: 92 px, 12 clips: walk 8f/8fps loop; run 8f/12fps loop; idle 32f/6fps 0-5.3s loop; stand_and_chat 41f/8fps 0-5.167s loop; chair_sit_idle_m 32f/6fps 2.4-7.667s loop; stand_and_drink 53f/6fps 0-8.867s; ladder_climb_loop 16f/10fps 0-1.567s loop; cautious_crouch_walk_forward 11f/10fps 0-1.133s loop; sneaky_walk 28f/10fps 0-2.833s loop; wave_one_hand 33f/8fps 0-4.1s; alert 32f/8fps 0-4s; injured_walk 28f/10fps 0-2.833s loop. miner_hauer_c0 92 px, 12 clips: walk 8f/8fps loop; run 8f/12fps loop; idle 32f/6fps 0-5.3s loop; stand_and_chat 41f/8fps 0-5.167s loop; chair_sit_idle_m 32f/6fps 2.4-7.667s loop; stand_and_drink 53f/6fps 0-8.867s; ladder_climb_loop 16f/10fps 0-1.567s loop; cautious_crouch_walk_forward 11f/10fps 0-1.133s loop; sneaky_walk 28f/10fps 0-2.833s loop; wave_one_hand 33f/8fps 0-4.1s; alert 32f/8fps 0-4s; injured_walk 28f/10fps 0-2.833s loop. Sheets: groups/g8/review/g8_miner_hauer_anims_right_x2.png / _left_x2.png. || P2F (the last credits, tag p2f): action pack on the pass-1/2 rig 01a1374f-811a-70b3-997f-dcc4588e0970 (10 actions, 30 cr; lib/miner_hauer/anim-01a138b7-ebd4-7503-a711-658d4063ea7d/animation.glb + .fbx, record lib/miner_hauer/final_anim_p2f.json): 261 Push and Walk Forward -> push_and_walk_forward, 551 Carry Heavy Object Walk -> carry_heavy_object_walk, 283 Pull Radish -> crouch_pull, 276 Male Bend Over Pick Up -> bend_over_pick_up, 31 Catching Breath -> catching_breath, 316 Headache Relief -> headache_relief, 363 Sit Cross-legged on Floor -> sit_on_floor, 338 Short Breathe and Look Around -> short_breathe_and_look_around, 157 Stand Dodge 1 -> cower, 543 Step Back -> back_off. Every id was checked with 'mk.py library --search' and its Meshy preview GIF (groups/g8/p2f/gif, gif24); none repeats a clip the character already had (243, 56, 33, 342, 438, 524, 559, 290, 2, 111). Rendered with the pass-1/2 renderer (char/char_page.js + render_char.mjs, config char/cfg_p2f.py -> chars_p2f.json: the character's own classes / ramps / height), both facings, then p2f/tools/finish.py: ground snap (each frame's lowest opaque row on the character's ground line - the line its idle's feet sit on, so old and new rows chain without a vertical pop), speed / root_px (px along the facing, the root motion the renderer took out), role / needs / next / prev / note / prop, pack 'p2f'; appended under the existing rows (pass-1/2 rows pixel- and anchor-identical, copies in groups/g8/p2f/backup/). New rows: push_and_walk_forward 34f/10fps loop (2-5.367 s; speed 24.3 / 24.3 px/s); carry_heavy_object_walk 22f/10fps loop (0-2.217 s; speed 13.0 / 13.2 px/s); crouch_pull 38f/8fps (0-4.7 s); bend_over_pick_up 35f/8fps (0.6-5 s); catching_breath 19f/6fps (3.8-7 s); headache_relief 39f/8fps (0-4.833 s); sit_on_floor 15f/6fps loop (0-2.5 s); short_breathe_and_look_around 47f/6fps (0-7.833 s); cower 13f/10fps (0-1.267 s; root 24.8 / 7.1 px); back_off 10f/12fps loop (0-0.867 s; speed -25.6 / -25.6 px/s). Atlas now 22 clips, 2082 x 3868 px. Notes: carry_heavy_object_walk holds the arms out at chest height with the hands ~23 px ahead of the head bone - empty, that is the salute-risk shape of the pass-1/2 arm rules, so a hand-pixeled 18 x 15 px wooden crate ('crate' in out/models.png, style.js wood) is placed per frame over the hands (frames[i].prop, review/g8_p2f_crate_x4.png); push_and_walk_forward needs a coal tub ahead of the hands (JSON needs); crouch_pull starts on one knee; bend_over_pick_up's 'up' scan hits (frames 6-8) are the bent-over back, not a raised hand. Not in the free library: a standing cough (catching_breath is the exhausted beat), a wave-over / beckon without a raised open palm at head height (29 Call Gesture, 291-296 Wave for Help were rejected for it), a surrender / hands-up (back_off: fists up, backing away, is the nearest). The alternate miner_hauer_c0 (its own rig) gets no p2f rows. Sheets: groups/g8/review/g8_miner_hauer_p2f_right_x2.png / _left_x2.png (new rows), g8_miner_hauer_anims_*_x2.png (all rows)."
+   "notes": "I3D from c2 (white helmet + cap lamp, blue work clothes, belt with battery and tucked gloves, rubber boots, sooty face) picked over c0 (dark leather helmet reads as a cap, canvas goes to speckle). Rigged (lib/miner_hauer/rig-01a1374f-811a-70b3-997f-dcc4588e0970: rigged_character.glb/.fbx + walking / running) and animated (lib/miner_hauer/anim-01a1374f-f3aa-7470-b62c-8d85338ad1a0/animation.glb + .fbx: the plan's action pack). Sprites: 12 clips x 8 frames, right (yaw 0.35) and left (pi - 0.35) facing, 92 px tall at 52.5 px/m, pitch 4, own three.js r128 renderer (groups/g8/char/char_page.js + render_char.mjs, config char/cfg_all.py -> char/chars.json): SS 4x4 albedo / normal / depth passes, material classes from the texture (Lab prototypes) -> style.js ramps (paint / coal / wood / steel / basalt / dust / burlap / stone+paper / lamp; skin = the hero's own skin ramp; miner denim = the hero's navy extended), hero light (upper left) and bands, value detail, upper-left rim, inner depth lines, lone-pixel clean-up, 1 px OUTLINE #0b080b. Atlas JSON like level/hero.json (anims / left.anims, frames {x,y,w,h,ax,ay}) plus per-frame sockets (hand_r, hand_l, back, head) for compositing the rifle; clips with root motion are made in-place, each clip turned so its start pose faces the view (turned = that yaw). Clips: walk, run, idle_3, stand_and_chat, chair_sit_idle_m, stand_and_drink, ladder_climb_loop, cautious_crouch_walk_forward, sneaky_walk, wave_one_hand, alert, injured_walk. Left sheet: groups/g8/review/g8_miner_hauer_anims_left_x2.png. glb = the static A-pose model (12k faces) for the kit; the Unreal asset is the rig dir's FBX / GLB. || FIX r1: Denim: deep = coal[1], dark / mid snapped to the hero's navy #141932 / #242b50; the two lit steps #323e5c / #4a5774 (4.9 % of his pixels) are the only colours outside style.js + hero.png - proposed as RAMP.denim for style.js (owner's call). Belt: the cap lamp alone on the lamp ramp, the tin battery and self-rescuer on metal, the gloves on canvas (no orange blob). ladder_climb_loop in place in y too (head travel 17 -> 5 px). idle (was idle_3) 6 fps over a fitted 5.3 s loop; chair_sit_idle_m = the seated hunch 2.4-7.67 s only; injured_walk / sneaky_walk 10 fps (fitted 2.83 s limp cycle). ALTERNATE miner_hauer_c0 (the plan's period hauer: leather helmet with cap lamp, grey-brown canvas, rubber boots, moustache): the unrigged c0 I3D rigged in the fix round (5 cr rig 01a137ac-0357 + 30 cr anim 01a137ac-7599, the same 10 actions; lib/miner_hauer/final_rig_c0.json), atlas groups/g8/out/miner_hauer_c0.png/.json (same clip set and timing), static glb groups/g8/models/miner_hauer_c0.glb, sheets g8_miner_hauer_c0_anims_right_x2.png / _left_x2.png; helmet on a dark coal ramp with a lighter lit top so it reads as a hard dome. Fix round r1 (renderer groups/g8/char/char_page.js = the judge's patch + segments / face modes / loop fit / wrap; config groups/g8/char/cfg_all.py): every clip is sampled by time with a per-clip fps and range (t0 / t1, or a loop point fitted to the start pose); facing per clip: rig forward for walks, aims, turns and knock-downs, 'open' for standing idles and talks (chest and head turned to the side's camera or profile, never away); root motion out in x/z; skin ramp without the off-palette rim #c99e7c. Atlas clips: 92 px, 12 clips: walk 8f/8fps loop; run 8f/12fps loop; idle 32f/6fps 0-5.3s loop; stand_and_chat 41f/8fps 0-5.167s loop; chair_sit_idle_m 32f/6fps 2.4-7.667s loop; stand_and_drink 53f/6fps 0-8.867s; ladder_climb_loop 16f/10fps 0-1.567s loop; cautious_crouch_walk_forward 11f/10fps 0-1.133s loop; sneaky_walk 28f/10fps 0-2.833s loop; wave_one_hand 33f/8fps 0-4.1s; alert 32f/8fps 0-4s; injured_walk 28f/10fps 0-2.833s loop. miner_hauer_c0 92 px, 12 clips: walk 8f/8fps loop; run 8f/12fps loop; idle 32f/6fps 0-5.3s loop; stand_and_chat 41f/8fps 0-5.167s loop; chair_sit_idle_m 32f/6fps 2.4-7.667s loop; stand_and_drink 53f/6fps 0-8.867s; ladder_climb_loop 16f/10fps 0-1.567s loop; cautious_crouch_walk_forward 11f/10fps 0-1.133s loop; sneaky_walk 28f/10fps 0-2.833s loop; wave_one_hand 33f/8fps 0-4.1s; alert 32f/8fps 0-4s; injured_walk 28f/10fps 0-2.833s loop. Sheets: groups/g8/review/g8_miner_hauer_anims_right_x2.png / _left_x2.png. || P2F (the last credits, tag p2f): action pack on the pass-1/2 rig 01a1374f-811a-70b3-997f-dcc4588e0970 (10 actions, 30 cr; lib/miner_hauer/anim-01a138b7-ebd4-7503-a711-658d4063ea7d/animation.glb + .fbx, record lib/miner_hauer/final_anim_p2f.json): 261 Push and Walk Forward -> push_and_walk_forward, 551 Carry Heavy Object Walk -> carry_heavy_object_walk, 283 Pull Radish -> crouch_pull, 276 Male Bend Over Pick Up -> bend_over_pick_up, 31 Catching Breath -> catching_breath, 316 Headache Relief -> headache_relief, 363 Sit Cross-legged on Floor -> sit_on_floor, 338 Short Breathe and Look Around -> short_breathe_and_look_around, 157 Stand Dodge 1 -> cower, 543 Step Back -> back_off. Every id was checked with 'mk.py library --search' and its Meshy preview GIF (groups/g8/p2f/gif, gif24); none repeats a clip the character already had (243, 56, 33, 342, 438, 524, 559, 290, 2, 111). Rendered with the pass-1/2 renderer (char/char_page.js + render_char.mjs, config char/cfg_p2f.py -> chars_p2f.json: the character's own classes / ramps / height), both facings, then p2f/tools/finish.py: ground snap (each frame's lowest opaque row on the character's ground line - the line its idle's feet sit on, so old and new rows chain without a vertical pop), speed / root_px (px along the facing, the root motion the renderer took out), role / needs / next / prev / note / prop, pack 'p2f'; appended under the existing rows (pass-1/2 rows pixel- and anchor-identical, copies in groups/g8/p2f/backup/). New rows: push_and_walk_forward 34f/10fps loop (2-5.367 s; speed 24.3 / 24.3 px/s); carry_heavy_object_walk 22f/10fps loop (0-2.217 s; speed 13.0 / 13.2 px/s); crouch_pull 38f/8fps loop (0-4.7 s); bend_over_pick_up 35f/8fps (0.6-5 s); catching_breath 19f/6fps (3.8-7 s); headache_relief 39f/8fps (0-4.833 s); sit_on_floor 15f/6fps loop (0-2.5 s); short_breathe_and_look_around 47f/6fps (0-7.833 s); cower 13f/10fps (0-1.267 s; root 24.8 / 7.1 px); back_off 10f/12fps loop (0-0.867 s; speed -25.6 / -25.6 px/s). Atlas now 22 clips, 2082 x 3868 px. Notes: carry_heavy_object_walk holds the arms out at chest height with the hands ~23 px ahead of the head bone - empty, that is the salute-risk shape of the pass-1/2 arm rules, so a hand-pixeled 18 x 15 px wooden crate ('crate' in out/models.png, style.js wood) is placed per frame over the hands (frames[i].prop, review/g8_p2f_crate_x4.png; the review sheets draw it too); push_and_walk_forward needs a coal tub ahead of the hands (JSON needs). Fix round (no credits): bend_over_pick_up is a motion edit - Meshy brought the picked-up object to the chest with the elbow out, which on the left sheet stuck the near (right) arm straight forward at shoulder / chin height in frames 15-34 (the whole hold, hand_r 14-16 px ahead of the head bone at dy 5-9: the salute-risk shape, missed by handscan's 20 px test because the head leans forward with the body); the right clavicle, arm and forearm are now slerped from 1.95 s (full from 2.5 s = frame 15) to a lowered hold, hand at belt height in front of the belly (hand_r 18-19 px under the head bone, about 1.1 m above the ground, in both facings; p2e/fix/armfix.py + p2f/af_miner.json, targets from p2f/tools/target.py -> p2f/glb/miner_hauer_p2f_fix.glb, only Male_Bend_Over_Pick_Up's three right-arm rotation channels differ, 1.97-5.67 s; frames 0-10 unchanged, both facings re-rendered); its 'up' scan hits (frames 6-8) are the bent-over back, not a raised hand. crouch_pull (the whole 4.7 s Pull Radish) never stands: it starts AND ends kneeling upright on one knee (71 px tall against the idle's 93-95 px), so it pops from / to the standing idle at both ends (the miner has no kneel-down or stand-up row) - its role no longer says 'stands up', and it is now loop: true as a kneeling work cycle (first / last frame within 0.002 mean alpha-RGBA diff against a 0.010 frame step), entered and left off-screen, behind cover or on a cut. Not in the free library: a standing cough (catching_breath is the exhausted beat), a wave-over / beckon without a raised open palm at head height (29 Call Gesture, 291-296 Wave for Help were rejected for it), a surrender / hands-up (back_off: fists up, backing away, is the nearest). The alternate miner_hauer_c0 (its own rig) gets no p2f rows. Sheets: groups/g8/review/g8_miner_hauer_p2f_right_x2.png / _left_x2.png (new rows), g8_miner_hauer_anims_*_x2.png (all rows)."
   },
   {
    "name": "civilian_woman",
@@ -8910,6 +9845,7 @@
     "notes": "1) Face: on the right sheet her face is a 2-3 px strip, half of it the deep step #271713, so she reads as a faceless or bearded hood (judge_r2/heads_a.png; the left sheet is fine). Use a skin ramp of ['#8d5245','#8d5245','#b18465','#b18465','#b18465'] so the visible strip is mid and light skin. The scarf could also take dust[3] on its lit front edge so the opening reads. 2) Apron: the floral print speckles (judge_r2/civ_c.png). In WOMAN_M give 'apron' detail 0 (tone from light only) and island [4,8], so it reads as 2-3 clean beige steps (stone[3..5]). 3) Ground snap: idle -1..-3, talk -3, wave -3, walk 0..+1. 4) 'speed' for walk, walking_woman and run (foot slide). Known and OK: the seated clips float because the bench is drawn under them. The jacket balloons in sit_to_stand (skinning) and frame 16 is the mocap's leg-uncross.",
     "reroll": "none: I3D c0 (headscarf, dark wool jacket, flowered apron, knee-length black skirt, grey stockings) is the plan's colony woman, rig-safe, and all 11 clips read."
    },
+   "sprite_models": [],
    "character": {
     "atlases": [
      {
@@ -9000,7 +9936,7 @@
       "excluded": {}
      }
     ],
-    "rigged_model": "download via task id (rig task: rigged GLB / FBX + walking / running); the compact models/civilian_woman.glb is the static, unrigged mesh"
+    "rigged_model": "no compact rigged GLB: the rig task's rigged GLB / FBX + walking / running and every animation pack are on the archive branch meshy-models-full (g8/civilian_woman/) and can be re-fetched by task id"
    },
    "tasks": {
     "final_model": {
@@ -9191,8 +10127,20 @@
     "group_score": 7.5,
     "group_first_round": 7.1,
     "notes": "1) Value separation: the tweed jacket (dust ramp) and trousers (burlap ramp) come out the same mid-dark olive-brown, so the figure reads as one flat mass (judge_r2/civ_b.png, civ_d.png). In cfg_civ.py MAN_M set 'trou' to st('basalt', 1, 2, 3, 4, 5); the 3D trousers are a cooler grey than the jacket. Alternatively, lift the jacket one step (st('dust', 1, 2, 3, 4, 5)) and keep the trousers on burlap[0..3]. 2) Moustache: paint it from 3D (1-2 px of smog[7] at the projected 'headfront' node minus about 3 cm in y), since it is too small to class. 3) Skin deep step -> '#8d5245'. 4) Ground snap: idle -1..-3, chair_sit -4, stand_and_chat -1..-3, wave -3. 5) 'speed' for walk, run and push_and_walk_forward (foot slide).",
-    "reroll": "none: I3D c0 (flat cap, patched tweed jacket, dark waistcoat, baggy trousers) is the right old worker. The push loop (34 frames, standing start cut) and crouch_and_push one-shot read as shunting a tub."
+    "reroll": "none: I3D c0 (flat cap, patched tweed jacket, dark waistcoat, baggy trousers) is the right old worker. The push loop (34 frames, standing start cut) and crouch_and_push one-shot read as shunting a tub.",
+    "later_rounds": [
+     {
+      "job": "p2f",
+      "score": null,
+      "source": "meshy/groups/g8/sink_result.json fix_round",
+      "must_fix_and_done": [
+       "repo copy: /home/user/DOOM/assets/meshy/characters/{miner_hauer,civilian_man,resistance_courier}.{png,json} are already byte-identical (cmp) to the final groups/g8/out files - the fixed atlases went in with repo commit 9f9dceb - so nothing was copied. The repo's assets/meshy/manifest.json still carries the pre-fix p2f notes for these three (e.g. crouch_pull listed without loop, no fix-round text); the atlas JSONs themselves hold the corrected role / note / loop."
+      ],
+      "should_fix_and_done": []
+     }
+    ]
    },
+   "sprite_models": [],
    "character": {
     "atlases": [
      {
@@ -9383,7 +10331,51 @@
       "excluded": {}
      }
     ],
-    "rigged_model": "download via task id (rig task: rigged GLB / FBX + walking / running); the compact models/civilian_man.glb is the static, unrigged mesh"
+    "rigged_model": "no compact rigged GLB: the rig task's rigged GLB / FBX + walking / running and every animation pack are on the archive branch meshy-models-full (g8/civilian_man/) and can be re-fetched by task id",
+    "edited_glbs": [
+     {
+      "file": "civilian_man_p2f_fix.glb",
+      "archive_path": "g8/civilian_man/edited/civilian_man_p2f_fix.glb",
+      "working_copy": "meshy/groups/g8/p2f/glb/civilian_man_p2f_fix.glb",
+      "bytes": 6374804,
+      "made_from": {
+       "task": "01a138b8-003a-703a-a9ad-35e0aa431f27",
+       "kind": "anim",
+       "file": "animation.glb"
+      },
+      "motion_edits": [
+       {
+        "clip": "Sit_on_Chair_Arms_Crossed",
+        "atlas_rows": [
+         "sit_arms_crossed"
+        ],
+        "bones": [
+         "LeftShoulder",
+         "LeftArm",
+         "LeftForeArm",
+         "LeftHand",
+         "RightShoulder",
+         "RightArm",
+         "RightForeArm",
+         "RightHand"
+        ],
+        "window_s": [
+         0.033,
+         0.567
+        ],
+        "max_change_deg": 92.0,
+        "spec": [
+         "tools/edits/af_man.json"
+        ]
+       }
+      ],
+      "texture_repainted": false,
+      "tools": [
+       "tools/edits/armfix.py"
+      ]
+     }
+    ],
+    "edited_glbs_note": "The atlases were rendered from these edited copies, not from the Meshy files: the Meshy animation packs and FBX files listed under tasks are unedited, so importing them brings back what the edits removed (an empty arm thrust forward or raised). For Unreal use the edited GLB (same rig and clip names), or apply the same spec with tools/edits/armfix.py."
    },
    "tasks": {
     "final_model": {
@@ -9614,7 +10606,7 @@
     "characters/civilian_man.png",
     "characters/civilian_man.json"
    ],
-   "notes": "I3D from c0 (flat cap, brown tweed jacket, dark waistcoat, baggy olive trousers, worn boots, grey moustache) - single pick, rigged directly. Rigged (lib/civilian_man/rig-01a13749-8753-74ed-94a3-9416103a1511: rigged_character.glb/.fbx + walking / running) and animated (lib/civilian_man/anim-01a13749-f937-75d5-8808-a413745c7843/animation.glb + .fbx: the plan's action pack). Sprites: 10 clips x 8 frames, right (yaw 0.35) and left (pi - 0.35) facing, 90 px tall at 52.5 px/m, pitch 4, own three.js r128 renderer (groups/g8/char/char_page.js + render_char.mjs, config char/cfg_all.py -> char/chars.json): SS 4x4 albedo / normal / depth passes, material classes from the texture (Lab prototypes) -> style.js ramps (paint / coal / wood / steel / basalt / dust / burlap / stone+paper / lamp; skin = the hero's own skin ramp; miner denim = the hero's navy extended), hero light (upper left) and bands, value detail, upper-left rim, inner depth lines, lone-pixel clean-up, 1 px OUTLINE #0b080b. Atlas JSON like level/hero.json (anims / left.anims, frames {x,y,w,h,ax,ay}) plus per-frame sockets (hand_r, hand_l, back, head) for compositing the rifle; clips with root motion are made in-place, each clip turned so its start pose faces the view (turned = that yaw). Clips: walk, run, idle, chair_sit_idle_m, sit_and_doze_off, stand_and_chat, push_and_walk_forward, crouch_and_push_forward, wave_one_hand, alert. Left sheet: groups/g8/review/g8_civilian_man_anims_left_x2.png. glb = the static A-pose model (12k faces) for the kit; the Unreal asset is the rig dir's FBX / GLB. || FIX r1: idle = the Meshy Idle seam stretch as for the woman, idle_fidget the whole clip. push_and_walk_forward = the steady push 2.0-5.37 s (fitted loop, 10 fps, 34 frames; the standing start is cut); crouch_and_push_forward is a one-shot (crouched push, then stands up), loop false. chair_sit_idle_m = the seated hunch; sit_and_doze_off 6 fps. Classes: a waistcoat class (coal) shows the dark front, a grey 'hair' class (basalt/smog) takes the grey collar; the moustache is too small and too close to the tweed to class and reads dark. The Idle 1 pack (3 cr, anim 01a137b4-9ef6) is not used (rifle-ready stance). Fix round r1 (renderer groups/g8/char/char_page.js = the judge's patch + segments / face modes / loop fit / wrap; config groups/g8/char/cfg_all.py): every clip is sampled by time with a per-clip fps and range (t0 / t1, or a loop point fitted to the start pose); facing per clip: rig forward for walks, aims, turns and knock-downs, 'open' for standing idles and talks (chest and head turned to the side's camera or profile, never away); root motion out in x/z; skin ramp without the off-palette rim #c99e7c. Atlas clips: 90 px, 11 clips: walk 8f/8fps loop; run 8f/12fps loop; idle 9f/8fps 3.2-4.283s loop; idle_fidget 32f/8fps 0-4s loop; chair_sit_idle_m 32f/6fps 2.4-7.667s loop; sit_and_doze_off 104f/6fps 0-17.3s; stand_and_chat 41f/8fps 0-5.167s loop; push_and_walk_forward 34f/10fps 2-5.367s loop; crouch_and_push_forward 37f/10fps 0-3.667s; wave_one_hand 33f/8fps 0-4.1s; alert 32f/8fps 0-4s. Sheets: groups/g8/review/g8_civilian_man_anims_right_x2.png / _left_x2.png. || P2F (the last credits, tag p2f): action pack on the pass-1/2 rig 01a13749-8753-74ed-94a3-9416103a1511 (10 actions, 30 cr; lib/civilian_man/anim-01a138b8-003a-703a-a9ad-35e0aa431f27/animation.glb + .fbx, record lib/civilian_man/final_anim_p2f.json): 57 Stand to Sit Transition Male -> sit_down, 53 Sit to Stand Transition Male -> stand_up, 307 Sitting Answering Questions -> sit_talk, 364 Sit on Chair Arms Crossed -> sit_arms_crossed, 314 Talk with Right Hand Open -> talk_with_right_hand_open, 47 Listening Gesture -> listen, 317 Shrug -> shrug, 157 Stand Dodge 1 -> cower, 512 Male Head-down Charge -> run_away, 543 Step Back -> back_off. Every id was checked with 'mk.py library --search' and its Meshy preview GIF (groups/g8/p2f/gif, gif24); none repeats a clip the character already had (0, 33, 268, 56, 261, 262, 290, 2, 11). Rendered with the pass-1/2 renderer (char/char_page.js + render_char.mjs, config char/cfg_p2f.py -> chars_p2f.json: the character's own classes / ramps / height), both facings, then p2f/tools/finish.py: ground snap (each frame's lowest opaque row on the character's ground line - the line its idle's feet sit on, so old and new rows chain without a vertical pop), speed / root_px (px along the facing, the root motion the renderer took out), role / needs / next / prev / note / prop, pack 'p2f'; appended under the existing rows (pass-1/2 rows pixel- and anchor-identical, copies in groups/g8/p2f/backup/). New rows: sit_down 31f/10fps (1.6-4.733 s; root -16.6 / -15.9 px); stand_up 26f/10fps (1.2-3.8 s; root 22.5 / 18.6 px); sit_talk 58f/6fps loop (0-9.667 s); sit_arms_crossed 19f/8fps (0-2.367 s); talk_with_right_hand_open 30f/8fps (0-3.733 s); listen 56f/6fps loop (0-9.333 s); shrug 20f/10fps (0-1.967 s); cower 13f/10fps (0-1.267 s; root 24.4 / 7.0 px); run_away 8f/16fps loop (0-0.5 s; speed 224.9 / 224.9 px/s); back_off 10f/12fps loop (0-0.867 s; speed -25.0 / -25.0 px/s). Atlas now 21 clips, 4455 x 3714 px. Notes: the bench chain is sit_down -> chair_sit_idle_m (pack 1) / sit_talk / sit_arms_crossed -> stand_up (JSON next / prev with dy_px: pack 1's seated row sits 3 px lower against its anchor on the right sheet; sit_down.root_px -16.6 = the seat is 16 px behind his start; needs a bench or chair); sit_arms_crossed is a motion edit (Meshy's reach thrust an open hand forward at shoulder height on the left sheet, frames 1-2: both arms now go from the knees straight to crossed, 0-0.6 s slerped to the 1.2 s pose, p2e/fix/armfix.py + p2f/af_man.json -> p2f/glb/civilian_man_p2f_fix.glb; the FBX keeps Meshy's original); talk_with_right_hand_open (open hand at waist height) stands in for 'point', the free library has no pointing action; back_off (fists up, backing away) stands in for hands-up, it has no surrender action; there is no smoking action at all (listen is the idle for a bystander instead). Sheets: groups/g8/review/g8_civilian_man_p2f_right_x2.png / _left_x2.png (new rows), g8_civilian_man_anims_*_x2.png (all rows)."
+   "notes": "I3D from c0 (flat cap, brown tweed jacket, dark waistcoat, baggy olive trousers, worn boots, grey moustache) - single pick, rigged directly. Rigged (lib/civilian_man/rig-01a13749-8753-74ed-94a3-9416103a1511: rigged_character.glb/.fbx + walking / running) and animated (lib/civilian_man/anim-01a13749-f937-75d5-8808-a413745c7843/animation.glb + .fbx: the plan's action pack). Sprites: 10 clips x 8 frames, right (yaw 0.35) and left (pi - 0.35) facing, 90 px tall at 52.5 px/m, pitch 4, own three.js r128 renderer (groups/g8/char/char_page.js + render_char.mjs, config char/cfg_all.py -> char/chars.json): SS 4x4 albedo / normal / depth passes, material classes from the texture (Lab prototypes) -> style.js ramps (paint / coal / wood / steel / basalt / dust / burlap / stone+paper / lamp; skin = the hero's own skin ramp; miner denim = the hero's navy extended), hero light (upper left) and bands, value detail, upper-left rim, inner depth lines, lone-pixel clean-up, 1 px OUTLINE #0b080b. Atlas JSON like level/hero.json (anims / left.anims, frames {x,y,w,h,ax,ay}) plus per-frame sockets (hand_r, hand_l, back, head) for compositing the rifle; clips with root motion are made in-place, each clip turned so its start pose faces the view (turned = that yaw). Clips: walk, run, idle, chair_sit_idle_m, sit_and_doze_off, stand_and_chat, push_and_walk_forward, crouch_and_push_forward, wave_one_hand, alert. Left sheet: groups/g8/review/g8_civilian_man_anims_left_x2.png. glb = the static A-pose model (12k faces) for the kit; the Unreal asset is the rig dir's FBX / GLB. || FIX r1: idle = the Meshy Idle seam stretch as for the woman, idle_fidget the whole clip. push_and_walk_forward = the steady push 2.0-5.37 s (fitted loop, 10 fps, 34 frames; the standing start is cut); crouch_and_push_forward is a one-shot (crouched push, then stands up), loop false. chair_sit_idle_m = the seated hunch; sit_and_doze_off 6 fps. Classes: a waistcoat class (coal) shows the dark front, a grey 'hair' class (basalt/smog) takes the grey collar; the moustache is too small and too close to the tweed to class and reads dark. The Idle 1 pack (3 cr, anim 01a137b4-9ef6) is not used (rifle-ready stance). Fix round r1 (renderer groups/g8/char/char_page.js = the judge's patch + segments / face modes / loop fit / wrap; config groups/g8/char/cfg_all.py): every clip is sampled by time with a per-clip fps and range (t0 / t1, or a loop point fitted to the start pose); facing per clip: rig forward for walks, aims, turns and knock-downs, 'open' for standing idles and talks (chest and head turned to the side's camera or profile, never away); root motion out in x/z; skin ramp without the off-palette rim #c99e7c. Atlas clips: 90 px, 11 clips: walk 8f/8fps loop; run 8f/12fps loop; idle 9f/8fps 3.2-4.283s loop; idle_fidget 32f/8fps 0-4s loop; chair_sit_idle_m 32f/6fps 2.4-7.667s loop; sit_and_doze_off 104f/6fps 0-17.3s; stand_and_chat 41f/8fps 0-5.167s loop; push_and_walk_forward 34f/10fps 2-5.367s loop; crouch_and_push_forward 37f/10fps 0-3.667s; wave_one_hand 33f/8fps 0-4.1s; alert 32f/8fps 0-4s. Sheets: groups/g8/review/g8_civilian_man_anims_right_x2.png / _left_x2.png. || P2F (the last credits, tag p2f): action pack on the pass-1/2 rig 01a13749-8753-74ed-94a3-9416103a1511 (10 actions, 30 cr; lib/civilian_man/anim-01a138b8-003a-703a-a9ad-35e0aa431f27/animation.glb + .fbx, record lib/civilian_man/final_anim_p2f.json): 57 Stand to Sit Transition Male -> sit_down, 53 Sit to Stand Transition Male -> stand_up, 307 Sitting Answering Questions -> sit_talk, 364 Sit on Chair Arms Crossed -> sit_arms_crossed, 314 Talk with Right Hand Open -> talk_with_right_hand_open, 47 Listening Gesture -> listen, 317 Shrug -> shrug, 157 Stand Dodge 1 -> cower, 512 Male Head-down Charge -> run_away, 543 Step Back -> back_off. Every id was checked with 'mk.py library --search' and its Meshy preview GIF (groups/g8/p2f/gif, gif24); none repeats a clip the character already had (0, 33, 268, 56, 261, 262, 290, 2, 11). Rendered with the pass-1/2 renderer (char/char_page.js + render_char.mjs, config char/cfg_p2f.py -> chars_p2f.json: the character's own classes / ramps / height), both facings, then p2f/tools/finish.py: ground snap (each frame's lowest opaque row on the character's ground line - the line its idle's feet sit on, so old and new rows chain without a vertical pop), speed / root_px (px along the facing, the root motion the renderer took out), role / needs / next / prev / note / prop, pack 'p2f'; appended under the existing rows (pass-1/2 rows pixel- and anchor-identical, copies in groups/g8/p2f/backup/). New rows: sit_down 31f/10fps (1.6-4.733 s; root -16.6 / -15.9 px); stand_up 26f/10fps (1.2-3.8 s; root 22.5 / 18.6 px); sit_talk 58f/6fps loop (0-9.667 s); sit_arms_crossed 19f/8fps (0-2.367 s); talk_with_right_hand_open 30f/8fps (0-3.733 s); listen 56f/6fps loop (0-9.333 s); shrug 20f/10fps (0-1.967 s); cower 13f/10fps (0-1.267 s; root 24.4 / 7.0 px); run_away 8f/16fps loop (0-0.5 s; speed 224.9 / 224.9 px/s); back_off 10f/12fps loop (0-0.867 s; speed -25.0 / -25.0 px/s). Atlas now 21 clips, 4455 x 3714 px. Notes: the bench chain is sit_down -> chair_sit_idle_m (pack 1) / sit_talk / sit_arms_crossed -> stand_up (JSON next / prev with dy_px: pack 1's seated row sits 3 px lower against its anchor on the right sheet; sit_down.root_px -16.6 = the seat is 16 px behind his start; needs a bench or chair); sit_arms_crossed is a motion edit (Meshy's reach thrust an open hand forward at shoulder height on the left sheet, frames 1-2: both arms now go from the knees straight to crossed, 0-0.6 s slerped to the 1.2 s pose, p2e/fix/armfix.py + p2f/af_man.json -> p2f/glb/civilian_man_p2f_fix.glb; the FBX keeps Meshy's original); talk_with_right_hand_open (open hand at waist height) stands in for 'point', the free library has no pointing action; back_off (fists up, backing away) stands in for hands-up, it has no surrender action; there is no smoking action at all (listen is the idle for a bystander instead). Fix round: cower / back_off notes say plainly that both open in a boxing guard (for a civilian: squaring up), cower can start at frame 4. Sheets: groups/g8/review/g8_civilian_man_p2f_right_x2.png / _left_x2.png (new rows), g8_civilian_man_anims_*_x2.png (all rows)."
   },
   {
    "name": "rifle_prop",
@@ -9642,6 +10634,24 @@
     "notes": "Optional, before integration: (a) add 'grip' (where hand_r goes) and 'muzzle' points to every rifle sprite in out/models.json. Today rifle_comp.py derives the grip ad hoc at 30% along the diagonal, and the game needs it as data. (b) All aim sprites point right (rifle_aim_m30/m15/15/30/45, mirror true). Add the left-pointing set (rifle_aim_*_l, mirror false), so the guard's left-facing aim and the patrol's left idle get a rifle lit from the upper left like every other left render, instead of a flipped one lit from the upper right.",
     "reroll": "none: the refined T3D c0 is a period bolt-action rifle (walnut stock, turned-down bolt, barrel bands, 1.10 m) with the sling cut for rifle_clean.glb. The 59x14 px sprites have a clean 1 px #0b080b outline and wood/steel ramps. Composites read in idle, aim and slung (review/rifle_comp_x3.png, fix/idle_rifle_x4.png, judge_r2/rifle_x6.png)."
    },
+   "sprite_models": [
+    {
+     "model": "rifle_clean",
+     "sprites": [
+      "rifle_prop",
+      "rifle_prop_l",
+      "rifle_slung",
+      "rifle_slung_l",
+      "rifle_aim_m30",
+      "rifle_aim_m15",
+      "rifle_aim_15",
+      "rifle_aim_30",
+      "rifle_aim_45"
+     ],
+     "compact_glb": "meshy/groups/g8/models/rifle_clean.glb",
+     "repo_file": "models/rifle_prop.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a13747-a9ee-7483-8d0f-8501fe4627a7",
@@ -9739,8 +10749,20 @@
     "group_score": 7.5,
     "group_first_round": 6.5,
     "notes": "(1) roll_behind_cover: frames 18-20 (right) and 16-18 (left) are headless; her head is bowed behind her shoulders while she turns. Start segment 2 after the turn, where the head shows again (about frame 21 right, 19 left), or re-render segment 2 turned so the head stays visible. Otherwise drop the clip from the web atlas (keep the FBX) and use crouch_look_around for hiding. (2) In the JSON, give the cover as an exact contact height rather than 'at most 0.69 m'. Her lowest body pixel is 27 px in frames 6 and 12, so the cover top should be about 27 px (0.5 m). (3) Optional: the wave turned +-0.8 rad is a 46-degree snap from the 0.35 profile idle; add turn-in and turn-out metadata or accept it. The concepts, I3D model, rig at 1.68 m, face ramp, belt row, walk, run, sneak, look-around, crouch, vault, ladder and collect clips are good and on the palette.",
-    "reroll": ""
+    "reroll": "",
+    "later_rounds": [
+     {
+      "job": "p2f",
+      "score": null,
+      "source": "meshy/groups/g8/sink_result.json fix_round",
+      "must_fix_and_done": [
+       "repo copy: /home/user/DOOM/assets/meshy/characters/{miner_hauer,civilian_man,resistance_courier}.{png,json} are already byte-identical (cmp) to the final groups/g8/out files - the fixed atlases went in with repo commit 9f9dceb - so nothing was copied. The repo's assets/meshy/manifest.json still carries the pre-fix p2f notes for these three (e.g. crouch_pull listed without loop, no fix-round text); the atlas JSONs themselves hold the corrected role / note / loop."
+      ],
+      "should_fix_and_done": []
+     }
+    ]
    },
+   "sprite_models": [],
    "character": {
     "atlases": [
      {
@@ -9932,7 +10954,78 @@
       "excluded": {}
      }
     ],
-    "rigged_model": "download via task id (rig task: rigged GLB / FBX + walking / running); the compact models/resistance_courier.glb is the static, unrigged mesh"
+    "rigged_model": "no compact rigged GLB: the rig task's rigged GLB / FBX + walking / running and every animation pack are on the archive branch meshy-models-full (g8/resistance_courier/) and can be re-fetched by task id",
+    "edited_glbs": [
+     {
+      "file": "courier_animation_fix.glb",
+      "archive_path": "g8/resistance_courier/edited/courier_animation_fix.glb",
+      "working_copy": "meshy/groups/g8/p2e/fix/glb/courier_animation_fix.glb",
+      "bytes": 12496596,
+      "made_from": {
+       "task": "01a13821-2a73-746a-9316-e125de6d7244",
+       "kind": "anim",
+       "file": "animation.glb"
+      },
+      "motion_edits": [],
+      "texture_repainted": true,
+      "tools": [
+       "tools/edits/texpaint.py",
+       "tools/edits/glbtex.py"
+      ]
+     },
+     {
+      "file": "courier_running_fix.glb",
+      "archive_path": "g8/resistance_courier/edited/courier_running_fix.glb",
+      "working_copy": "meshy/groups/g8/p2e/fix/glb/courier_running_fix.glb",
+      "bytes": 12537508,
+      "made_from": {
+       "task": "01a13820-b97f-7267-b715-d3a00a363123",
+       "kind": "rig",
+       "file": "running.glb"
+      },
+      "motion_edits": [],
+      "texture_repainted": true,
+      "tools": [
+       "tools/edits/texpaint.py",
+       "tools/edits/glbtex.py"
+      ]
+     },
+     {
+      "file": "courier_walking_fix.glb",
+      "archive_path": "g8/resistance_courier/edited/courier_walking_fix.glb",
+      "working_copy": "meshy/groups/g8/p2e/fix/glb/courier_walking_fix.glb",
+      "bytes": 12548132,
+      "made_from": {
+       "task": "01a13820-b97f-7267-b715-d3a00a363123",
+       "kind": "rig",
+       "file": "walking.glb"
+      },
+      "motion_edits": [],
+      "texture_repainted": true,
+      "tools": [
+       "tools/edits/texpaint.py",
+       "tools/edits/glbtex.py"
+      ]
+     },
+     {
+      "file": "courier_animation_p2f_fix.glb",
+      "archive_path": "g8/resistance_courier/edited/courier_animation_p2f_fix.glb",
+      "working_copy": "meshy/groups/g8/p2f/glb/courier_animation_p2f_fix.glb",
+      "bytes": 12165224,
+      "made_from": {
+       "task": "01a138b8-0411-7409-b9ae-21a5d49fdbde",
+       "kind": "anim",
+       "file": "animation.glb"
+      },
+      "motion_edits": [],
+      "texture_repainted": true,
+      "tools": [
+       "tools/edits/texpaint.py",
+       "tools/edits/glbtex.py"
+      ]
+     }
+    ],
+    "edited_glbs_note": "The atlases were rendered from these edited copies, not from the Meshy files: the Meshy animation packs and FBX files listed under tasks are unedited, so importing them brings back what the edits removed (an empty arm thrust forward or raised). For Unreal use the edited GLB (same rig and clip names), or apply the same spec with tools/edits/armfix.py."
    },
    "tasks": {
     "final_model": {
@@ -10158,6 +11251,19 @@
     "notes": "Polish, no credits; both sprites, in post.py.\n(1) Searchlight: the glass is an upright 13x23 px egg (x 141-153, y 83-105), the same in both views, with no barrel or fork, so it reads as a mirror on a stick. Paint it the way props.js searchlight() does:\n- a lens of about 20x14 px, tilted along d=[0.34,-0.94]: lens[0] rim, lens[1], lens[2] staying at points.lens, a lens[3] glint at the upper left;\n- the barrel's top side rising up-left behind it, in steel[3..5] with two lit cooling ribs;\n- the fork arms with trunnion bosses down to the bracket.\n(2) Roof: remap basalt to smog, as props.js does (smog[3] body; smog[4] lap edges every 7 rows with smog[2] under; smog[6] lit left hip; smog[1] right hip). The current basalt[5] roof is too light for tar paper. Erase the stray hip fragment at x 135-147, y 27-37, or draw the full hip line from the ridge end to the front-right eave corner.\n(3) Railing: remap basalt to steel: posts steel[4] with a steel[6] lit left column; rails steel[6] top row and steel[3] underside.\n(4) Walkway beam (rows about 170-182): replace the mottled wood[4] patches with props.js's beam: wood[4] top row, wood[3], a wood[2] face, wood[0] bottom row, and 4x4 wood[1] joist ends every 18 px. Clear the glyph-like wood[0] marks on the deck at x 83-97, y 163-170 and x 150-215, y 165-172.\n(5) Ladder foot (x 72-110, rows 368-387) is painted in stone; use the wood ramp.\n(6) Front sprite: flatten the smudgy narrow side face (x 145-158, y 50-115) to wood[2] with wood[1] seams.\nKit: ship as is (welded, float32, glass and frame materials, clean in my renders).",
     "reroll": ""
    },
+   "sprite_models": [
+    {
+     "model": "p2_guard_tower_v2",
+     "sprites": [
+      "p2_guard_tower_v2",
+      "p2_guard_tower_v2_front"
+     ],
+     "compact_glb": "meshy/groups/p2new/models/p2_guard_tower_v2.glb",
+     "repo_file": null,
+     "archive_file": "p2new/guard_tower_v2/compact/p2_guard_tower_v2.glb",
+     "note": "the sprite-grade import (quantized) of the same Meshy model whose Unreal kit piece (float32, welded, re-charted UVs) ships as models/guard_tower_v2.glb; this import is on the archive branch at p2new/guard_tower_v2/compact/p2_guard_tower_v2.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a13819-c1c2-7599-b849-f7bb39aa01cd",
@@ -10268,6 +11374,18 @@
     "notes": "No credits; T3D failed twice, so no more Meshy spend.\n(1) Hinge collar (sprite x 174-200, y 4-22): an unlit near-black coal mass with a knobby outline. Replace it with a drawn hub:\n- a clean 10x10 px cylinder in coal[3], with a coal[5] top row and left column and coal[1] on the bottom and right;\n- a 3x3 steel[5] axle cap with a steel[2] shadow pixel;\n- a 1 px coal[1] shadow onto the pole;\n- a straight silhouette, no knobs.\n(2) Counterweight (x 214-233, y 5-26): the two bolt heads side by side read as eyes. Use one centred bolt, or bolts at the lower corners, each a coal[5] / coal[1] pair.\n(3) Pivot post (x 198-210, y 20-62): give it a continuous steel[5] lit left column from top to bottom instead of the single glint. Do the same on the rest post, whose lit edge is broken into dashes.\n(4) Record in the kit notes that boom_arm.glb is procedural: the Meshy refine contributed only the posts.\nKit: ok (origin at the axle; bands 0.4 m from the tip).",
     "reroll": ""
    },
+   "sprite_models": [
+    {
+     "model": "p2_boom_barrier",
+     "sprites": [
+      "p2_boom_barrier"
+     ],
+     "compact_glb": "meshy/groups/p2new/models/p2_boom_barrier.glb",
+     "repo_file": null,
+     "archive_file": "p2new/checkpoint_boom_barrier/compact/p2_boom_barrier.glb",
+     "note": "the sprite-grade import (quantized) of the same Meshy model whose Unreal kit piece (float32, welded, re-charted UVs) ships as models/checkpoint_boom_barrier.glb; this import is on the archive branch at p2new/checkpoint_boom_barrier/compact/p2_boom_barrier.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a1381c-b315-7773-9fba-6a5f2fe6da0f",
@@ -10356,6 +11474,18 @@
     "notes": "Polish, no credits.\n(1) The far legs are 1 px dust[5] slivers (the lightest tone), cut off from the near legs by outline pixels at x 16-17 and x 46-47, rows 35-43. This gives checkered paws in rows 41-43. Paint the far legs dust[2..3]: they are behind the body and in shadow. Merge each pair of paws into one 3-4 px foot with no inner outline pixels.\n(2) Remove the isolated pixels at (35,31) and (40,41).\nKit: ok (one piece, 0.84 m tall, re-charted 512 atlas).",
     "reroll": ""
    },
+   "sprite_models": [
+    {
+     "model": "p2_guard_dog",
+     "sprites": [
+      "p2_guard_dog"
+     ],
+     "compact_glb": "meshy/groups/p2new/models/p2_guard_dog.glb",
+     "repo_file": null,
+     "archive_file": "p2new/guard_dog/compact/p2_guard_dog.glb",
+     "note": "the sprite-grade import (quantized) of the same Meshy model whose Unreal kit piece (float32, welded, re-charted UVs) ships as models/guard_dog.glb; this import is on the archive branch at p2new/guard_dog/compact/p2_guard_dog.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a13819-c740-7023-b070-78819e4d79c9",
@@ -10437,6 +11567,18 @@
     "notes": "No credits; post.py.\n(1) Top lip (rows 1-26, full length): replace the blotchy steel[2]/[5]/[6] noise with a clean flange drawn along the projected rim line: steel[6] lit top row, one steel[4] row, steel[2] shadow row. Keep the feed-end lip straight.\n(2) Side stiffeners: make them regular, about every 16 px, running the full height from the lip to the lower edge, each a steel[2] line with a steel[5] lit left pixel. Today their lengths and spacing are random.\n(3) Erase the ghost glyph scribble at x 140-158, y 49-59, and flatten the dark blotch on the discharge end face (x 172-190, y 45-60) to steel[3].\n(4) Flatten the dark ragged lump over the drive (x 66-94, y 34-44) to steel[4].\n(5) The pipe-like stub at the base's right end (x 176-195, y 76-90): clip it, or draw it as the I-beam's end (coal[5] flange, coal[4] web).\nKit: ok (one piece, welded).",
     "reroll": ""
    },
+   "sprite_models": [
+    {
+     "model": "p2_siebhaus_screen",
+     "sprites": [
+      "p2_siebhaus_screen"
+     ],
+     "compact_glb": "meshy/groups/p2new/models/p2_siebhaus_screen.glb",
+     "repo_file": null,
+     "archive_file": "p2new/siebhaus_vibrating_screen/compact/p2_siebhaus_screen.glb",
+     "note": "the sprite-grade import (quantized) of the same Meshy model whose Unreal kit piece (float32, welded, re-charted UVs) ships as models/siebhaus_vibrating_screen.glb; this import is on the archive branch at p2new/siebhaus_vibrating_screen/compact/p2_siebhaus_screen.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a13819-cc31-71ca-9917-eb016906a268",
@@ -10532,6 +11674,18 @@
     "notes": "Polish, no credits.\n(1) The bin's front face is 97% steel[4], which reads flat. Add:\n- a 4x4 Bayer steel[5] band in the 5 rows under the lip;\n- a steel[3] Bayer in the 4 rows above the bottom flange;\n- 3-4 vertical steel[3] streaks of 1 px.\nKeep the face's mean luminance at 0.076 or more (the VALUE target).\n(2) Break the continuous rust[1..2] band along the bin's flange into 3-4 runs with gaps, so it reads as rust rather than a painted stripe.\n(3) The orange rust dots on the frame braces read as speckle at x1 and x2. Keep them only at the joints, about every third rivet.\nLight is right: front steel[4], right face steel[3].\nKit: ok (one piece).",
     "reroll": ""
    },
+   "sprite_models": [
+    {
+     "model": "p2_siebhaus_hopper",
+     "sprites": [
+      "p2_siebhaus_hopper"
+     ],
+     "compact_glb": "meshy/groups/p2new/models/p2_siebhaus_hopper.glb",
+     "repo_file": null,
+     "archive_file": "p2new/siebhaus_hopper/compact/p2_siebhaus_hopper.glb",
+     "note": "the sprite-grade import (quantized) of the same Meshy model whose Unreal kit piece (float32, welded, re-charted UVs) ships as models/siebhaus_hopper.glb; this import is on the archive branch at p2new/siebhaus_hopper/compact/p2_siebhaus_hopper.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a13819-d1c4-70cf-a651-5ec902a05001",
@@ -10613,6 +11767,40 @@
     "notes": "No credits.\n(1) p2_wall_lamp_sodium is not the level's head, despite the note. Its hood is a 12-13 px steel dome no wider than the bowl. props.js lamp() draws a 25 px trapezoid hood in smog: 15 px top, 9 rows, smog[2] body, smog[4] lit left slope, smog[1] right slope, smog[5] top row, over a 13 px glass. Repaint the head at those proportions (hood at least 1.6x the glass width, shallow) in the smog ramp, so it matches the street lamps next to it. Keep the glass rows (lamp[3] with a lamp[4] glint, lamp[2], lamp[1], lamp[0]).\n(2) p2_wall_lamp (the lantern) is off-brief, a 19th-century style lantern rather than a sodium fitting. Keep it only as a decorative variant.\n(3) Kit, delete the floating leftovers from the clip:\n- sodium kit: the 110-face crescent at x 0.072-0.080, y 0.496-0.525, and the 36-face shard at x 0.117-0.148, y 0.365-0.392;\n- lantern kit: the 61-face curl at x -0.144..-0.128, y 0.475-0.492, and the 30-face piece at x 0.072-0.079, y 0.496-0.525.\n(4) Cap the ragged cut at the sodium kit's arm tip (where the lantern neck was cut, at the stem top) with a clean end disc.\n(5) Move both origins to the wall plate's back centre (x about 0.263, y about 0.455, z 0) so the lamp snaps onto a wall. Today y=0 is the old lantern bottom, and the sodium kit floats with min y 0.275.\n(6) Lantern kit: split the glass into its own emissive material, as the sodium kit has.\n(7) Sodium bowl: raise the lathe to 24 or more segments; the facets show.",
     "reroll": ""
    },
+   "sprite_models": [
+    {
+     "model": "p2_wall_lamp",
+     "sprites": [
+      "p2_wall_lamp"
+     ],
+     "compact_glb": "meshy/groups/p2new/models/p2_wall_lamp.glb",
+     "repo_file": null,
+     "archive_file": "p2new/wall_bracket_street_lamp/compact/p2_wall_lamp.glb",
+     "kit_glb": "meshy/groups/p2new/kit/p2_wall_lamp.glb",
+     "kit_archive_file": "p2new/wall_bracket_street_lamp/compact/kit_p2_wall_lamp.glb",
+     "note": "the sprite-grade import of a second model of this asset; it and its Unreal kit piece are on the archive branch (p2new/wall_bracket_street_lamp/compact/p2_wall_lamp.glb, p2new/wall_bracket_street_lamp/compact/kit_p2_wall_lamp.glb)"
+    },
+    {
+     "model": "p2_wall_bracket",
+     "sprites": [
+      "p2_wall_lamp_sodium"
+     ],
+     "compact_glb": "meshy/groups/p2new/models/p2_wall_bracket.glb",
+     "repo_file": null,
+     "archive_file": "p2new/wall_bracket_street_lamp/compact/p2_wall_bracket.glb",
+     "note": "a sprite-grade part model, welded with the others into the kit piece models/wall_bracket_street_lamp.glb; on the archive branch at p2new/wall_bracket_street_lamp/compact/p2_wall_bracket.glb"
+    },
+    {
+     "model": "p2_sodium_head",
+     "sprites": [
+      "p2_wall_lamp_sodium"
+     ],
+     "compact_glb": "meshy/groups/p2new/models/p2_sodium_head.glb",
+     "repo_file": null,
+     "archive_file": "p2new/wall_bracket_street_lamp/compact/p2_sodium_head.glb",
+     "note": "a sprite-grade part model, welded with the others into the kit piece models/wall_bracket_street_lamp.glb; on the archive branch at p2new/wall_bracket_street_lamp/compact/p2_sodium_head.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a1381c-a938-75b9-8f0d-3c8bdabca899",
@@ -10691,6 +11879,18 @@
     "notes": "Polish, no credits.\n(1) The crate is open at the front rather than lid-off as briefed. The Meshy model came open-sided, and it reads better in 2D: accepted.\n(2) Fill the outline notch on the right silhouette at (64-65, 40-41) with wood[1] and move the OUTLINE back to the edge.\n(3) Change the lone wood[4] pixel on the floor seam at (38,46) to wood[0].\nKit: ok (one piece, front open, feet removed, 0.97 x 0.91 x 1.02 m). Its texture is creamier than crate_a's (mean RGB 207,187,157 against 159,155,146): tint it in Unreal, or re-bake toward crate_a's grey so the two match.",
     "reroll": ""
    },
+   "sprite_models": [
+    {
+     "model": "p2_crate_open",
+     "sprites": [
+      "p2_crate_open"
+     ],
+     "compact_glb": "meshy/groups/p2new/models/p2_crate_open.glb",
+     "repo_file": null,
+     "archive_file": "p2new/crate_open_broken/compact/p2_crate_open.glb",
+     "note": "the sprite-grade import (quantized) of the same Meshy model whose Unreal kit piece (float32, welded, re-charted UVs) ships as models/crate_open_broken.glb; this import is on the archive branch at p2new/crate_open_broken/compact/p2_crate_open.glb"
+    }
+   ],
    "tasks": {
     "final_model": {
      "id": "01a1381c-9dc8-73e0-9b67-937db7b58a28",
@@ -10794,6 +11994,9 @@
   },
   "characters": 7,
   "character_clips": 148,
+  "character_clips_all_atlases": 160,
+  "edited_glbs": 9,
+  "edited_clips": 7,
   "animation_tasks": 18,
   "animation_actions": 138
  },
@@ -10824,45 +12027,58 @@
    "name": "guard_tower",
    "group": "g1",
    "method": "REUSE",
+   "status": "reuse",
    "why": "reused: the pilot model (gen/dl)"
   },
   {
    "name": "ropeway_pylon",
    "group": "g1",
    "method": "REUSE",
+   "status": "reuse",
    "why": "reused: the pilot model (gen/dl)"
   },
   {
    "name": "ropeway_bucket",
    "group": "g1",
    "method": "REUSE",
-   "why": "reused: the pilot model (gen/dl)"
+   "status": "dropped",
+   "why": "planned as a reuse of the pilot model (gen/dl), then dropped by the judge (not shipped)"
   },
   {
    "name": "street_lamp",
    "group": "g3",
    "method": "REUSE",
+   "status": "reuse",
    "why": "reused: the pilot model (gen/dl)"
   },
   {
    "name": "headframe_owner",
    "group": "g4",
    "method": "REUSE",
+   "status": "reuse",
    "why": "reused: the owner's model (level/models)"
   },
   {
    "name": "railcar_owner",
    "group": "g4",
    "method": "REUSE",
+   "status": "reuse",
    "why": "reused: the owner's model (level/models)"
   },
   {
    "name": "barrel_owner",
    "group": "g4",
    "method": "REUSE",
+   "status": "reuse",
    "why": "reused: the owner's model (level/models)"
   }
  ],
+ "archive_branch": {
+  "branch": "meshy-models-full",
+  "remote": "origin",
+  "holds": "the full-resolution Meshy output of every asset's final model and of every variant (GLB, texture inside), each character's rigs (rigged model, walk / run) and animation packs (GLB + FBX), the pilot model of the dropped ropeway_bucket, the edited animation GLBs the character atlases were rendered from (g8/<character>/edited/) and the compact sprite-source GLBs that are not in this package (<group>/<asset>/compact/, as each archive_file says); no concepts, previews or other candidates",
+  "fetch": "git fetch origin meshy-models-full && git worktree add ../meshy-full meshy-models-full"
+ },
  "inventory_items_not_planned_for_meshy": [
   {
    "n": 1,

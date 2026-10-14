@@ -1,22 +1,32 @@
 # Meshy asset library: Grube Kattowitz III
 
-The 3D models, pixel sprites and characters generated with Meshy (the owner's Premium account) for the 1957 Upper Silesia level, in two passes: pass 1 generated 60 planned assets in eight groups (and reused 7 pilot and owner models), pass 2 re-rolled the weak ones and added 8 new assets and more animation packs. Every asset was judged by an independent reviewer (scores 0-10, 8+ ships). Built by `tools/bin/assemble.py`; `manifest.json` holds every detail.
+The 3D models, pixel sprites and characters generated with Meshy (the owner's Premium account) for the 1957 Upper Silesia level, in two passes: pass 1 generated 60 planned assets in eight groups (and reused 7 pilot and owner models), pass 2 re-rolled the weak ones and added 8 new assets and more animation packs. Every asset was judged by an independent reviewer (scores 0-10; verdict `ok` ships as it is, `fix` ships with the judge's open notes, `drop` does not ship). Built by `tools/bin/assemble.py`; `manifest.json` holds every detail. The full-resolution Meshy files are on the archive branch `meshy-models-full` (below).
 
 ## What is here
 
 | Path | What |
 |---|---|
 | `manifest.json` | One entry per asset: group, pass, method, layer, size, status, judge score and notes, every Meshy task id (final model, its concept or preview, variants, replaced and rejected tries, candidates, rig, animation packs with action ids and names), the prompts, the credits, the files here. Plus totals, excluded tests and the plan items that were not generated. |
-| `models/<asset>.glb` | The compact GLB each asset's sprites were rendered from: its final pick (a kept pass-2 re-roll wins over pass 1). `models/<asset>__<variant>.glb`: a variant that also ships sprites, while the package stays under 80 MB. |
+| `models/<asset>.glb` | The asset's final compact GLB (a kept pass-2 re-roll wins over pass 1): the model its sprites were rendered from, except where pass 2 replaced the model for Unreal and kept the pass-1 sprites (`conveyor_bridge_truss`, `industrial_chimney`; there the GLB is the pass-2 kit and `models/<asset>__sprite.glb` is the pass-1 GLB the sprites came from) and for the p2new assets (the GLB is the Unreal kit piece, float32 and welded, built from the same Meshy model as the sprite-grade import the sprites were rendered from). `sprite_models` in the manifest maps every sprite to its GLB. `models/<asset>__<variant>.glb`: a variant that also ships sprites, while the package stays under 80 MB. Characters have no file here (see Unreal notes). |
 | `sprites/<group>.png` + `.json` | The sprite atlases exactly as the sprite tool wrote them (g1-g8, p2new). |
 | `characters/<name>.png` + `.json` | The NPC atlases: every clip, right and left facing. |
-| `tools/` | `mk.py` (the budget-guarded Meshy client), `bin/` (batch, sheet, palette, refetch and assemble scripts, `setup_group.sh`), `ms_pilot.mjs` (the library variant of `level/tools/model_sprites.mjs`). |
+| `tools/` | `mk.py` (the budget-guarded Meshy client), `bin/` (batch, sheet, palette, refetch, assemble and archive scripts, `setup_group.sh`), `ms_pilot.mjs` (the library variant of `level/tools/model_sprites.mjs`), `edits/` (the animation GLB edits behind the character atlases: `armfix.py` and its `af_*.json` specs, `texpaint.py` / `glbtex.py` and the courier's spec). |
 
-Size: 79.1 MB in 118 files (69 GLBs). The full-resolution Meshy models are not here: fetch them by task id (below).
+Size: 79.1 MB in 130 files (70 GLBs). The full-resolution Meshy models are not here: they are on the archive branch (next section), and can be fetched again by task id while Meshy still holds them.
+
+## The full-resolution archive branch
+
+`origin/meshy-models-full` (an orphan branch, about 1 GB, kept out of the main history) holds the full-resolution Meshy output of every asset's final model and of every variant (GLB, texture inside), each character's rigs (rigged model, walk / run) and animation packs (GLB + FBX), the pilot model of the dropped ropeway_bucket, the edited animation GLBs the character atlases were rendered from (g8/<character>/edited/) and the compact sprite-source GLBs that are not in this package (<group>/<asset>/compact/, as each archive_file says); no concepts, previews or other candidates. Its `README.md` indexes every file with its Meshy task id. Fetch it on its own:
+
+```sh
+git fetch origin meshy-models-full && git worktree add ../meshy-full meshy-models-full
+```
+
+Layout: `<group>/<asset>/<asset>.glb` (the final model), `<asset>__<variant>.glb` (a variant's model; manifest `tasks.variants[].full_res_archive_file`), `compact/` (the compact GLBs of `sprite_models[].archive_file` and `tasks.variants[].archive_file`), and for each character `<asset>_rigged_character.glb / .fbx`, `_walking`, `_running`, `_anim<n>.glb / .fbx` (the animation packs in the order of `tasks.animations`; a variant rig and its packs carry the variant key, e.g. `miner_hauer_c0_rigged_character.glb`) and `edited/` (see "Edited animations"). Scale: metres as Meshy exported them.
 
 ## The assets
 
-Status: **ok** ships; **fix** ships with the judge's open notes (paint / recipe changes, no credits); **reuse** is a pilot or owner model; **dropped** is not shipped. Pass `1+2`: a pass-1 model with pass-2 animation packs.
+Status: **ok** ships; **fix** ships with the judge's open notes (paint / recipe changes, no credits); **reuse** is a pilot or owner model (shipped; its judge score and notes still apply); **dropped** is not shipped. Pass `1+2`: a pass-1 model with pass-2 animation packs.
 
 ### g1: A/B: Sperrzone, siding and ropeway props (playfield) + bucket v2 + pilot reuse
 
@@ -29,7 +39,7 @@ Status: **ok** ships; **fix** ships with the judge's open notes (paint / recipe 
 | `ropeway_loading_station` | ok | 8 | 2 | IMG | `models/ropeway_loading_station.glb` (2.74 x 1.83 x 1.59 m) | 112 |
 | `searchlight_bracket` | ok | 8 | 1 | T3D | `models/searchlight_bracket.glb` (0.61 x 0.8 x 0.49 m) | 50 |
 | `sandbag_nest` | ok | 8 | 1 | T3D | `models/sandbag_nest.glb` (0.63 x 0.29 x 0.32 m) | 90 |
-| `guard_tower` | reuse | 7.5 | 1 | REUSE | `models/guard_tower.glb` (3.04 x 8.64 x 3.11 m) | pilot 30 |
+| `guard_tower` | reuse | 7.5 | 1 | REUSE | `models/guard_tower.glb` (3.04 x 7.03 x 3.11 m) | pilot 30 |
 | `ropeway_pylon` | reuse | 8 | 1 | REUSE | `models/ropeway_pylon.glb` (1.01 x 4.25 x 0.85 m) | pilot 30 |
 | `ropeway_bucket_v2` | ok | 8.5 | 1 | IMG | `models/ropeway_bucket_v2.glb` (1.83 x 3.14 x 0.93 m) | 57 |
 | `ropeway_bucket` | dropped | 5 | 1 | REUSE | - (2.07 x 2.4 x 1.97 m) | pilot 30 |
@@ -167,19 +177,46 @@ curl -s -H "Authorization: Bearer $MESHY_API_KEY" $API/v1/animations/<id>       
 
 Or with the library's own client: put the key in `tools/.key` (one line, mode 0600; `tools/.gitignore` keeps it and `.auth_header` out of git) and run `python3 tools/mk.py wait <id> --kind <kind> --name <asset>`, which downloads the GLB, OBJ, MTL, texture and thumbnail (rig / animation: GLB + FBX) into `tools/lib/<asset>/<kind>-<id>/` (ignored by git). Models were requested as GLB + OBJ only, so model tasks have no FBX; the rig and animation tasks have GLB and FBX.
 
-**Most task results expire.** Every image-to-3D, multi-image-to-3D, text-to-image, rigging and animation task reports `expires_at` = 72 hours after it was made (t2i 2026-10-16T21:51Z to 2026-10-17T02:16Z, i3d 2026-10-16T22:01Z to 2026-10-17T02:18Z, mi3d 2026-10-16T22:02Z to 2026-10-16T22:04Z, rig 2026-10-16T22:02Z to 2026-10-17T01:57Z, anim 2026-10-16T22:03Z to 2026-10-17T04:43Z); text-to-3D previews and refines report none. Meshy documents `expires_at` as the time the task result expires, so download those models, concepts, rigs and animation packs before then (the gallery links them all; `manifest.json` gives each task's `expires_at`). The text-to-3D models (method T3D) stay on the account and can be fetched by id later. Local copies of every picked task's downloads are in the working directory `meshy/lib/<asset>/<kind>-<id>/` (not in this repository).
+**Most task results expire.** Every image-to-3D, multi-image-to-3D, text-to-image, rigging and animation task reports `expires_at` = 72 hours after it was made (t2i 2026-10-16T21:51Z to 2026-10-17T02:16Z, i3d 2026-10-16T22:01Z to 2026-10-17T02:18Z, mi3d 2026-10-16T22:02Z to 2026-10-16T22:04Z, rig 2026-10-16T22:02Z to 2026-10-17T01:57Z, anim 2026-10-16T22:03Z to 2026-10-17T04:43Z); text-to-3D previews and refines report none. Meshy documents `expires_at` as the time the task result expires, so download those models, concepts, rigs and animation packs before then (the gallery links them all; `manifest.json` gives each task's `expires_at`). The text-to-3D models (method T3D) stay on the account and can be fetched by id later. The archive branch `meshy-models-full` keeps every final and variant model, rig, walk / run and animation pack beyond those dates (not the concepts and the other candidates).
 
 If the rigs and packs are lost they can be rebuilt from the full-resolution GLB: the rigging API also takes a `model_url` (5 credits a rig; `height_meters` as in `tasks.rig[].height_meters`), then re-run the packs on the new rig (3 credits per action, ids and names in `tasks.animations[].actions`): about 454 credits for all 8 rigs and 138 actions. The sprite atlases here do not depend on them.
 
 ## Unreal import notes
 
 - glTF is Y-up, metres; Unreal is Z-up, centimetres. The glTF / Interchange importer converts: 1 m = 100 uu. Import at scale 1.
-- Every compact GLB has its origin at the base: it stands on y = 0 (Unreal z = 0), centred in x and z, so it drops onto the floor. `model_bbox_m` in the manifest is its size in metres (x wide, y tall, z deep).
+- The compact GLBs have their origin at the base: they stand on y = 0 (Unreal z = 0), centred in x and z, so they drop onto the floor. `model_bbox_m` in the manifest is the size in metres (x wide, y tall, z deep). Exceptions, check them before placing (an origin at a mount point such as a hinge or a wall plate, or an off-centre part): `checkpoint_boom_barrier.glb` (bounding box centred at x = -1.657, z = 0 m); `ropeway_pylon.glb` (bounding box centred at x = -0.114, z = 0 m); `wall_bracket_street_lamp.glb` (lowest point at y = 0.275 m, bounding box centred at x = 0.055, z = 0 m).
 - Sizes are real-world metres: the hero is 1.85 m. In the web level 52.5 px = 1 m on the playfield, and a parallax layer's sprite is that times its `scale`; in Unreal place the same models at depth instead of scaling them.
 - The compact GLBs use `KHR_mesh_quantization` (int16 positions under a node scale), except the p2new kit pieces (float32, welded, re-charted UVs). If an importer rejects quantized meshes, dequantize first (glTF-Transform: `gltf-transform dequantize in.glb out.glb`) or import the full-resolution Meshy model by task id.
 - Textures: each compact GLB carries one re-baked JPEG atlas at the texel size in `models.json` (sprite-grade). For close-ups use the Meshy 2k base-colour texture of the final task. Materials are unlit base colour only (no PBR maps were requested).
 - Several kit models were stretched or cut at import to the plan's proportions (spreadX / spreadY, clip boxes); the full-resolution Meshy model is the raw, unstretched mesh. The judge's kit notes (`judge.notes`) say where a piece needs work before Unreal.
-- Characters: Meshy rig, 24 joints, no fingers, height set at rigging (1.65-1.85 m). Use the rig task's FBX (or the animation packs' 30 fps FBX) and retarget to your skeleton with the IK Retargeter. No compact rigged GLB exists, so the characters have no file under `models/`: download them by the rig and animation task ids in the manifest.
+- Characters: Meshy rig, 24 joints, no fingers, height set at rigging (1.65-1.85 m). Use the rig task's FBX (or the animation packs' 30 fps FBX) and retarget to your skeleton with the IK Retargeter. No compact rigged GLB exists, so the characters have no file under `models/`: the rigged models and packs are on the archive branch, and can be re-fetched by the rig and animation task ids in the manifest. Mind the edited clips (next section): for those, import the edited GLB, not the Meshy pack.
+
+## Edited animations: the atlases do not match the raw Meshy packs
+
+Some character clips were rendered from edited copies of Meshy's animation GLBs. An edit keeps Meshy's rig, mesh and clip names and changes only what is listed below. **The Meshy animation packs, rigs and FBX files in the manifest (`tasks.animations`, `tasks.rig`) are unedited.** Imported into Unreal as they are, these clips bring back what the edits removed: an empty arm thrust forward, or raised with an open hand at head height (the salute-like silhouette the atlases avoid). For these clips import the edited GLB from the archive branch (`g8/<character>/edited/<file>`), or re-apply the spec to the Meshy GLB with `python3 tools/edits/armfix.py <animation.glb> <out.glb> tools/edits/<spec>.json`. The edited GLBs are about 81 MB in all, too big for this package. `character.edited_glbs` in the manifest has the same data.
+
+Motion edits (`armfix.py`): within the window, the listed bones' rotation keys are slerped toward a calm pose of the same rig (an arm hanging along the body, or a lowered hold), with smoothstep ramps in and out. The window is the span of changed keys.
+
+| Character | Edited GLB | Made from (Meshy task, file) | Clip -> atlas rows | Bones | Window (s) | Max change | Spec |
+|---|---|---|---|---|---|---|---|
+| `guard_soldier` | `guard_soldier_p2e_fix.glb` | anim `01a1381e-2b61-75d7-947b-ad3aef733daa`, `animation.glb` | `Arise` -> `arise` | LeftShoulder, LeftArm, LeftForeArm, LeftHand | 0.033-1.333 | 81 deg | `af_guard.json` |
+| `patrol_soldier` | `patrol_soldier_p2e_fix.glb` | anim `01a1381e-30cc-7322-977f-1c2b8ed3a500`, `animation.glb` | `Stand_Up1` -> `stand_up` | LeftArm, LeftForeArm, RightArm, RightForeArm | 1.633-2.867 | 74.6 deg | `af_patrol.json` |
+| `regime_officer` | `regime_officer_p2e_fix.glb` | anim `01a1381e-3615-72b8-9ce1-fa3e5e5fb51a`, `animation.glb` | `Phone_Conversation` -> `phone_conversation` | RightShoulder, RightArm, RightForeArm, RightHand | 0-4.833 | 102.8 deg | `af_officer.json` |
+| `regime_officer` | `regime_officer_p2e_fix.glb` | anim `01a1381e-3615-72b8-9ce1-fa3e5e5fb51a`, `animation.glb` | `Arise` -> `arise` | LeftShoulder, LeftArm, LeftForeArm, LeftHand | 0.033-1.333 | 81 deg | `af_officer.json` |
+| `regime_officer` | `regime_officer_p2e_fix.glb` | anim `01a1381e-3615-72b8-9ce1-fa3e5e5fb51a`, `animation.glb` | `Crouch_and_Step_Back` -> `crouch_and_step_back` | RightShoulder, RightArm, RightForeArm, RightHand | 0.533-1.733 | 78.9 deg | `af_officer.json` |
+| `miner_hauer` | `miner_hauer_p2f_fix.glb` | anim `01a138b7-ebd4-7503-a711-658d4063ea7d`, `animation.glb` | `Male_Bend_Over_Pick_Up` -> `bend_over_pick_up` | RightShoulder, RightArm, RightForeArm | 1.967-5.667 | 58.6 deg | `af_miner.json` |
+| `civilian_man` | `civilian_man_p2f_fix.glb` | anim `01a138b8-003a-703a-a9ad-35e0aa431f27`, `animation.glb` | `Sit_on_Chair_Arms_Crossed` -> `sit_arms_crossed` | LeftShoulder, LeftArm, LeftForeArm, LeftHand, RightShoulder, RightArm, RightForeArm, RightHand | 0.033-0.567 | 92 deg | `af_man.json` |
+
+Texture edits: the embedded texture is repainted (`texpaint.py` with `tp_courier.json`: the courier's belt; `glbtex.py` puts the same texture into a later pack); mesh, rig and motion are unchanged:
+
+| Character | Edited GLB | Made from (Meshy task, file) |
+|---|---|---|
+| `resistance_courier` | `courier_animation_fix.glb` | anim `01a13821-2a73-746a-9316-e125de6d7244`, `animation.glb` |
+| `resistance_courier` | `courier_running_fix.glb` | rig `01a13820-b97f-7267-b715-d3a00a363123`, `running.glb` |
+| `resistance_courier` | `courier_walking_fix.glb` | rig `01a13820-b97f-7267-b715-d3a00a363123`, `walking.glb` |
+| `resistance_courier` | `courier_animation_p2f_fix.glb` | anim `01a138b8-0411-7409-b9ae-21a5d49fdbde`, `animation.glb` |
+
+Cut in the atlas instead of edited (the Meshy clip still holds the removed part): `patrol_soldier` `phone_call_gesture` (frames 0-33 of 39 kept): frames 34-38 (5.82-6.5 s) removed in the assembly fix round, both facings: a raised open palm at head height in the left facing and a hand at the cap peak in the right one (the p2e judge's salute rule). Clips left out of an atlas altogether are listed under "What was rejected".
 
 ## Credits
 
@@ -222,7 +259,7 @@ Total: **4 972 credits** in 302 Meshy tasks (ledger `lib/ledger.jsonl`, actual c
 - `lattice_catwalk_section`: replaced `refine` 01a1377e-352c-7476-8c89-9c714946cbfc (pass-1 judge 5): replaced by the pass-2 re-roll (p2b); pass-1 judge: The model is wrong for the Unreal kit: four legs with knee braces (a table), a closed end rail, and an extra stretch z 0.64 in the import.
 - `conveyor_head_drive`: replaced `i3d` 01a13747-6696-779e-b600-110ca2aa6f2f (pass 1): re-rolled in the pass-1 fix round.
 - `shaft_collar_guides`: replaced `i3d` 01a13747-6bf7-71dd-8703-dc91751983fb (pass-1 judge 2): replaced by the pass-2 re-roll (p2b); pass-1 judge: The model is wrong for the job: a 1.77 m open-front brick box, not a 4.6 m shaft back wall with the guides; pass-2 tries not used: `t2i` 01a13830-72e7-777a-95fe-07aa99d008ca (6 credits).
-- `conveyor_bridge_truss`: replaced `i3d` 01a13748-92c8-721e-900d-f5fc5690553e (pass-1 judge 8): replaced by the pass-2 re-roll (p2c); pass-1 judge: For the kit only, later and optional (about 30 credits): T3D preview plus refine, 'a steel Pratt truss conveyor gallery, two straight parallel chords, regular verticals and diagonals, a belt deck inside, open sides, no stairs, no end housings, 8 m long, 1.5 m…; pass-2 tries not used: `t3d` 01a13816-9821-7459-9376-4cd9258cff03 (20 credits).
+- `conveyor_bridge_truss`: pass-2 tries not used: `t3d` 01a13816-9821-7459-9376-4cd9258cff03 (20 credits).
 - `sawtooth_hall`: replaced `i3d` 01a13749-66a1-72f9-a4d7-ef0634f96ce8 (pass-1 judge 6): replaced by the pass-2 re-roll (p2c); pass-1 judge: Wrong type: three symmetric pitched gables with fully glazed gable ends, not the plan's 3-tooth saw-tooth, and the mesh is noisy.
 - `industrial_chimney`: pass-2 tries not used: `t3d` 01a13816-a2fe-7572-98d5-ce1f6e17c91b, `t3d` 01a13816-b0df-7103-87f7-37c87011599e (40 credits).
 - `fg_crane_girder`: pass-2 re-roll dropped (judge 6, p2c): Dropped, as the judge ruled. The pass-2 text-to-3D re-roll failed twice (40 credits: a trestle machine on legs, then a 1.1 : 1 : 1 square frame), and I stopped.
@@ -234,7 +271,7 @@ Candidates that were generated but not picked (other previews and concepts) are 
 
 ## Not generated
 
-Plan items with no Meshy task: `guard_tower` (reused: the pilot model (gen/dl)), `ropeway_pylon` (reused: the pilot model (gen/dl)), `ropeway_bucket` (reused: the pilot model (gen/dl)), `street_lamp` (reused: the pilot model (gen/dl)), `headframe_owner` (reused: the owner's model (level/models)), `railcar_owner` (reused: the owner's model (level/models)), `barrel_owner` (reused: the owner's model (level/models)).
+Plan items with no Meshy task: `guard_tower` (reused: the pilot model (gen/dl)), `ropeway_pylon` (reused: the pilot model (gen/dl)), `ropeway_bucket` (planned as a reuse of the pilot model (gen/dl), then dropped by the judge (not shipped)), `street_lamp` (reused: the pilot model (gen/dl)), `headframe_owner` (reused: the owner's model (level/models)), `railcar_owner` (reused: the owner's model (level/models)), `barrel_owner` (reused: the owner's model (level/models)).
 
 The level inventory has 49 more items the plan kept procedural (tiles, fog, fx, UI and the like; listed in `inventory_items_not_planned_for_meshy`).
 
@@ -242,4 +279,4 @@ The level inventory has 49 more items the plan kept procedural (tiles, fog, fx, 
 
 The scripts in `tools/` expect the library's working layout (`meshy/` with `lib/`, `groups/`, `plan/`); `bin/setup_group.sh` hard-codes that directory in `M=`, so edit it before use.
 
-`tools/bin/assemble.py` rebuilt this directory and the private gallery from the working files (`meshy/` in the scratch area: plan, verdicts, ledger, lib, groups). It is deterministic and reads everything from disk; the Polish gallery texts are in `tools/bin/assemble_pl.json`. `tools/mk.py` is the only way the library touched the Meshy API: every create call is checked against a global cap (`lib/caps.json`) and a per-group cap under a file lock, and the ledger records the estimate and then the actual credits. The key lives in `.key` next to `mk.py` and is never printed.
+`tools/bin/assemble.py` rebuilt this directory and the private gallery from the working files (`meshy/` in the scratch area: plan, verdicts, ledger, lib, groups). It is deterministic and reads everything from disk; the Polish gallery texts are in `tools/bin/assemble_pl.json`. `tools/bin/archive_full.py <worktree> --push` syncs the archive branch from `manifest.json`. `tools/mk.py` is the only way the library touched the Meshy API: every create call is checked against a global cap (`lib/caps.json`) and a per-group cap under a file lock, and the ledger records the estimate and then the actual credits. The key lives in `.key` next to `mk.py` and is never printed.

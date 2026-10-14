@@ -30,6 +30,7 @@ LEVEL = os.path.join(REPO, 'level')
 DEF_REPO_OUT = os.path.join(REPO, 'assets', 'meshy')
 DEF_GALLERY = os.path.join(M, 'gallery')
 SIZE_BUDGET = 80 * 1000 * 1000
+ARCHIVE_BRANCH = 'meshy-models-full'                                   # the full-resolution archive branch on origin
 MODEL_KINDS = ('refine', 'i3d', 'mi3d')
 KIND_ORDER = ['t2i', 't3d', 'refine', 'i3d', 'mi3d', 'rig', 'anim']
 # leak patterns, assembled so this file does not match itself
@@ -158,8 +159,79 @@ def glb_info(path):
         walk(i, I)
     size = [round(hi[k] - lo[k], 2) for k in range(3)] if hi[0] > -math.inf else None
     return {'size_m': size, 'min_y': round(lo[1], 3) if size else None, 'tris': tris,
+            'centre_xz': [round((hi[0] + lo[0]) / 2, 3), round((hi[2] + lo[2]) / 2, 3)] if size else None,
             'animations': [a.get('name', '') for a in j.get('animations', [])], 'skinned': bool(j.get('skins')),
             'extensions': j.get('extensionsUsed', [])}
+
+
+def glb_split(path):
+    """(json, BIN bytes) of a GLB."""
+    with open(path, 'rb') as f:
+        b = f.read()
+    cl = struct.unpack('<I', b[12:16])[0]
+    j = json.loads(b[20:20 + cl])
+    o = 20 + cl
+    binb = b''
+    if o + 8 <= len(b):
+        bl = struct.unpack('<I', b[o:o + 4])[0]
+        binb = b[o + 8:o + 8 + bl]
+    return j, binb
+
+
+def _acc_bytes(j, binb, i):
+    a = j['accessors'][i]; v = j['bufferViews'][a['bufferView']]
+    n = {'SCALAR': 1, 'VEC2': 2, 'VEC3': 3, 'VEC4': 4}[a['type']]
+    o = v.get('byteOffset', 0) + a.get('byteOffset', 0)
+    return binb[o:o + a['count'] * n * 4], n
+
+
+def _floats(bs):
+    return struct.unpack('<%df' % (len(bs) // 4), bs)
+
+
+def clip_label(n):
+    return re.sub(r'^Armature\|', '', n).replace('|baselayer', '')
+
+
+def glb_edit_diff(src, dst):
+    """what an edited copy of a Meshy animation GLB changed: per clip the bones whose rotation keys differ and the time window of the
+    changed keys, plus whether the texture image differs. None when the two do not share the clip list and the node names."""
+    js, bs = glb_split(src); jd, bd = glb_split(dst)
+    if [a.get('name') for a in js.get('animations', [])] != [a.get('name') for a in jd.get('animations', [])]:
+        return None
+    if [n.get('name') for n in js.get('nodes', [])] != [n.get('name') for n in jd.get('nodes', [])]:
+        return None
+    clips = []
+    for an_s, an_d in zip(js.get('animations', []), jd.get('animations', [])):
+        bones, t0, t1, maxdeg = [], None, None, 0.0
+        for ch_s, ch_d in zip(an_s['channels'], an_d['channels']):
+            ss, sd = an_s['samplers'][ch_s['sampler']], an_d['samplers'][ch_d['sampler']]
+            os_, n = _acc_bytes(js, bs, ss['output']); od, _ = _acc_bytes(jd, bd, sd['output'])
+            if os_ == od:
+                continue
+            T = _floats(_acc_bytes(js, bs, ss['input'])[0]); A = _floats(os_); B = _floats(od)
+            ch = []
+            for k in range(min(len(T), len(A) // n)):
+                qa, qb = A[k * n:(k + 1) * n], B[k * n:(k + 1) * n]
+                if qa != qb:
+                    ch.append(T[k])
+                    if n == 4:
+                        d = abs(sum(x * y for x, y in zip(qa, qb)))
+                        maxdeg = max(maxdeg, math.degrees(2 * math.acos(min(1.0, d))))
+            if ch:
+                bones.append('%s.%s' % (jd['nodes'][ch_d['target']['node']].get('name'), ch_d['target']['path']))
+                t0 = ch[0] if t0 is None else min(t0, ch[0]); t1 = ch[-1] if t1 is None else max(t1, ch[-1])
+        if bones:
+            clips.append(OrderedDict([('clip', clip_label(an_d.get('name', ''))), ('channels', bones),
+                                      ('window_s', [round(t0, 3), round(t1, 3)]), ('max_change_deg', round(maxdeg, 1))]))
+    tex = False
+    for ims, imd in zip(js.get('images', []), jd.get('images', [])):
+        if 'bufferView' in ims and 'bufferView' in imd:
+            vs, vd = js['bufferViews'][ims['bufferView']], jd['bufferViews'][imd['bufferView']]
+            a = bs[vs.get('byteOffset', 0):vs.get('byteOffset', 0) + vs['byteLength']]
+            b = bd[vd.get('byteOffset', 0):vd.get('byteOffset', 0) + vd['byteLength']]
+            tex = tex or a != b
+    return {'clips': clips, 'texture': tex}
 
 
 # ---------------------------------------------------------------------------------------------------------------------------- data
@@ -174,6 +246,8 @@ class Data:
         self.load_actions()
         self.load_results()
         self.load_atlases()
+        self.load_edits()
+        self.load_reviews()
 
     # ledger: one row per task, credits = actual when the task finished, else the estimate
     def load_ledger(self):
@@ -274,6 +348,70 @@ class Data:
             self.atlas['level'] = {'png': os.path.join(LEVEL, 'sprites', 'models.png'), 'json': lj, 'sprites': load(lj).get('sprites', {})}
         self._img = {}
 
+    def load_edits(self):
+        """the sprite side's edited copies of Meshy animation GLBs (motion edits by armfix.py, texture repaints by texpaint.py): each is
+        matched to the Meshy file it was made from (same clip list and node names, fewest changed channels) and diffed against it."""
+        self.edits = []
+        self.edit_specs = sorted(glob.glob(os.path.join(GROUPS, 'g8', '*', 'af_*.json')) +
+                                 glob.glob(os.path.join(GROUPS, 'g8', '*', 'fix', 'af_*.json')))
+        spec_of = defaultdict(list)                               # Meshy clip name -> spec files
+        for sf in self.edit_specs:
+            for s in load(sf, []) or []:
+                spec_of[s.get('clip')].append(sf)
+        files = sorted(set(glob.glob(os.path.join(GROUPS, 'g8', '*', 'glb', '*.glb')) +
+                           glob.glob(os.path.join(GROUPS, 'g8', '*', 'fix', 'glb', '*.glb'))))
+        cands = []
+        for p in sorted(glob.glob(os.path.join(LIB, '*', 'anim-*', 'animation.glb')) +
+                        glob.glob(os.path.join(LIB, '*', 'rig-*', '*.glb'))):
+            j = glb_json(p)
+            if j and j.get('animations'):
+                cands.append((p, [a.get('name') for a in j['animations']]))
+        for f in files:
+            jf = glb_json(f)
+            if not jf:
+                continue
+            names = [a.get('name') for a in jf.get('animations', [])]
+            best = None
+            for p, cn in cands:
+                if cn != names:
+                    continue
+                d = glb_edit_diff(p, f)
+                if d is None:
+                    continue
+                score = sum(len(c['channels']) for c in d['clips']) + (1 if d['texture'] else 0)
+                if best is None or score < best[0]:
+                    best = (score, p, d)
+            if not best:
+                continue
+            _, p, d = best
+            tdir = os.path.basename(os.path.dirname(p)); kind, _, tid = tdir.partition('-')
+            asset = os.path.basename(os.path.dirname(os.path.dirname(p)))
+            for c in d['clips']:
+                raw = next((n for n in names if clip_label(n) == c['clip']), c['clip'])
+                sp = spec_of.get(raw, [])
+                own = [s for s in sp if re.sub(r'^af_|\.json$', '', os.path.basename(s)) in asset.split('_')]
+                c['spec'] = ['tools/edits/' + os.path.basename(s) for s in (own or sp)]
+            tools = (['tools/edits/armfix.py'] if d['clips'] else []) + (['tools/edits/texpaint.py', 'tools/edits/glbtex.py']
+                                                                           if d['texture'] else [])
+            self.edits.append(OrderedDict([('file', f), ('asset', asset), ('source_task', tid), ('source_kind', kind),
+                                           ('source_file', os.path.basename(p)), ('bytes', os.path.getsize(f)),
+                                           ('clips', d['clips']), ('texture_repainted', d['texture']), ('tools', tools)]))
+
+    def load_reviews(self):
+        """later judge rounds recorded only in a job's sink_result.json (fix_round: the judge's must-fix items and what was done)."""
+        self.reviews = defaultdict(list)
+        for sf in sorted(glob.glob(os.path.join(GROUPS, '*', 'sink_result.json'))):
+            d = load(sf, {}) or {}
+            fr = d.get('fix_round') or {}
+            if not fr:
+                continue
+            names = {a.get('name') for a in d.get('assets', [])} | {t.get('name') for t in d.get('tasks', [])}
+            for n in sorted(x for x in names if x):
+                mf = [x for x in fr.get('must_fix', []) if n in x]
+                sh = [x for x in fr.get('should_fix', []) if n in x]
+                self.reviews[n].append(OrderedDict([('job', d.get('job')), ('score', None), ('source', clean(sf) + ' fix_round'),
+                                                    ('must_fix_and_done', mf), ('should_fix_and_done', sh)]))
+
     def atlas_img(self, key):
         if key not in self._img:
             self._img[key] = Image.open(self.atlas[key]['png']).convert('RGBA')
@@ -355,6 +493,33 @@ def model_from_entry(D, asset, e):
     if (e.get('glb') or '').startswith(LEVEL):
         return None, 'owner'
     return None, 'proc'
+
+
+def same_bytes(a, b):
+    if not a or not b or not os.path.exists(a) or not os.path.exists(b):
+        return False
+    if os.path.abspath(a) == os.path.abspath(b):
+        return True
+    if os.path.getsize(a) != os.path.getsize(b):
+        return False
+    with open(a, 'rb') as fa, open(b, 'rb') as fb:
+        return fa.read() == fb.read()
+
+
+def sprite_model_glbs(D, sprites, prefer_group=None):
+    """abs paths of the compact GLBs the given sprites were rendered from (the atlas 'model' field, every '+' part)."""
+    out = OrderedDict()
+    for s in sprites or []:
+        if '/' in s:
+            continue
+        k = D.find_sprite(s, [prefer_group] if prefer_group else [])
+        if not k or k == 'level':
+            continue
+        for m in str(D.atlas[k]['sprites'][s].get('model', '')).split('+'):
+            p = os.path.join(GROUPS, k, 'models', m + '.glb') if m else ''
+            if p and os.path.exists(p):
+                out.setdefault(p, []).append(s)
+    return out
 
 
 def final_outputs(asset, files='final.json'):
@@ -489,6 +654,23 @@ def build_asset(D, name, planned):
                 A['kit_glb'] = main_glb
                 main_glb = cand
                 break
+    # pass-1 sprites under a pass-2 / procedural replacement: the GLB the shipped sprites were rendered from is the replaced slot's
+    sprite_glb, sprite_tid = None, None
+    if main and main.get('pass') == 2 and main.get('replaced_slot') and main_glb and not is_char:
+        og = absm(main['replaced_slot']['entry'].get('glb') or '')
+        if og and os.path.exists(og) and og in sprite_model_glbs(D, main['entry'].get('sprites'), group) and \
+                not same_bytes(og, main_glb):
+            sprite_glb = og
+            sprite_tid = model_from_entry(D, name, main['replaced_slot']['entry'])[0]
+            if sprite_tid in replaced_ids:
+                replaced_ids.discard(sprite_tid)
+            if sprite_tid and sprite_tid != mid:
+                roles[sprite_tid] = 'sprite_source'
+                s0 = source_of(D, name, sprite_tid)
+                if s0:
+                    roles.setdefault(s0, 'sprite_source_concept')
+    A['_sprite_glb'] = sprite_glb
+    A['_sprite_tid'] = sprite_tid
     siblings = []
     if main_glb and not is_char and os.path.dirname(main_glb).startswith(GROUPS):
         stem = os.path.splitext(os.path.basename(main_glb))[0]
@@ -673,6 +855,85 @@ def char_info(D, A):
     return out
 
 
+def _norm(s):
+    return re.sub(r'[^a-z0-9]', '', (s or '').lower())
+
+
+def edits_of(D, name):
+    """the manifest records of a character's edited GLBs, each with the atlas rows rendered from the edited clips."""
+    rows_of = defaultdict(list)
+    for c in [name]:
+        j = load(os.path.join(GROUPS, 'g8', 'out', c + '.json'), {}) or {}
+        for k, a in (j.get('anims') or {}).items():
+            rows_of[_norm((a.get('src') or {}).get('clip'))].append(k)
+    out = []
+    for e in D.edits:
+        if e['asset'] != name:
+            continue
+        clips = []
+        for c in e['clips']:
+            rows = rows_of.get(_norm(c['clip']), [])
+            clips.append(OrderedDict([('clip', c['clip']), ('atlas_rows', rows), ('bones', [b.replace('.rotation', '') for b in c['channels']]),
+                                      ('window_s', c['window_s']), ('max_change_deg', c['max_change_deg']), ('spec', c['spec'])]))
+        out.append(OrderedDict([('file', os.path.basename(e['file'])), ('archive_path', '%s/%s/edited/%s' % ('g8', name, os.path.basename(e['file']))),
+                                ('working_copy', clean(e['file'])), ('bytes', e['bytes']),
+                                ('made_from', OrderedDict([('task', e['source_task']), ('kind', e['source_kind']), ('file', e['source_file'])])),
+                                ('motion_edits', clips), ('texture_repainted', e['texture_repainted']), ('tools', e['tools'])]))
+    return out
+
+
+def archive_compact(A, path, prefix=''):
+    """the archive branch path of a compact GLB that is not in this package."""
+    return '%s/%s/compact/%s%s' % (A['group'], A['name'], prefix, os.path.basename(path))
+
+
+def sprite_models_rec(D, A, repo_files):
+    """which compact GLBs the asset's sprites were rendered from, and where each one is: a file of this package (its own, or another
+    asset's identical model), or the archive branch's compact/ folder."""
+    if A['_char'] or A['_how'] == 'owner':
+        return []
+    out = []
+    shipped = getattr(D, 'shipped', {})
+    for p, sps in sprite_model_glbs(D, A['_sprites'], A['group']).items():
+        rf, note, extra = None, '', []
+        if same_bytes(p, A['_glb']):
+            rf = 'models/%s.glb' % A['name']
+        elif p == A.get('_sprite_glb'):
+            rf = 'models/%s__sprite.glb' % A['name']
+            note = ('the pass-1 model the shipped sprites were rendered from; models/%s.glb is the pass-2 %s that replaced it for Unreal'
+                    % (A['name'], 'procedural kit mesh' if A['_how'] == 'proc' else 'kit piece'))
+        else:
+            v = next((v for v in A['_variants'] if v.get('glb') and same_bytes(p, v['glb'])), None)
+            other = next((r for src, r in sorted(shipped.items()) if same_bytes(p, src)), None)
+            if v and v.get('repo_file'):
+                rf = v['repo_file']
+            elif other:
+                rf = other; note = 'the same compact GLB as %s' % other
+            else:
+                af = archive_compact(A, p)
+                extra.append(('archive_file', af))
+                pm = os.path.join(GROUPS, 'p2new', 'models')
+                kit = os.path.join(GROUPS, 'p2new', 'kit', os.path.basename(p))
+                if v:
+                    note = 'a variant GLB over the 80 MB size budget: not in this package, on the archive branch at %s' % af
+                elif os.path.dirname(p) == pm and same_bytes(kit, A['_glb']):
+                    note = ('the sprite-grade import (quantized) of the same Meshy model whose Unreal kit piece (float32, welded, re-charted '
+                            'UVs) ships as models/%s.glb; this import is on the archive branch at %s' % (A['name'], af))
+                elif os.path.dirname(p) == pm and os.path.exists(kit):
+                    kf = archive_compact(A, kit, 'kit_')
+                    extra += [('kit_glb', clean(kit)), ('kit_archive_file', kf)]
+                    note = ('the sprite-grade import of a second model of this asset; it and its Unreal kit piece are on the archive branch '
+                            '(%s, %s)' % (af, kf))
+                elif os.path.dirname(p) == pm:
+                    note = ('a sprite-grade part model, welded with the others into the kit piece models/%s.glb; on the archive branch at %s'
+                            % (A['name'], af))
+                else:
+                    note = 'a helper model of the sprite recipe; on the archive branch at %s' % af
+        out.append(OrderedDict([('model', os.path.splitext(os.path.basename(p))[0]), ('sprites', sps), ('compact_glb', clean(p)),
+                                ('repo_file', rf)] + extra + ([('note', note)] if note else [])))
+    return out
+
+
 # ---------------------------------------------------------------------------------------------------------------------------- manifest
 def manifest_asset(D, A, repo_files):
     roles = A['_roles']
@@ -688,9 +949,16 @@ def manifest_asset(D, A, repo_files):
     m['judge'] = j
     if A['judge_history']:
         m['judge_history'] = A['judge_history']
+    if D.reviews.get(A['name']):
+        j['later_rounds'] = D.reviews[A['name']]
     t = OrderedDict()
     t['final_model'] = task_rec(D, A['_mid'], 'final') if A['_mid'] else None
     t['concept_or_preview'] = task_rec(D, A['_src'], 'source') if A['_src'] else None
+    if A.get('_sprite_tid') and A['_sprite_tid'] != A['_mid']:
+        t['sprite_model'] = task_rec(D, A['_sprite_tid'], 'sprite_source')
+        s0 = source_of(D, A['name'], A['_sprite_tid'])
+        if s0:
+            t['sprite_model']['concept_or_preview'] = task_rec(D, s0, 'sprite_source_concept')
     t['variants'] = []
     for v in A['_variants']:
         vr = OrderedDict([('key', v['key']), ('task', task_rec(D, v['id'], 'variant') if v['id'] else None)])
@@ -705,19 +973,32 @@ def manifest_asset(D, A, repo_files):
         vr['sprites'] = v['sprites']
         vr['repo_file'] = v.get('repo_file')
         vr['compact_glb'] = clean(v['glb']) if v.get('glb') else None
+        if v.get('glb') and not v.get('repo_file'):
+            vr['archive_file'] = archive_compact(A, v['glb'])
+        if vr.get('task') and vr['task'].get('local_copy') and os.path.exists(os.path.join(D.task[v['id']]['dir'], 'model.glb')):
+            vr['full_res_archive_file'] = '%s/%s/%s__%s.glb' % (A['group'], A['name'], A['name'], v['key'])
         t['variants'].append(vr)
     t['replaced'] = [OrderedDict([('task', task_rec(D, r['id'], 'replaced')), ('pass1_judge', r['pass1_judge']), ('why', r['why'])])
                      for r in A['_replaced']]
     t['rejected_pass2_attempt'] = [task_rec(D, i, 'rejected') for i, ro in roles.items() if ro == 'rejected']
     t['candidates'] = [task_rec(D, i, ro) for i, ro in roles.items() if ro in ('candidate', 'variant_source', 'replaced_source')
                        and i != A['_src']]
+    m['sprite_models'] = sprite_models_rec(D, A, repo_files)
     if A['_char']:
         ci = char_info(D, A)
         t['rig'] = ci['rigs']
         t['animations'] = ci['animations']
         m['character'] = OrderedDict([('atlases', ci['atlases']),
-                                      ('rigged_model', 'download via task id (rig task: rigged GLB / FBX + walking / running); the '
-                                       'compact models/%s.glb is the static, unrigged mesh' % A['name'])])
+                                      ('rigged_model', 'no compact rigged GLB: the rig task\'s rigged GLB / FBX + walking / running and '
+                                       'every animation pack are on the archive branch %s (%s/%s/) and can be re-fetched by task id'
+                                       % (ARCHIVE_BRANCH, A['group'], A['name']))])
+        ed = edits_of(D, A['name'])
+        if ed:
+            m['character']['edited_glbs'] = ed
+            m['character']['edited_glbs_note'] = (
+                'The atlases were rendered from these edited copies, not from the Meshy files: the Meshy animation packs and FBX files '
+                'listed under tasks are unedited, so importing them brings back what the edits removed (an empty arm thrust forward or '
+                'raised). For Unreal use the edited GLB (same rig and clip names), or apply the same spec with tools/edits/armfix.py.')
     m['tasks'] = t
     pa = A['_plan'] or {}
     pr = OrderedDict()
@@ -745,7 +1026,8 @@ def manifest_asset(D, A, repo_files):
     if A['_how'] == 'owner':
         notes = ('The owner\'s own model, already in the repository at %s; reused as it is. ' % os.path.relpath(A['_glb'], REPO)) + notes
     if A['_how'] == 'pilot':
-        notes = 'Pilot model (generated before the ledger, gen/dl), reused. ' + notes
+        notes = 'Pilot model (generated before the ledger, gen/dl), %s ' % (
+            'dropped by the judge, not shipped.' if A['status'] == 'dropped' else 'reused.') + notes
     if A['_how'] == 'proc':
         notes = 'Procedural kit mesh; the Meshy task listed as final_model is its texture source. ' + notes
     m['notes'] = notes
@@ -798,6 +1080,9 @@ def write_repo(D, assets, out):
         dst = os.path.join(out, 'models', A['name'] + '.glb')
         copy(A['_glb'], dst)
         files_of[A['name']].insert(0, 'models/%s.glb' % A['name'])
+        if A.get('_sprite_glb'):                                   # pass-1 sprites under a pass-2 kit: their own GLB ships too
+            copy(A['_sprite_glb'], os.path.join(out, 'models', A['name'] + '__sprite.glb'))
+            files_of[A['name']].insert(1, 'models/%s__sprite.glb' % A['name'])
     # tools
     tdir = os.path.join(out, 'tools')
     copy(os.path.join(M, 'mk.py'), os.path.join(tdir, 'mk.py'))
@@ -807,6 +1092,16 @@ def write_repo(D, assets, out):
         if os.path.exists(f):
             copy(f, os.path.join(tdir, 'bin', os.path.basename(f)))
     copy(os.path.join(M, 'pilot', 'ms_pilot.mjs'), os.path.join(tdir, 'ms_pilot.mjs'))
+    # the sprite side's GLB edits: armfix.py + its specs (motion), texpaint.py / glbtex.py + the courier's spec (texture)
+    efiles = list(D.edit_specs)
+    for rel in ('p2e/fix/armfix.py', 'p2e/fix/texpaint.py', 'p2e/fix/glbmesh.py', 'p2e/fix/tp_courier.json', 'p2f/tools/glbtex.py'):
+        efiles.append(os.path.join(GROUPS, 'g8', rel))
+    seen = set()
+    for f in efiles:
+        bn = os.path.basename(f)
+        if os.path.exists(f) and bn not in seen:
+            seen.add(bn)
+            copy(f, os.path.join(tdir, 'edits', bn))
     with open(os.path.join(tdir, '.gitignore'), 'w') as f:
         f.write('# mk.py reads the Meshy API key from tools/.key and writes the auth header to tools/.auth_header: never commit them.\n'
                 '.key\n.auth_header\n# mk.py creates its ledger and downloads under tools/lib/\nlib/\n__pycache__/\n')
@@ -830,6 +1125,14 @@ def write_repo(D, assets, out):
         v['repo_file'] = rf
         files_of[an].append(rf)
         base += size
+    D.shipped = OrderedDict()                                      # compact source GLB -> its file in this package
+    for A in assets:
+        for rf in files_of.get(A['name'], []):
+            if rf.startswith('models/'):
+                srcp = (A['_glb'] if rf == 'models/%s.glb' % A['name'] else A.get('_sprite_glb') if rf.endswith('__sprite.glb') else
+                        next((v['glb'] for v in A['_variants'] if v.get('repo_file') == rf), None))
+                if srcp:
+                    D.shipped[srcp] = rf
     man = manifest(D, assets, files_of)
     with open(os.path.join(out, 'manifest.json'), 'w') as f:
         json.dump(man, f, indent=1, ensure_ascii=False)
@@ -866,6 +1169,10 @@ def manifest(D, assets, files_of):
     tot['characters'] = len(chars)
     tot['character_clips'] = sum(len((load(os.path.join(GROUPS, 'g8', 'out', A['name'] + '.json'), {}) or {}).get('anims', {}))
                                  for A in chars if A['_char_atlases'])
+    tot['character_clips_all_atlases'] = sum(len((load(os.path.join(GROUPS, 'g8', 'out', c + '.json'), {}) or {}).get('anims', {}))
+                                             for A in chars for c in A['_char_atlases'])
+    tot['edited_glbs'] = len(D.edits)
+    tot['edited_clips'] = sum(len(e['clips']) for e in D.edits)
     tot['animation_tasks'] = sum(1 for r in D.ledger if r['kind'] == 'anim')
     tot['animation_actions'] = sum(len(task_rec(D, r['id']).get('actions', [])) for r in D.ledger if r['kind'] == 'anim')
     # excluded ledger entries (tests) and plan items that were not generated
@@ -878,10 +1185,24 @@ def manifest(D, assets, files_of):
         for a in g['assets']:
             if not D.by_name.get(a['name']):
                 A = next((x for x in assets if x['name'] == a['name']), None)
+                src = 'the owner\'s model (level/models)' if A and A['_how'] == 'owner' else 'the pilot model (gen/dl)'
+                if a['method'] != 'REUSE':
+                    why = 'no Meshy task'
+                elif A and A['status'] == 'dropped':
+                    why = 'planned as a reuse of %s, then dropped by the judge (not shipped)' % src
+                else:
+                    why = 'reused: ' + src
                 ng.append(OrderedDict([('name', a['name']), ('group', g['key']), ('method', a['method']),
-                                       ('why', 'reused: ' + ('the owner\'s model (level/models)' if A and A['_how'] == 'owner' else
-                                                            'the pilot model (gen/dl)') if a['method'] == 'REUSE' else 'no Meshy task')]))
+                                       ('status', A['status'] if A else None), ('why', why)]))
     man['plan_items_not_generated'] = ng
+    man['archive_branch'] = OrderedDict([
+        ('branch', ARCHIVE_BRANCH), ('remote', 'origin'),
+        ('holds', 'the full-resolution Meshy output of every asset\'s final model and of every variant (GLB, texture inside), each '
+                  'character\'s rigs (rigged model, walk / run) and animation packs (GLB + FBX), the pilot model of the dropped '
+                  'ropeway_bucket, the edited animation GLBs the character atlases were rendered from (g8/<character>/edited/) and the '
+                  'compact sprite-source GLBs that are not in this package (<group>/<asset>/compact/, as each archive_file says); '
+                  'no concepts, previews or other candidates'),
+        ('fetch', 'git fetch origin %s && git worktree add ../meshy-full %s' % (ARCHIVE_BRANCH, ARCHIVE_BRANCH))])
     used = set()
     for g in D.plan['groups']:
         for a in g['assets']:
@@ -896,6 +1217,51 @@ def fmt_cr(x):
     return '{:,}'.format(int(x)).replace(',', ' ')
 
 
+def edit_section(D, assets, man, w):
+    """README: the edited animation GLBs behind the character atlases, and the clips cut in the atlas instead."""
+    recs = [(ma['name'], e) for ma in man['assets'] for e in ((ma.get('character') or {}).get('edited_glbs') or [])]
+    if not recs:
+        return
+    w('## Edited animations: the atlases do not match the raw Meshy packs\n')
+    w('Some character clips were rendered from edited copies of Meshy\'s animation GLBs. An edit keeps Meshy\'s rig, mesh and clip names '
+      'and changes only what is listed below. **The Meshy animation packs, rigs and FBX files in the manifest (`tasks.animations`, '
+      '`tasks.rig`) are unedited.** Imported into Unreal as they are, these clips bring back what the edits removed: an empty arm '
+      'thrust forward, or raised with an open hand at head height (the salute-like silhouette the atlases avoid). For these clips import '
+      'the edited GLB from the archive branch (`g8/<character>/edited/<file>`), or re-apply the spec to the Meshy GLB with '
+      '`python3 tools/edits/armfix.py <animation.glb> <out.glb> tools/edits/<spec>.json`. The edited GLBs are about %d MB in all, too '
+      'big for this package. `character.edited_glbs` in the manifest has the same data.\n' % round(sum(e['bytes'] for _, e in recs) / 1e6))
+    w('Motion edits (`armfix.py`): within the window, the listed bones\' rotation keys are slerped toward a calm pose of the same rig '
+      '(an arm hanging along the body, or a lowered hold), with smoothstep ramps in and out. The window is the span of changed keys.\n')
+    w('| Character | Edited GLB | Made from (Meshy task, file) | Clip -> atlas rows | Bones | Window (s) | Max change | Spec |')
+    w('|---|---|---|---|---|---|---|---|')
+    for n, e in recs:
+        for c in e['motion_edits']:
+            w('| `%s` | `%s` | %s `%s`, `%s` | `%s` -> %s | %s | %g-%g | %g deg | %s |' % (
+                n, e['file'], e['made_from']['kind'], e['made_from']['task'], e['made_from']['file'], c['clip'],
+                ', '.join('`%s`' % r for r in c['atlas_rows']) or '-', ', '.join(c['bones']), c['window_s'][0], c['window_s'][1],
+                c['max_change_deg'], ', '.join('`%s`' % os.path.basename(s) for s in c['spec'])))
+    tex = [(n, e) for n, e in recs if e['texture_repainted']]
+    if tex:
+        w('')
+        w('Texture edits: the embedded texture is repainted (`texpaint.py` with `tp_courier.json`: the courier\'s belt; `glbtex.py` puts the '
+          'same texture into a later pack); mesh, rig and motion are unchanged:\n')
+        w('| Character | Edited GLB | Made from (Meshy task, file) |')
+        w('|---|---|---|')
+        for n, e in tex:
+            w('| `%s` | `%s` | %s `%s`, `%s` |' % (n, e['file'], e['made_from']['kind'], e['made_from']['task'], e['made_from']['file']))
+    cuts = []
+    for A in assets:
+        for c in A['_char_atlases']:
+            j = load(os.path.join(GROUPS, 'g8', 'out', c + '.json'), {}) or {}
+            for k, a in (j.get('anims') or {}).items():
+                cu = a.get('cut')
+                if isinstance(cu, dict) and cu.get('why'):
+                    cuts.append('`%s` `%s` (frames %d-%d of %d kept): %s' % (c, k, min(cu['kept']), max(cu['kept']), cu['of'], cu['why']))
+    w('')
+    w('Cut in the atlas instead of edited (the Meshy clip still holds the removed part): %s. Clips left out of an atlas altogether are '
+      'listed under "What was rejected".\n' % ('; '.join(cuts) if cuts else 'none'))
+
+
 def readme(D, assets, man, out):
     tot = man['totals']
     L = []
@@ -903,31 +1269,51 @@ def readme(D, assets, man, out):
     w('# Meshy asset library: Grube Kattowitz III\n')
     w('The 3D models, pixel sprites and characters generated with Meshy (the owner\'s Premium account) for the 1957 Upper Silesia level, '
       'in two passes: pass 1 generated %d planned assets in eight groups (and reused %d pilot and owner models), pass 2 re-rolled the '
-      'weak ones and added %d new assets and more animation packs. Every asset was judged by an independent reviewer (scores 0-10, '
-      '8+ ships). Built by `tools/bin/assemble.py`; `manifest.json` holds every detail.\n' % (
+      'weak ones and added %d new assets and more animation packs. Every asset was judged by an independent reviewer (scores 0-10; '
+      'verdict `ok` ships as it is, `fix` ships with the judge\'s open notes, `drop` does not ship). Built by `tools/bin/assemble.py`; '
+      '`manifest.json` holds every detail. The full-resolution Meshy files are on the archive branch `%s` (below).\n' % (
           sum(1 for g in D.plan['groups'] for a in g['assets'] if a['method'] != 'REUSE'),
           sum(1 for g in D.plan['groups'] for a in g['assets'] if a['method'] == 'REUSE'),
-          sum(1 for A in assets if not A['_plan'])))
+          sum(1 for A in assets if not A['_plan']), ARCHIVE_BRANCH))
     w('## What is here\n')
     w('| Path | What |')
     w('|---|---|')
     w('| `manifest.json` | One entry per asset: group, pass, method, layer, size, status, judge score and notes, every Meshy task id '
       '(final model, its concept or preview, variants, replaced and rejected tries, candidates, rig, animation packs with action ids and '
       'names), the prompts, the credits, the files here. Plus totals, excluded tests and the plan items that were not generated. |')
-    w('| `models/<asset>.glb` | The compact GLB each asset\'s sprites were rendered from: its final pick (a kept pass-2 re-roll wins over '
-      'pass 1). `models/<asset>__<variant>.glb`: a variant that also ships sprites, while the package stays under 80 MB. |')
+    sg = [A['name'] for A in assets if A.get('_sprite_glb') and A['status'] not in ('dropped', 'excluded')]
+    w('| `models/<asset>.glb` | The asset\'s final compact GLB (a kept pass-2 re-roll wins over pass 1): the model its sprites were '
+      'rendered from, except where pass 2 replaced the model for Unreal and kept the pass-1 sprites (%s; there the GLB is the pass-2 '
+      'kit and `models/<asset>__sprite.glb` is the pass-1 GLB the sprites came from) and for the p2new assets (the GLB is the Unreal '
+      'kit piece, float32 and welded, built from the same Meshy model as the sprite-grade import the sprites were rendered from). '
+      '`sprite_models` in the manifest maps every sprite to its GLB. `models/<asset>__<variant>.glb`: a variant that also ships '
+      'sprites, while the package stays under 80 MB. Characters have no file here (see Unreal notes). |' % ', '.join('`%s`' % n for n in sg))
     w('| `sprites/<group>.png` + `.json` | The sprite atlases exactly as the sprite tool wrote them (g1-g8, p2new). |')
     w('| `characters/<name>.png` + `.json` | The NPC atlases: every clip, right and left facing. |')
-    w('| `tools/` | `mk.py` (the budget-guarded Meshy client), `bin/` (batch, sheet, palette, refetch and assemble scripts, '
-      '`setup_group.sh`), `ms_pilot.mjs` (the library variant of `level/tools/model_sprites.mjs`). |')
+    w('| `tools/` | `mk.py` (the budget-guarded Meshy client), `bin/` (batch, sheet, palette, refetch, assemble and archive scripts, '
+      '`setup_group.sh`), `ms_pilot.mjs` (the library variant of `level/tools/model_sprites.mjs`), `edits/` (the animation GLB edits '
+      'behind the character atlases: `armfix.py` and its `af_*.json` specs, `texpaint.py` / `glbtex.py` and the courier\'s spec). |')
     w('')
     nmod = len(glob.glob(os.path.join(out, 'models', '*.glb')))
-    w('Size: %.1f MB in %d files (%d GLBs). The full-resolution Meshy models are not here: fetch them by task id (below).\n'
+    w('Size: %.1f MB in %d files (%d GLBs). The full-resolution Meshy models are not here: they are on the archive branch (next '
+      'section), and can be fetched again by task id while Meshy still holds them.\n'
       % (dir_size(out) / 1e6, sum(len(fs) for _, _, fs in os.walk(out)), nmod))
+    ab = man['archive_branch']
+    w('## The full-resolution archive branch\n')
+    w('`origin/%s` (an orphan branch, about 1 GB, kept out of the main history) holds %s. Its `README.md` indexes every file with '
+      'its Meshy task id. Fetch it on its own:\n' % (ARCHIVE_BRANCH, ab['holds']))
+    w('```sh')
+    w(ab['fetch'])
+    w('```\n')
+    w('Layout: `<group>/<asset>/<asset>.glb` (the final model), `<asset>__<variant>.glb` (a variant\'s model; manifest '
+      '`tasks.variants[].full_res_archive_file`), `compact/` (the compact GLBs of `sprite_models[].archive_file` and '
+      '`tasks.variants[].archive_file`), and for each character `<asset>_rigged_character.glb / .fbx`, `_walking`, `_running`, '
+      '`_anim<n>.glb / .fbx` (the animation packs in the order of `tasks.animations`; a variant rig and its packs carry the variant key, '
+      'e.g. `miner_hauer_c0_rigged_character.glb`) and `edited/` (see "Edited animations"). Scale: metres as Meshy exported them.\n')
     # status table
     w('## The assets\n')
     w('Status: **ok** ships; **fix** ships with the judge\'s open notes (paint / recipe changes, no credits); **reuse** is a pilot or '
-      'owner model; **dropped** is not shipped. Pass `1+2`: a pass-1 model with pass-2 animation packs.\n')
+      'owner model (shipped; its judge score and notes still apply); **dropped** is not shipped. Pass `1+2`: a pass-1 model with pass-2 animation packs.\n')
     by_group = OrderedDict()
     for A in assets:
         by_group.setdefault(A['group'], []).append(A)
@@ -1004,16 +1390,34 @@ def readme(D, assets, man, out):
           '`expires_at` = 72 hours after it was made (%s); text-to-3D previews and refines report none. Meshy documents `expires_at` as '
           'the time the task result expires, so download those models, concepts, rigs and animation packs before then (the gallery links '
           'them all; `manifest.json` gives each task\'s `expires_at`). The text-to-3D models (method T3D) stay on the account and can be '
-          'fetched by id later. Local copies of every picked task\'s downloads are in the working directory `meshy/lib/<asset>/<kind>-<id>/` '
-          '(not in this repository).\n' % ', '.join('%s %s to %s' % (k, min(v), max(v)) for k, v in sorted(exp.items(), key=lambda kv: KIND_ORDER.index(kv[0]) if kv[0] in KIND_ORDER else 9)))
+          'fetched by id later. The archive branch `%s` keeps every final and variant model, rig, walk / run and animation pack beyond '
+          'those dates (not the concepts and the other candidates).\n' % (
+              ', '.join('%s %s to %s' % (k, min(v), max(v)) for k, v in sorted(exp.items(), key=lambda kv: KIND_ORDER.index(kv[0]) if kv[0] in KIND_ORDER else 9)),
+              ARCHIVE_BRANCH))
         w('If the rigs and packs are lost they can be rebuilt from the full-resolution GLB: the rigging API also takes a `model_url` '
           '(5 credits a rig; `height_meters` as in `tasks.rig[].height_meters`), then re-run the packs on the new rig (3 credits per action, '
           'ids and names in `tasks.animations[].actions`): about %d credits for all %d rigs and %d actions. The sprite atlases here do not '
           'depend on them.\n' % (nrig * 5 + nact * 3, nrig, nact))
     w('## Unreal import notes\n')
     w('- glTF is Y-up, metres; Unreal is Z-up, centimetres. The glTF / Interchange importer converts: 1 m = 100 uu. Import at scale 1.')
-    w('- Every compact GLB has its origin at the base: it stands on y = 0 (Unreal z = 0), centred in x and z, so it drops onto the floor. '
-      '`model_bbox_m` in the manifest is its size in metres (x wide, y tall, z deep).')
+    offs = []
+    for f in sorted(glob.glob(os.path.join(out, 'models', '*.glb'))):
+        gi = glb_info(f)
+        if not gi or not gi['size_m']:
+            continue
+        c = gi['centre_xz']
+        why = []
+        if abs(gi['min_y']) > 0.01:
+            why.append('lowest point at y = %g m' % gi['min_y'])
+        if abs(c[0]) > 0.05 or abs(c[1]) > 0.05:
+            why.append('bounding box centred at x = %g, z = %g m' % (c[0], c[1]))
+        if why:
+            offs.append('`%s` (%s)' % (os.path.basename(f), ', '.join(why)))
+    w('- The compact GLBs have their origin at the base: they stand on y = 0 (Unreal z = 0), centred in x and z, so they drop onto the '
+      'floor. `model_bbox_m` in the manifest is the size in metres (x wide, y tall, z deep).' + (
+          ' Exceptions, check them before placing (an origin at a mount point such as a hinge or a wall plate, or an off-centre part): %s.'
+          % '; '.join(offs)
+          if offs else ''))
     w('- Sizes are real-world metres: the hero is 1.85 m. In the web level 52.5 px = 1 m on the playfield, and a parallax layer\'s sprite '
       'is that times its `scale`; in Unreal place the same models at depth instead of scaling them.')
     w('- The compact GLBs use `KHR_mesh_quantization` (int16 positions under a node scale), except the p2new kit pieces (float32, welded, '
@@ -1025,8 +1429,10 @@ def readme(D, assets, man, out):
       'Meshy model is the raw, unstretched mesh. The judge\'s kit notes (`judge.notes`) say where a piece needs work before Unreal.')
     w('- Characters: Meshy rig, 24 joints, no fingers, height set at rigging (1.65-1.85 m). Use the rig task\'s FBX (or the animation '
       'packs\' 30 fps FBX) and retarget to your skeleton with the IK Retargeter. No compact rigged GLB exists, so the characters have '
-      'no file under `models/`: download them by the rig and animation task ids in the manifest.')
+      'no file under `models/`: the rigged models and packs are on the archive branch, and can be re-fetched by the rig and animation '
+      'task ids in the manifest. Mind the edited clips (next section): for those, import the edited GLB, not the Meshy pack.')
     w('')
+    edit_section(D, assets, man, w)
     w('## Credits\n')
     w('Total: **%s credits** in %d Meshy tasks (ledger `lib/ledger.jsonl`, actual consumed credits), plus %s credits of the pilot made '
       'before the ledger.\n' % (fmt_cr(tot['credits']), tot['tasks'], fmt_cr(tot['pilot_before_ledger'])))
@@ -1081,7 +1487,7 @@ def readme(D, assets, man, out):
       'hard-codes that directory in `M=`, so edit it before use.\n')
     w('`tools/bin/assemble.py` rebuilt this directory and the private gallery from the working files (`meshy/` in the scratch area: '
       'plan, verdicts, ledger, lib, groups). It is deterministic and reads everything from disk; the Polish gallery texts are in '
-      '`tools/bin/assemble_pl.json`. `tools/mk.py` is the only way the library touched the Meshy API: every create call is checked '
+      '`tools/bin/assemble_pl.json`. `tools/bin/archive_full.py <worktree> --push` syncs the archive branch from `manifest.json`. `tools/mk.py` is the only way the library touched the Meshy API: every create call is checked '
       'against a global cap (`lib/caps.json`) and a per-group cap under a file lock, and the ledger records the estimate and then the '
       'actual credits. The key lives in `.key` next to `mk.py` and is never printed.\n')
     return '\n'.join(L)
@@ -1196,30 +1602,72 @@ class Gallery:
         im = Image.open(os.path.join(GROUPS, 'g8', 'out', atlas + '.png')).convert('RGBA')
         return (im.crop((f['x'], f['y'], f['x'] + f['w'], f['y'] + f['h'])), f['ax'], f['ay'], 1)
 
+    def frame_cell(self, src, f):
+        """a frame as the engine draws it: the figure with its per-frame prop (frames[i].prop: a sprite of the g8 atlas at x / y relative
+        to the frame rect, layer over / under) composited; -> (image, ax, ay, prop sprite name or None)."""
+        fig = src.crop((f['x'], f['y'], f['x'] + f['w'], f['y'] + f['h']))
+        pr = f.get('prop')
+        MJ = self.D.atlas.get('g8', {}).get('sprites', {})
+        if not isinstance(pr, dict) or pr.get('sprite') not in MJ:
+            return fig, f['ax'], f['ay'], None
+        sp = MJ[pr['sprite']]
+        P = self.D.atlas_img('g8').crop((sp['x'], sp['y'], sp['x'] + sp['w'], sp['y'] + sp['h']))
+        x0, y0 = min(0, pr['x']), min(0, pr['y'])
+        x1, y1 = max(f['w'], pr['x'] + sp['w']), max(f['h'], pr['y'] + sp['h'])
+        c = Image.new('RGBA', (x1 - x0, y1 - y0), (0, 0, 0, 0))
+        if pr.get('layer') == 'under':
+            c.alpha_composite(P, (pr['x'] - x0, pr['y'] - y0)); c.alpha_composite(fig, (-x0, -y0))
+        else:
+            c.alpha_composite(fig, (-x0, -y0)); c.alpha_composite(P, (pr['x'] - x0, pr['y'] - y0))
+        return c, f['ax'] - x0, f['ay'] - y0, pr['sprite']
+
     def clip_sheet(self, atlas, name):
-        """one PNG per character: a row per clip (right facing), every frame in a fixed cell aligned on the anchor."""
+        """two PNGs per character atlas (right and left facing) with one shared geometry: a row per clip, every frame in a fixed cell
+        aligned on the anchor, its per-frame prop composited (flashlight, pistol, crate) as the engine draws it."""
         j = load(os.path.join(GROUPS, 'g8', 'out', atlas + '.json'), {})
         src = Image.open(os.path.join(GROUPS, 'g8', 'out', atlas + '.png')).convert('RGBA')
         an = j.get('anims', {})
-        up = max(f['ay'] for a in an.values() for f in a['frames'])
-        down = max(f['h'] - f['ay'] for a in an.values() for f in a['frames'])
+        lan = (j.get('left') or {}).get('anims', {})
+        cells = OrderedDict()
+        for k, a in an.items():
+            cells[k] = {'right': [self.frame_cell(src, f) for f in a['frames']],
+                        'left': [self.frame_cell(src, f) for f in (lan.get(k) or {}).get('frames', [])]}
+        allc = [c for v in cells.values() for side in v.values() for c in side]
+        up = max(c[2] for c in allc)
+        down = max(c[0].height - c[2] for c in allc)
         CH = up + down + 2
         rows = []
-        for k, a in an.items():
-            fr = a['frames']
-            L = max(f['ax'] for f in fr) + 1; R = max(f['w'] - f['ax'] for f in fr) + 1
-            rows.append((k, a, fr, L, L + R))
-        W = max(len(fr) * cw for _, _, fr, _, cw in rows)
-        sheet = Image.new('RGBA', (W, CH * len(rows)), (0, 0, 0, 0))
+        for k, v in cells.items():
+            both = v['right'] + v['left']
+            L = max(c[1] for c in both) + 1; R = max(c[0].width - c[1] for c in both) + 1
+            n = max(len(v['right']), len(v['left']))
+            rows.append((k, an[k], v, L, L + R, n))
+        # shelf packing (next fit, clip order): a clip's frames stay in one horizontal run, several short clips share a shelf, so the
+        # sheet is a few shelves tall instead of one row per clip (a fraction of the decoded size: easier on phones)
+        W = max(n * cw for _, _, _, _, cw, n in rows)
+        place, x, shelf = [], 0, 0
+        for _, _, _, _, cw, n in rows:
+            if x and x + n * cw > W:
+                shelf += 1; x = 0
+            place.append((x, shelf)); x += n * cw
+        sheets = {s: Image.new('RGBA', (W, CH * (shelf + 1)), (0, 0, 0, 0)) for s in ('right', 'left')}
         meta = []
-        for i, (k, a, fr, L, cw) in enumerate(rows):
-            for n, f in enumerate(fr):
-                im = src.crop((f['x'], f['y'], f['x'] + f['w'], f['y'] + f['h']))
-                sheet.alpha_composite(im, (n * cw + L - f['ax'], i * CH + 1 + up - f['ay']))
-            meta.append({'clip': k, 'row': i, 'cw': cw, 'n': len(fr), 'fps': a.get('fps') or 8, 'loop': a.get('loop'),
-                         'pack': a.get('pack'), 'needs': a.get('needs'), 'src': (a.get('src') or {}).get('clip')})
-        url = self.save(sheet, name, format='PNG', optimize=True)
-        return url, sheet.width, sheet.height, CH, meta, j.get('excluded', {})
+        for i, (k, a, v, L, cw, n) in enumerate(rows):
+            x0, sh = place[i]
+            props = set()
+            for side in ('right', 'left'):
+                for m_, (im, ax, ay, pn) in enumerate(v[side]):
+                    sheets[side].alpha_composite(im, (x0 + m_ * cw + L - ax, sh * CH + 1 + up - ay))
+                    if pn:
+                        props.add(re.sub(r'_(l|toward|away)$', '', pn))
+            meta.append({'clip': k, 'row': sh, 'x0': x0, 'cw': cw, 'n': n, 'fps': a.get('fps') or 8, 'loop': a.get('loop'),
+                         'pack': a.get('pack'), 'needs': a.get('needs'), 'src': (a.get('src') or {}).get('clip'),
+                         'props': sorted(props), 'rifle': ((a.get('prop') or {}).get('rifle') if isinstance(a.get('prop'), dict) else None)
+                         if ((a.get('prop') or {}).get('rifle') if isinstance(a.get('prop'), dict) else None) not in (None, 'none', False) else None,
+                         'cut': a.get('cut'), 'nl': len(v['left'])})
+        url = self.save(sheets['right'], name, format='PNG', optimize=True)
+        url_l = self.save(sheets['left'], name.replace('.png', '_l.png'), format='PNG', optimize=True)
+        return url, url_l, W, CH * (shelf + 1), CH, meta, j.get('excluded', {})
 
     # ---- links
     def links(self, tid):
@@ -1348,10 +1796,21 @@ class Gallery:
         v = pl.get('v') or self.generic_verdict(A)
         h.append('<p class="verdict">%s</p>' % E(v))
         h.append(stage)
+        if A.get('_sprite_glb'):
+            pv = (A['_main'] or {}).get('p1verdict')
+            s1 = pv[1].get('score') if pv else None
+            proc = A['_how'] == 'proc'
+            h.append('<p class="srcnote">Sprite\'y pochodzą z modelu z pass 1: <code>models/%s__sprite.glb</code>%s. <code>models/%s.glb</code> '
+                     'to %s z pass 2 (ocena %s/10)%s.</p>' % (
+                         E(n), (' (ocena w pass 1: %s/10)' % pl_num(s1)) if s1 is not None else '', E(n),
+                         'kit do Unreal toczony w Pythonie z teksturą Meshy' if proc else 'nowy model do Unreal',
+                         pl_num(A['judge']['score']),
+                         '; miniatura i linki to zadanie Meshy z pass 1, z którego kit wziął teksturę, a wymiary modelu to kit' if proc else
+                         '; miniatura, wymiary i linki „Model” dotyczą modelu z pass 2'))
         facts = []
         bbox = ma.get('model_bbox_m')
         if A['size_m']:
-            facts.append(('Rozmiar (plan)', A['size_m']))
+            facts.append(('Rozmiar w planie', self.pl_size(A['size_m'])))
         if bbox:
             facts.append(('Model', '%s m · %s trójkątów' % (' × '.join(pl_num(x, 2) for x in bbox), pl_num(ma.get('model_triangles')))))
         lay = A['layer']
@@ -1360,10 +1819,11 @@ class Gallery:
         if not lay and items and not A['_char']:
             k = D.find_sprite(names[0], [A['group']]) if names else None
             sj = D.atlas[k]['sprites'].get(names[0], {}) if k else {}
-            lay = '%s %s' % ({'play': 'playfield', 'mover': 'playfield (ruchomy)'}.get(sj.get('layer'), sj.get('layer', '')),
-                             ('%.2f' % (sj.get('scale', 1) or 1)).rstrip('0').rstrip('.') if (sj.get('scale', 1) or 1) != 1 else '1.0') if sj else None
+            lay = '%s %s%s' % ({'play': 'playfield', 'mover': 'playfield'}.get(sj.get('layer'), sj.get('layer', '')),
+                               ('%.2f' % (sj.get('scale', 1) or 1)).rstrip('0').rstrip('.') if (sj.get('scale', 1) or 1) != 1 else '1.0',
+                               ' (mover)' if sj.get('layer') == 'mover' else '') if sj else None
         if lay:
-            facts.append(('Warstwa', lay))
+            facts.append(('Warstwa', self.pl_layer(lay)))
         meth = (self.pl.get('methods') or {}).get(A['method'], A['method'])
         facts.append(('Metoda', meth or '–'))
         cr = A['credits']
@@ -1381,6 +1841,11 @@ class Gallery:
                 lab = 'Model' if A['_how'] != 'proc' else 'Źródło tekstury'
                 dl.append('<div class="dl-row"><span class="dl-lab">%s <code>%s</code></span>%s</div>' % (
                     lab, E(D.kind(A['_mid']) or ''), self.link_html(ln)))
+        if A.get('_sprite_tid') and A['_sprite_tid'] != A['_mid']:
+            ln = self.links(A['_sprite_tid'])
+            if ln:
+                dl.append('<div class="dl-row"><span class="dl-lab">Model sprite\'ów (pass 1) <code>%s</code></span>%s</div>' % (
+                    E(D.kind(A['_sprite_tid']) or ''), self.link_html(ln)))
         for vv in A['_variants']:
             if vv.get('id'):
                 ln = self.links(vv['id'])
@@ -1408,6 +1873,7 @@ class Gallery:
             h.append('<div class="downloads"><h4>Model</h4><p class="muted">W repozytorium: <code>%s</code></p></div>' % E(
                 os.path.relpath(A['_glb'], REPO)))
         if A['_char']:
+            h.append(self.edited_block(A))
             h.append(self.char_block(A))
         # task ids
         rows = []
@@ -1418,6 +1884,8 @@ class Gallery:
                     E(lab), E(rec['id']), E(rec.get('kind') or ''), (' · %s kr.' % pl_num(rec['credits'])) if rec.get('credits') else ''))
         tr('model końcowy', t.get('final_model'))
         tr('koncept / podgląd', t.get('concept_or_preview'))
+        tr('model sprite\'ów (pass 1)', t.get('sprite_model'))
+        tr('jego koncept', (t.get('sprite_model') or {}).get('concept_or_preview'))
         for vr in t.get('variants', []):
             tr('wariant ' + vr['key'], vr.get('task'))
         for r in t.get('replaced', []):
@@ -1436,6 +1904,22 @@ class Gallery:
         h.append('</article>')
         return '\n'.join(h)
 
+    def pl_size(self, s):
+        """the plan's size string -> 'w × h × d m' (the English detail in brackets stays in the manifest)."""
+        m = re.match(r'\s*([\d.]+)\s*x\s*([\d.]+)\s*x\s*([\d.]+)', str(s))
+        if not m:
+            return str(s)
+        return '%s × %s × %s m' % tuple(x.replace('.', ',') for x in m.groups())
+
+    def pl_layer(self, s):
+        """the plan's layer string in Polish: the phrase table in assemble_pl.json (longest first, whole words), decimal commas."""
+        tab = self.pl.get('layers') or {}
+        if tab:
+            keys = sorted(tab, key=len, reverse=True)
+            rx = re.compile(r'(?<![\w-])(' + '|'.join(re.escape(k) for k in keys) + r')(?![\w-])')
+            s = rx.sub(lambda mm: tab[mm.group(1)], str(s))
+        return re.sub(r'(\d)\.(\d)', r'\1,\2', s)
+
     def generic_verdict(self, A):
         st = A['status']
         return {'ok': 'Sędzia: gotowe do użycia.', 'fix': 'Sędzia: do użycia, z uwagami do poprawki.', 'reuse': 'Ponownie użyty model.',
@@ -1443,18 +1927,39 @@ class Gallery:
 
     def char_block(self, A):
         h = []
+        props_pl = self.pl.get('props') or {}
+        modes_pl = self.pl.get('rifle_modes') or {}
         for i, c in enumerate(A['_char_atlases']):
-            url, SW, SH, CH, meta, excl = self.clip_sheet(c, 'c_%s.png' % c)
+            url, url_l, SW, SH, CH, meta, excl = self.clip_sheet(c, 'c_%s.png' % c)
             title = 'Klipy' if i == 0 else 'Klipy wariantu %s' % c.replace(A['name'] + '_', '')
-            h.append('<div class="clips"><h4>%s: %d <span class="muted">(prawa strona; atlas ma też lewą)</span></h4><div class="clip-grid">' % (
-                E(title), len(meta)))
+            h.append('<div class="clips" data-r="%s" data-l="%s" style="--sheet:url(%s)"><div class="clips-head"><h4>%s: %d</h4>'
+                     '<button type="button" class="face" aria-pressed="false">Pokaż stronę lewą</button></div>' % (
+                         url, url_l, url, E(title), len(meta)))
+            if any(m['props'] for m in meta) or any(m['rifle'] for m in meta):
+                h.append('<p class="clip-legend muted">Rekwizyty z atlasu g8 (%s) są dorysowane klatka po klatce, tak jak rysuje je gra. '
+                         'Karabin<sup>*</sup> rysuje silnik według trybu klipu, więc na tym podglądzie go nie ma.</p>' % E(', '.join(
+                             sorted({props_pl.get(p, p) for m in meta for p in m['props']})) or '–'))
+            h.append('<div class="clip-grid">')
             for m in meta:
                 dur = m['n'] / float(m['fps'])
-                badge = '' if not m.get('pack') else '<span class="tag">pakiet %s</span>' % E(str(m['pack']))
-                h.append('<div class="clip%s"><div class="player" role="img" aria-label="%s" style="--cw:%d;--ch:%d;--n:%d;--row:%d;--sw:%d;--sh:%d;'
-                         '--dur:%.3fs;background-image:url(%s)"></div><div class="clip-name">%s</div><div class="clip-meta">%d kl. · %s fps%s</div>%s</div>' % (
-                             ' span2' if m['cw'] * 2 > 138 else '', E('Animacja %s' % m['clip']), m['cw'], CH, m['n'], m['row'], SW, SH, dur, url, E(m['clip']), m['n'],
-                             pl_num(m['fps']), ' · pętla' if m['loop'] else '', badge))
+                badges = []
+                if m.get('pack'):
+                    badges.append('<span class="tag">pakiet %s</span>' % E(str(m['pack'])))
+                for p in m['props']:
+                    badges.append('<span class="tag prop">+ %s</span>' % E(props_pl.get(p, p)))
+                if m.get('rifle'):
+                    badges.append('<span class="tag eng" title="%s">karabin: %s<sup>*</sup></span>' % (
+                        E('Karabin dorysowuje silnik gry (tryb %s); na tym podglądzie go nie ma.' % m['rifle'], quote=True),
+                        E(modes_pl.get(m['rifle'], m['rifle']))))
+                if m.get('cut'):
+                    cu = m['cut']
+                    tip = cu.get('why') if isinstance(cu, dict) and cu.get('why') else (
+                        'zachowane klatki %s z %s' % (len(cu.get('kept', [])), cu.get('of')) if isinstance(cu, dict) else str(cu))
+                    badges.append('<span class="tag" title="%s">skrócony</span>' % E(tip, quote=True))
+                h.append('<div class="clip%s"><div class="player" role="img" aria-label="%s" style="--cw:%d;--ch:%d;--n:%d;--row:%d;--x0:%d;--sw:%d;--sh:%d;'
+                         '--dur:%.3fs"></div><div class="clip-name">%s</div><div class="clip-meta">%d kl. · %s fps%s</div><div class="badges">%s</div></div>' % (
+                             ' span2' if m['cw'] * 2 > 138 else '', E('Animacja %s' % m['clip']), m['cw'], CH, m['n'], m['row'], m['x0'], SW, SH, dur,
+                             E(m['clip']), m['n'], pl_num(m['fps']), ' · pętla' if m['loop'] else '', ''.join(badges)))
             h.append('</div>')
             if excl:
                 h.append('<p class="excluded">Wyłączone z atlasu: %s</p>' % ', '.join('<code title="%s">%s</code>' % (E(why, quote=True), E(k))
@@ -1462,17 +1967,40 @@ class Gallery:
             h.append('<details class="strips"><summary>Pasy klatek (×1)</summary><div class="strip-list">')
             for m in meta:
                 h.append('<div class="strip"><span>%s</span><div class="strip-scroll"><div class="strip-img" style="width:%dpx;height:%dpx;'
-                         'background-image:url(%s);background-position:0 -%dpx"></div></div></div>' % (
-                             E(m['clip']), m['cw'] * m['n'], CH, url, m['row'] * CH))
+                         'background-position:-%dpx -%dpx"></div></div></div>' % (E(m['clip']), m['cw'] * m['n'], CH, m['x0'], m['row'] * CH))
             h.append('</div></details></div>')
         return '\n'.join(h)
+
+    def edited_block(self, A):
+        """a character's edited animation GLBs: where they are and which clips differ from the Meshy downloads."""
+        ma = next(x for x in self.man['assets'] if x['name'] == A['name'])
+        ed = (ma.get('character') or {}).get('edited_glbs') or []
+        if not ed:
+            return ''
+        rows = []
+        for e in ed:
+            what = '; '.join('%s → %s (%s, %s–%s s)' % (c['clip'], ', '.join(c['atlas_rows']) or '–', ', '.join(c['bones']),
+                                                        pl_num(c['window_s'][0], 2), pl_num(c['window_s'][1], 2)) for c in e['motion_edits'])
+            if e['texture_repainted']:
+                what = (what + '; ' if what else '') + 'tekstura z domalowanym paskiem'
+            rows.append('<li><code>%s</code> <span class="muted">(z %s <code>%s</code>)</span>: %s</li>' % (
+                E(e['archive_path']), E(e['made_from']['kind']), E(e['made_from']['task'][:13]), E(what)))
+        motion = any(e['motion_edits'] for e in ed)
+        tex = any(e['texture_repainted'] for e in ed)
+        why = []
+        if motion:
+            why.append('w poprawionych klipach puste ramię wychodzi tam do przodu albo w górę')
+        if tex:
+            why.append('tekstura nie ma domalowanego paska')
+        return ('<div class="edited"><h4>Poprawione animacje</h4><p>Część klipów w atlasie wyrenderowano z poprawionych kopii GLB, nie z plików '
+                'Meshy. Pakiety do pobrania powyżej są oryginalne (%s). Do Unreal weź poprawione GLB z gałęzi <code>%s</code>:</p>'
+                '<ul>%s</ul></div>' % ('; '.join(why), ARCHIVE_BRANCH, ''.join(rows)))
 
     def page(self, cards):
         D, man, pl = self.D, self.man, self.pl
         tot = man['totals']
         grp_titles = pl.get('groups', {})
         exp_min = min(self.expiries) if self.expiries else None
-        texp = (min(self.task_expiries), max(self.task_expiries)) if self.task_expiries else None
         kinds = tot['by_kind']
         kmax = max(kinds.values()) if kinds else 1
         knames = pl.get('kinds', {})
@@ -1482,25 +2010,36 @@ class Gallery:
         st = tot['by_status']
         sorder = ['ok', 'fix', 'reuse', 'dropped', 'excluded', 'not generated']
         stat_line = ', '.join('%s %s' % (pl_num(st[k]), (pl.get('status') or {}).get(k, k)) for k in sorted(st, key=lambda k: (sorder.index(k) if k in sorder else 9, k)))
-        nchar = tot['characters']; nclips = tot['character_clips']
+        nchar = tot['characters']; nclips = tot.get('character_clips_all_atlases') or tot['character_clips']
+        nvar = nclips - tot['character_clips']
         tiles = [('Kredyty', pl_num(tot['credits']), '+ %s w pilocie, %s zadań Meshy' % (pl_num(tot['pilot_before_ledger']), pl_num(tot['tasks']))),
                  ('Assety', pl_num(tot['assets']), stat_line),
                  ('Postacie', pl_num(nchar), 'z riggiem Meshy'),
-                 ('Klipy', pl_num(nclips), '%s pakietów animacji, %s akcji' % (pl_num(tot['animation_tasks']), pl_num(tot['animation_actions'])))]
+                 ('Klipy', pl_num(nclips), '%s%s pakietów animacji, %s akcji' % (
+                     ('w tym %s w wariancie górnika c0; ' % pl_num(nvar)) if nvar else '', pl_num(tot['animation_tasks']),
+                     pl_num(tot['animation_actions'])))]
         tiles_html = ''.join('<div class="tile"><div class="tile-lab">%s</div><div class="tile-num">%s</div><div class="tile-sub">%s</div></div>'
                              % (E(a), E(b), E(c)) for a, b, c in tiles)
         summ = pl.get('summary', {})
-        exp_html = ''
-        if exp_min or texp:
-            parts = []
-            if exp_min:
-                parts.append('Linki do pobrania to podpisane adresy Meshy, ważne najwcześniej do <b>%s</b>; nowe linki daje API po ID zadania '
-                             '(instrukcja w README pakietu w repozytorium).' % E(pl_date(exp_min)))
-            if texp:
-                parts.append('Wyniki zadań image-to-3D, konceptów, riggingu i animacji Meshy przechowuje tylko 72 godziny: wygasają od <b>%s</b> '
-                             'do <b>%s</b>. Pobierz te pliki przed tym terminem. Modele text-to-3D (metoda T3D) zostają na koncie i da się je '
-                             'pobrać później po ID zadania.' % (E(pl_date(texp[0])), E(pl_date(texp[1]))))
-            exp_html = '<aside class="notice"><p>%s</p></aside>' % ' '.join(parts)
+        # task expiry over every ledger task (concepts included, though the page links none of them)
+        tx = []
+        for r in D.ledger:
+            e = (D.tjson(r['id']) or {}).get('expires_at')
+            if e:
+                tx.append((e / 1000, r['kind']))
+        kn = pl.get('kinds', {})
+        parts = ['Pełne modele są też w repozytorium, na osobnej gałęzi <code>%s</code> (ok. 1 GB, poza główną historią): model końcowy '
+                 'i warianty każdego assetu, a dla postaci rigi, chód, bieg, wszystkie pakiety animacji i poprawione GLB, z których wyrenderowano atlasy. '
+                 'Nie ma tam konceptów ani pozostałych kandydatów. Pobranie: <code>git fetch origin %s</code>.' % (ARCHIVE_BRANCH, ARCHIVE_BRANCH)]
+        if exp_min:
+            parts.append('Linki na tej stronie to podpisane adresy Meshy; pierwsze z nich przestaną działać <b>%s</b>. Nowe linki daje API po '
+                         'ID zadania (instrukcja w README pakietu w repozytorium).' % E(pl_date(exp_min)))
+        if tx:
+            t0, k0 = min(tx); t1 = max(tx)[0]
+            parts.append('Same wyniki zadań image-to-3D, konceptów, riggingu i animacji Meshy trzyma tylko 72 godziny: wygasają od <b>%s</b> '
+                         '(%s) do <b>%s</b>. Modele text-to-3D (metoda T3D) zostają na koncie i da się je pobrać później po ID zadania.' % (
+                             E(pl_date(t0)), E(kn.get(k0, k0)), E(pl_date(t1))))
+        exp_html = '<aside class="notice">%s</aside>' % ''.join('<p>%s</p>' % x for x in parts)
         nav = ''.join('<a class="navchip" href="#%s">%s <span>%d</span></a>' % (E(g), E(g), len(cs)) for g, cs in cards.items())
         secs = []
         for g, cs in cards.items():
@@ -1569,7 +2108,7 @@ h1{font-size:clamp(2rem,6vw,3.4rem);letter-spacing:.01em;text-transform:uppercas
 .summary ul{margin:0;padding-left:1.1em;display:grid;gap:6px}
 .summary h3{font-size:1rem;text-transform:uppercase;letter-spacing:.08em;margin:12px 0 6px;color:var(--muted)}
 .notice{border-left:4px solid var(--accent-fill);background:var(--surface);padding:10px 14px;margin-block:16px 0}
-.notice p{margin:0;max-width:90ch}
+.notice p{margin:0;max-width:90ch} .notice p+p{margin-top:6px}
 nav.groups{display:flex;flex-wrap:wrap;gap:8px;padding-block:16px}
 .navchip{font-family:var(--font-display);text-transform:uppercase;letter-spacing:.08em;text-decoration:none;color:var(--ink);border:1px solid var(--line);padding:4px 10px;background:var(--surface)}
 .navchip span{color:var(--muted)}
@@ -1616,25 +2155,43 @@ nav.groups{display:flex;flex-wrap:wrap;gap:8px;padding-block:16px}
 .clip-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
 .clip{background:var(--stage);color:var(--stage-ink);padding:6px;display:grid;grid-template-columns:minmax(0,1fr);gap:2px;justify-items:center;align-content:start;min-width:0}
 .clip.span2{grid-column:span 2}
-.player{width:calc(var(--cw) * 2px);height:calc(var(--ch) * 2px);max-width:100%;background-repeat:no-repeat;image-rendering:pixelated;image-rendering:crisp-edges;
-  background-size:calc(var(--sw) * 2px) calc(var(--sh) * 2px);background-position:0 calc(var(--row) * var(--ch) * -2px);
+.clips-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:6px 12px}
+.face{font:inherit;font-size:.8rem;background:var(--soft);color:var(--ink);border:1px solid var(--line);padding:2px 10px;cursor:pointer}
+.face[aria-pressed="true"]{background:var(--accent-fill);color:#1d1a1c;border-color:var(--accent-fill)}
+.clip-legend{margin:0;font-size:.8rem;max-width:90ch}
+.player{width:calc(var(--cw) * 2px);height:calc(var(--ch) * 2px);max-width:100%;background-repeat:no-repeat;image-rendering:pixelated;image-rendering:crisp-edges;background-image:var(--sheet);
+  background-size:calc(var(--sw) * 2px) calc(var(--sh) * 2px);background-position:calc(var(--x0) * -2px) calc(var(--row) * var(--ch) * -2px);
   animation:play var(--dur) steps(var(--n)) infinite}
-@keyframes play{from{background-position-x:0}to{background-position-x:calc(var(--n) * var(--cw) * -2px)}}
+@keyframes play{from{background-position-x:calc(var(--x0) * -2px)}to{background-position-x:calc((var(--x0) + var(--n) * var(--cw)) * -2px)}}
 @media (prefers-reduced-motion: reduce){.player{animation:none}}
 .clip-name{font-family:var(--font-mono);font-size:.7rem;text-align:center;overflow-wrap:anywhere;line-height:1.25}
 .clip-meta{font-size:.68rem;opacity:.75}
+.badges{display:flex;flex-wrap:wrap;gap:3px;justify-content:center}
 .clip .tag{border-color:currentColor;font-size:.64rem}
+.clip .tag.prop{background:var(--accent-fill);color:#1d1a1c;border-color:var(--accent-fill)}
+.clip .tag.eng{opacity:.8;border-style:dashed}
+.srcnote{margin:0;font-size:.86rem;border-left:3px solid var(--accent-fill);padding-left:8px}
+.edited{font-size:.86rem} .edited p{margin:0 0 4px;max-width:90ch} .edited ul{margin:0;padding-left:1.1em} .edited li{overflow-wrap:anywhere}
+.edited h4{font-size:.95rem;text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px}
 .excluded{margin:0;font-size:.82rem;color:var(--muted)}
 .strips summary{cursor:pointer;color:var(--muted);font-size:.85rem}
 .strip-list{display:grid;gap:6px;margin-top:6px}
 .strip{display:grid;gap:2px;font-family:var(--font-mono);font-size:.7rem;color:var(--muted)}
 .strip-scroll{overflow-x:auto;background:var(--stage)}
-.strip-img{image-rendering:pixelated;background-repeat:no-repeat}
+.strip-img{image-rendering:pixelated;background-repeat:no-repeat;background-image:var(--sheet)}
 footer{border-top:1px solid var(--line);margin-top:24px;padding-top:12px;font-size:.82rem;color:var(--muted)}
 @media (max-width:520px){ .thumb{width:104px;height:87px} .card{padding:12px} .bar{grid-template-columns:minmax(0,8.5rem) 1fr 3.4rem} }
 """
 
 JS = r"""
+document.querySelectorAll('.clips[data-l]').forEach(function(c){
+  var b=c.querySelector('.face'); if(!b) return;
+  b.addEventListener('click',function(){
+    var left=b.getAttribute('aria-pressed')!=='true';
+    c.style.setProperty('--sheet','url('+(left?c.dataset.l:c.dataset.r)+')');
+    b.setAttribute('aria-pressed',left?'true':'false'); b.textContent=left?'Pokaż stronę prawą':'Pokaż stronę lewą';
+  });
+});
 document.querySelectorAll('.stage').forEach(function(f){
   var img=f.querySelector('img.px'), b=f.querySelector('.zoom'); if(!img||!b) return;
   b.addEventListener('click',function(){
